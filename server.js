@@ -3,10 +3,10 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { body, validationResult } from "express-validator";
+import bcrypt from "bcrypt";
 
 const app = express();
 dotenv.config();
