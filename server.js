@@ -46,6 +46,7 @@ app.use(
 await mongoose.connect(process.env.MONGO_URI);
 console.log("✓MongoDB connected");
 
+// Add this to your userSchema definition
 const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true, minlength: 8 },
@@ -54,7 +55,17 @@ const userSchema = new mongoose.Schema({
     of: String,
     default: {},
   },
+  emotionalLog: [
+    // New field for emotional logging
+    {
+      emotion: { type: String, required: true }, // e.g., 'happy', 'sad', 'anxious'
+      intensity: { type: Number, min: 1, max: 10, required: false }, // Optional: 1-10 scale
+      context: { type: String, required: false }, // User's message or a summary
+      timestamp: { type: Date, default: Date.now },
+    },
+  ],
 });
+// ... rest of your schema and model definitions ...
 const User = mongoose.model("User", userSchema);
 
 // --- Short-Term Memory Schema  ---
@@ -69,6 +80,7 @@ const ShortTermMemory = mongoose.model(
   "ShortTermMemory",
   shortTermMemorySchema
 );
+
 
 // --- Task Queue Schema ---
 const taskSchema = new mongoose.Schema({
@@ -85,6 +97,8 @@ const taskSchema = new mongoose.Schema({
   result: { type: String }, // Store task results
   priority: { type: Number, default: 0 }, // Optional: for task prioritization
 });
+
+
 // Index for efficient polling by workers
 taskSchema.index({ runAt: 1, status: 1 });
 const Task = mongoose.model("Task", taskSchema);
@@ -94,6 +108,7 @@ const signToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES,
   });
+
 
 // ── 4.  Auth routes
 app.post(
@@ -117,6 +132,7 @@ app.post(
       // hash password
       const hashed = await bcrypt.hash(password, 12);
       const user = await User.create({ email, password: hashed });
+      console.log("New user created:", user.email);
 
       // respond with JWT
       res.status(201).json({ token: signToken(user._id) });
@@ -125,6 +141,7 @@ app.post(
     }
   }
 );
+
 
 app.post(
   "/login",
@@ -135,6 +152,7 @@ app.post(
       return res.status(400).json({ errors: errors.array() });
 
     const { email, password } = req.body;
+    console.log("Login attempt:", email);
 
     try {
       const user = await User.findOne({ email });
@@ -147,6 +165,7 @@ app.post(
     }
   }
 );
+
 
 // ── 5.  Auth-guard middleware & protected demo route
 const protect = (req, res, next) => {
@@ -162,10 +181,12 @@ const protect = (req, res, next) => {
   }
 };
 
+
 app.get("/profile", protect, async (req, res) => {
   const user = await User.findById(req.user.id).select("-password");
   res.json(user);
 });
+
 
 // ---  LLM Completion and Task Inference Endpoint ---
 app.post("/completion", protect, async (req, res) => {
@@ -195,24 +216,31 @@ app.post("/completion", protect, async (req, res) => {
 
     // 3. Construct the LLM prompt with memory and user intent inference instructions
     const fullPrompt = `
-    You are Numina, an AI assistant focused on understanding user emotions and automating tasks.
-    User Profile: ${userProfile}
-    Conversation History:
-    ${conversationHistory}
+You are Numina, an AI assistant focused on understanding user emotions and automating tasks.
+User Profile: ${userProfile}
 
-    Based on the user's input, perform the following:
-    1. Respond to the user's message with a warm friendly greeting.
-    2. Identify if the user is asking for a specific task to be performed (e.g., "summarize my expenses", "send me my weekly report", "check my unread emails").
-    3. If a task is inferred, output a JSON object in a separate line at the end of your response, starting with "TASK_INFERENCE:".
-       The JSON should have a "taskType" and "parameters" field.
-       Example: {"taskType": "summarize_expenses", "parameters": {"period": "weekly"}}
-       Example: {"taskType": "send_email_summary", "parameters": {"filter": "unread", "category": "important"}}
+Recent Conversation History:
+${conversationHistory}
 
-    <|im_start|>user
-    ${userPrompt}
-    <|im_end|>
-    <|im_start|>assistant
-    `;
+Instructions:
+1. Respond to the user's message with a warm and friendly greeting, maintaining a supportive tone.
+2. **Emotional Logging**: If the user expresses a clear emotion (e.g., "I feel happy," "I'm anxious about this," "Today has been stressful"), infer the core emotion and its context.
+   If an emotion is detected, append a JSON object to the end of your response, on a new line, starting with "EMOTION_LOG:".
+   Example: {"emotion": "happy", "context": "Today was a good day at work."}
+   Example: {"emotion": "anxious", "context": "Thinking about the upcoming presentation."}
+   You can infer intensity (1-10) if clearly implied, otherwise omit it.
+3. **Emotional Retrieval**: If the user asks about their past emotions (e.g., "How have I been feeling lately?", "What emotions have I expressed this week?"), retrieve and summarize relevant entries from their history.
+   When summarizing past emotions, refer to them using a friendly, insightful tone, without simply listing raw data.
+4. **Task Inference**: If the user is asking for a specific task to be performed (e.g., "summarize my expenses", "send me my weekly report", "check my unread emails"), output a JSON object in a separate line, starting with "TASK_INFERENCE:".
+   The JSON should have a "taskType" and "parameters" field.
+   Example: {"taskType": "summarize_expenses", "parameters": {"period": "weekly"}}
+   Example: {"taskType": "send_email_summary", "parameters": {"filter": "unread", "category": "important"}}
+
+<|im_start|>user
+${userPrompt}
+<|im_end|>
+<|im_start|>assistant
+`;
 
     // 4. Send request to llama.cpp backend
     const llamaCppApiUrl =
@@ -242,13 +270,17 @@ app.post("/completion", protect, async (req, res) => {
 
     // 6. Extract potential task inference from the LLM's response
     let inferredTask = null;
-    const taskInferenceRegex = /TASK_INFERENCE:(\{.*\})/;
-    const match = botReplyContent.match(taskInferenceRegex);
+    let inferredEmotion = null;
 
-    if (match && match[1]) {
+    const taskInferenceRegex = /TASK_INFERENCE:(\{.*\})/;
+    const emotionLogRegex = /EMOTION_LOG:(\{.*\})/;
+
+    const taskMatch = botReplyContent.match(taskInferenceRegex);
+    const emotionMatch = botReplyContent.match(emotionLogRegex);
+
+    if (taskMatch && taskMatch[1]) {
       try {
-        inferredTask = JSON.parse(match[1]);
-        // Remove the task inference string from the bot's reply
+        inferredTask = JSON.parse(taskMatch[1]);
         botReplyContent = botReplyContent
           .replace(taskInferenceRegex, "")
           .trim();
@@ -257,22 +289,44 @@ app.post("/completion", protect, async (req, res) => {
       }
     }
 
+    if (emotionMatch && emotionMatch[1]) {
+      try {
+        inferredEmotion = JSON.parse(emotionMatch[1]);
+        botReplyContent = botReplyContent.replace(emotionLogRegex, "").trim();
+      } catch (jsonError) {
+        console.error("Failed to parse LLM's emotion log JSON:", jsonError);
+      }
+    }
     // 7. Save assistant reply to short-term memory
     await ShortTermMemory.create({
       userId,
       content: botReplyContent,
       role: "assistant",
-      // conversationId: 'some_id_if_needed'
     });
 
-    // 8. If a task was inferred, queue it in the Task collection
+    // 8. If an emotion was inferred, log it to the user's profile
+    if (inferredEmotion && inferredEmotion.emotion) {
+      await User.findByIdAndUpdate(userId, {
+        $push: {
+          emotionalLog: {
+            emotion: inferredEmotion.emotion,
+            intensity: inferredEmotion.intensity || undefined, // Only add if present
+            context: inferredEmotion.context || userPrompt, // Use inferred context or original prompt
+          },
+        },
+      });
+      console.log(
+        `Emotion "${inferredEmotion.emotion}" logged for user ${userId}.`
+      );
+    }
+
+    // 9. If a task was inferred, queue it in the Task collection
     if (inferredTask && inferredTask.taskType) {
       await Task.create({
         userId,
         taskType: inferredTask.taskType,
         parameters: inferredTask.parameters,
-        status: "queued", // Set initial status
-        // runAt: new Date(Date.now() + 5000) // Example: schedule for 5 seconds later
+        status: "queued",
       });
       console.log(`Task "${inferredTask.taskType}" queued for user ${userId}.`);
     }
@@ -360,7 +414,6 @@ app.get("/run-tasks", protect, async (req, res) => {
   }
 });
 
-// ── 6.  Start server
 app.listen(process.env.PORT, () =>
   console.log(`API running → http://localhost:${process.env.PORT}`)
 );
