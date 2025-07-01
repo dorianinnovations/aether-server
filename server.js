@@ -7,7 +7,6 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { body, validationResult } from "express-validator";
 import bcrypt from "bcrypt";
-
 import fetch from "node-fetch";
 
 const app = express();
