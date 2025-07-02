@@ -7,7 +7,8 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { body, validationResult } from "express-validator";
 import bcrypt from "bcrypt";
-import fetch from "node-fetch"; // Make sure node-fetch is installed: npm install node-fetch
+import axios from "axios";
+import https from "https";
 
 const app = express();
 dotenv.config(); // Load environment variables
@@ -263,6 +264,63 @@ app.get("/profile", protect, async (req, res) => {
   }
 });
 
+// --- Health Check Endpoint ---
+app.get("/health", async (req, res) => {
+  try {
+    const llamaCppApiUrl = process.env.LLAMA_CPP_API_URL || 
+      "https://1c19-2603-8000-e602-bfd4-ccb5-8ca5-46f0-1dbf.ngrok-free.app/completion";
+    
+    // Create custom HTTPS agent for ngrok compatibility
+    const httpsAgent = new https.Agent({
+      rejectUnauthorized: false, // For ngrok certificates
+      timeout: 10000
+    });
+    
+    try {
+      const testRes = await axios({
+        method: 'POST',
+        url: llamaCppApiUrl,
+        headers: { 
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true"
+        },
+        data: {
+          prompt: "Hello",
+          n_predict: 5,
+          temperature: 0.1
+        },
+        httpsAgent: httpsAgent,
+        timeout: 10000
+      });
+      
+      const healthStatus = {
+        server: "healthy",
+        database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+        llm_api: "accessible",
+        llm_api_url: llamaCppApiUrl,
+        llm_response_status: testRes.status
+      };
+      
+      res.json({ status: "success", health: healthStatus });
+    } catch (testError) {
+      console.error("Health check LLM test failed:", testError.message);
+      res.status(503).json({ 
+        status: "degraded", 
+        health: {
+          server: "healthy",
+          database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+          llm_api: "unreachable",
+          llm_api_url: llamaCppApiUrl,
+          error: testError.message
+        }
+      });
+    }
+  } catch (err) {
+    console.error("Health check error:", err);
+    res.status(500).json({ status: "error", message: "Health check failed" });
+  }
+});
+
 // --- LLM Completion Endpoint ---
 app.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
@@ -360,28 +418,67 @@ ${userPrompt}
 
     const llamaCppApiUrl =
       process.env.LLAMA_CPP_API_URL ||
-      "https://1c19-2603-8000-e602-bfd4-ccb5-8ca5-46f0-1dbf.ngrok-free.app/completion"; // Use environment variable or default URL
-    const llmRes = await fetch(llamaCppApiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt: fullPrompt,
-        stop: stop,
-        n_predict: n_predict,
-        temperature: temperature,
-        // Add other llama.cpp parameters as needed for better control
-        // e.g., "top_k": 40, "top_p": 0.9, "repeat_penalty": 1.1
-      }),
+      "https://1c19-2603-8000-e602-bfd4-ccb5-8ca5-46f0-1dbf.ngrok-free.app/completion";
+    
+    console.log("Using LLAMA_CPP_API_URL:", llamaCppApiUrl);
+    console.log("Environment LLAMA_CPP_API_URL:", process.env.LLAMA_CPP_API_URL);
+    
+    // Create custom HTTPS agent for ngrok compatibility
+    const httpsAgent = new https.Agent({
+      rejectUnauthorized: false, // For ngrok certificates
+      timeout: 30000
     });
+    
+    let llmRes;
+    try {
+      llmRes = await axios({
+        method: 'POST',
+        url: llamaCppApiUrl,
+        headers: { 
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+          "User-Agent": "numina-server/1.0"
+        },
+        data: {
+          prompt: fullPrompt,
+          stop: stop,
+          n_predict: n_predict,
+          temperature: temperature,
+          // Add other llama.cpp parameters as needed for better control
+          // e.g., "top_k": 40, "top_p": 0.9, "repeat_penalty": 1.1
+        },
+        httpsAgent: httpsAgent,
+        timeout: 30000
+      });
 
-    if (!llmRes.ok) {
-      const errorData = await llmRes.text();
-      throw new Error(
-        `LLM API error: ${llmRes.status} - ${llmRes.statusText} - ${errorData}`
-      );
+      console.log("LLM API Response Status:", llmRes.status, llmRes.statusText);
+    } catch (fetchError) {
+      if (fetchError.code === 'ECONNABORTED') {
+        console.error("LLM API request timed out after 30 seconds");
+        throw new Error("LLM API request timed out. Please try again.");
+      } else if (fetchError.response) {
+        // Server responded with error status
+        console.error("LLM API Response Error:", {
+          status: fetchError.response.status,
+          statusText: fetchError.response.statusText,
+          data: fetchError.response.data
+        });
+        throw new Error(
+          `LLM API error: ${fetchError.response.status} - ${fetchError.response.statusText} - ${fetchError.response.data}`
+        );
+      } else {
+        console.error("Fetch error details:", {
+          name: fetchError.name,
+          message: fetchError.message,
+          code: fetchError.code
+        });
+        throw fetchError;
+      }
     }
 
-    const llmData = await llmRes.json();
+    // Extract data from axios response
+    const llmData = llmRes.data;
+    
     let botReplyContent = llmData.content || ""; // Initialize as empty string
 
     console.log("Raw LLM Data Content (before cleaning):", botReplyContent);
