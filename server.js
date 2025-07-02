@@ -530,23 +530,27 @@ app.post("/completion", protect, async (req, res) => {
     console.log("Raw LLM Data Content (before cleaning):", botReplyContent);
 
     // --- Optimized Parsing and Cleaning ---
+    // Strengthening the cleaning logic to completely remove TASK_INFERENCE and EMOTION_LOG markers from responses
+    // --- Begin Robust Parsing and Cleaning ---
+    console.log("Raw LLM response:", botReplyContent);
+
+    // Declare variables to store parsed information
     let inferredTask = null;
     let inferredEmotion = null;
 
-    // Create a processing function to avoid code duplication
+    // Helper function for JSON extraction with error handling
     const extractJsonPattern = (regex, content, logType) => {
-      const match = regex.exec(content);
-      if (!match || !match[1]) return [null, content];
+      const match = content.match(regex);
+      if (!match || !match[1]) {
+        return [null, content];
+      }
 
       try {
-        // Use a faster, more forgiving JSON parser for small objects
-        const jsonStr = match[1].trim();
-        const parsed = JSON.parse(jsonStr);
-
-        // Create a copy of content instead of using replace (more efficient for large strings)
-        const newContent =
-          content.slice(0, match.index) +
-          content.slice(match.index + match[0].length);
+        // Extract JSON and remove the match from content
+        const jsonString = match[1].trim();
+        const parsed = JSON.parse(jsonString);
+        // Remove the entire pattern (marker + JSON)
+        const newContent = content.replace(match[0], "");
 
         return [parsed, newContent];
       } catch (jsonError) {
@@ -555,11 +559,11 @@ app.post("/completion", protect, async (req, res) => {
       }
     };
 
-    // Extract and remove patterns more efficiently with a single pass when possible
-    const taskInferenceRegex = /TASK_INFERENCE:\s*(\{[\s\S]*?\})\s*?/;
-    const emotionLogRegex = /EMOTION_LOG:\s*(\{[\s\S]*?\})\s*?/;
+    // Extract and remove patterns with comprehensive patterns to catch all variations
+    const taskInferenceRegex = /TASK_INFERENCE:?\s*(\{[\s\S]*?\})\s*?/g;
+    const emotionLogRegex = /EMOTION_LOG:?\s*(\{[\s\S]*?\})\s*?/g;
 
-    // Process emotion first
+    // Process emotion first - use the first match if multiple exist
     [inferredEmotion, botReplyContent] = extractJsonPattern(
       emotionLogRegex,
       botReplyContent,
@@ -570,7 +574,7 @@ app.post("/completion", protect, async (req, res) => {
       console.log("Parsed emotion:", inferredEmotion.emotion);
     }
 
-    // Then process task
+    // Then process task - use the first match if multiple exist
     [inferredTask, botReplyContent] = extractJsonPattern(
       taskInferenceRegex,
       botReplyContent,
@@ -579,14 +583,44 @@ app.post("/completion", protect, async (req, res) => {
 
     if (inferredTask) {
       console.log("Parsed task:", inferredTask.taskType);
+    } // Ensure ALL marker patterns are completely removed, even if parsing failed
+    // This is a more aggressive approach to ensure no markers leak to the UI
+    botReplyContent = botReplyContent
+      // Remove model tokens
+      .replace(/<\|im_(start|end)\|>(assistant|user)?\n?/g, "")
+      // Aggressively remove any marker patterns, even incomplete ones
+      .replace(/TASK_INFERENCE:?\s*(\{[\s\S]*?\})?\s*?/g, "")
+      .replace(/EMOTION_LOG:?\s*(\{[\s\S]*?\})?\s*?/g, "")
+      // Remove even just the marker names without JSON
+      .replace(/TASK_INFERENCE:?/g, "")
+      .replace(/EMOTION_LOG:?/g, "")
+      // Remove code blocks that might contain markers
+      .replace(/```json[\s\S]*?```/g, "")
+      // Normalize newlines
+      .replace(/(\r?\n){2,}/g, "\n")
+      .trim();
+
+    // Double check for any remaining marker patterns
+    if (
+      botReplyContent.includes("TASK_INFERENCE") ||
+      botReplyContent.includes("EMOTION_LOG")
+    ) {
+      console.warn(
+        "WARNING: Markers still present after cleaning. Applying emergency cleanup."
+      );
+      // Emergency fallback: split by lines and filter out any line containing markers
+      botReplyContent = botReplyContent
+        .split("\n")
+        .filter(
+          (line) =>
+            !line.includes("TASK_INFERENCE") && !line.includes("EMOTION_LOG")
+        )
+        .join("\n")
+        .trim();
     }
 
-    // Use a single regex with alternation for more efficient cleaning
-    botReplyContent = botReplyContent
-      .replace(/<\|im_(start|end)\|>(assistant|user)?\n?/g, "") // Remove tokens in one pass
-      .replace(/```json[\s\S]*?```/g, "") // Remove code blocks
-      .replace(/(\r?\n){2,}/g, "\n") // Normalize newlines
-      .trim();
+    // Use the dedicated sanitizer for a final pass
+    botReplyContent = sanitizeResponse(botReplyContent);
 
     console.log("Cleaned Bot Reply Content (for display):", botReplyContent);
     // --- End Robust Parsing and Cleaning ---
@@ -656,6 +690,21 @@ app.post("/completion", protect, async (req, res) => {
     }
 
     console.log(summaryParts.join(" "));
+
+    // Final safety check before sending response to client
+    botReplyContent = sanitizeResponse(botReplyContent);
+
+    // Validate that sanitization was successful
+    if (
+      botReplyContent.includes("TASK_INFERENCE") ||
+      botReplyContent.includes("EMOTION_LOG")
+    ) {
+      console.error(
+        "CRITICAL ERROR: Markers still present despite sanitization"
+      );
+      botReplyContent =
+        "I'm sorry, I wasn't able to provide a proper response. Please try again.";
+    }
 
     res.json({ content: botReplyContent });
   } catch (err) {
@@ -847,6 +896,53 @@ setInterval(() => {
     }
   }
 }, 60 * 1000); // Check every minute
+
+// --- Helper Functions ---
+
+// Helper function to ensure all special markers are removed from text
+const sanitizeResponse = (text) => {
+  if (!text) return "";
+
+  // Initial regex-based cleaning with case-insensitive matching
+  let sanitized = text
+    // Remove all variations of TASK_INFERENCE with case insensitivity
+    .replace(/TASK_INFERENCE:?\s*(\{[\s\S]*?\})?\s*?/gi, "")
+    .replace(/TASK_INFERENCE:?/gi, "")
+    // Remove all variations of EMOTION_LOG with case insensitivity
+    .replace(/EMOTION_LOG:?\s*(\{[\s\S]*?\})?\s*?/gi, "")
+    .replace(/EMOTION_LOG:?/gi, "")
+    // Also clean up any formatting artifacts
+    .replace(/(\r?\n){2,}/g, "\n")
+    .trim();
+
+  // Case-insensitive check for remaining markers
+  const lowerSanitized = sanitized.toLowerCase();
+  if (
+    lowerSanitized.includes("task_inference") ||
+    lowerSanitized.includes("emotion_log")
+  ) {
+    // Secondary line-by-line filtering with case insensitivity
+    sanitized = sanitized
+      .split("\n")
+      .filter((line) => {
+        const lowerLine = line.toLowerCase();
+        return (
+          !lowerLine.includes("task_inference") &&
+          !lowerLine.includes("emotion_log")
+        );
+      })
+      .join("\n")
+      .trim();
+  }
+
+  return (
+    sanitized ||
+    "I'm sorry, I wasn't able to provide a proper response. Please try again."
+  );
+};
+
+// Export for testing
+export { sanitizeResponse };
 
 // --- Server Start ---
 const PORT = process.env.PORT || 5000; // Use port from .env or default to 5000
