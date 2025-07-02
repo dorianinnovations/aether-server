@@ -359,7 +359,8 @@ ${userPrompt}
     // console.log("Full prompt content:", fullPrompt); // Uncomment for debugging if needed
 
     const llamaCppApiUrl =
-      process.env.LLAMA_CPP_API_URL || "https://1c19-2603-8000-e602-bfd4-ccb5-8ca5-46f0-1dbf.ngrok-free.app/completion"; 
+      process.env.LLAMA_CPP_API_URL ||
+      "https://1c19-2603-8000-e602-bfd4-ccb5-8ca5-46f0-1dbf.ngrok-free.app/completion"; // Use environment variable or default URL
     const llmRes = await fetch(llamaCppApiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
