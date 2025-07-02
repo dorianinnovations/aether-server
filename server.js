@@ -284,7 +284,7 @@ app.get("/health", async (req, res) => {
       req.app.locals.httpsAgent ||
       new https.Agent({
         rejectUnauthorized: false, // For ngrok certificates
-        timeout: 10000,
+        timeout: 30000,
       });
 
     try {
@@ -339,9 +339,9 @@ app.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   // Sensible defaults for LLM parameters
-  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>"]; // Added common stop sequences
-  const n_predict = req.body.n_predict || 200; // Slightly reduced default prediction length
-  const temperature = req.body.temperature || 0.7; // Slightly reduced temperature for more focused responses
+  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>"]; 
+  const n_predict = req.body.n_predict || 128; 
+  const temperature = req.body.temperature || 0.9;
 
   if (!userPrompt || typeof userPrompt !== "string") {
     return res.status(400).json({ message: "Invalid or missing prompt." });
@@ -360,7 +360,7 @@ app.post("/completion", protect, async (req, res) => {
     // Limit emotional log to a relevant number of recent entries to keep prompt concise
     const recentEmotionalLogEntries = user.emotionalLog
       .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, 5); // Get most recent 5 entries
+      .slice(0, 3); // Get most recent 5 entries
 
     const formattedEmotionalLog = recentEmotionalLogEntries
       .map((entry) => {
@@ -382,7 +382,7 @@ app.post("/completion", protect, async (req, res) => {
         { role: 1, content: 1, _id: 0 } // Project only needed fields
       )
         .sort({ timestamp: -1 })
-        .limit(10)
+        .limit(6)
         .lean(),
     ]);
 
@@ -453,7 +453,6 @@ app.post("/completion", protect, async (req, res) => {
       new https.Agent({
         rejectUnauthorized: false, // For ngrok certificates
         keepAlive: true, // Enable keep-alive for connection reuse
-        timeout: 30000,
       });
 
     // Start a timer to measure LLM response time
