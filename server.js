@@ -339,8 +339,8 @@ app.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   // Sensible defaults for LLM parameters
-  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>"]; 
-  const n_predict = req.body.n_predict || 128; 
+  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>"];
+  const n_predict = req.body.n_predict || 128;
   const temperature = req.body.temperature || 0.9;
 
   if (!userPrompt || typeof userPrompt !== "string") {
@@ -631,7 +631,14 @@ app.post("/completion", protect, async (req, res) => {
     dbOperations.push(
       ShortTermMemory.insertMany([
         { userId, content: userPrompt, role: "user" },
-        { userId, content: botReplyContent, role: "assistant" },
+        // Ensure content is never empty for the assistant's response
+        {
+          userId,
+          content:
+            botReplyContent ||
+            "I'm sorry, I wasn't able to provide a proper response.",
+          role: "assistant",
+        },
       ])
     );
 
