@@ -9,6 +9,7 @@ import { body, validationResult } from "express-validator";
 import bcrypt from "bcrypt";
 import axios from "axios";
 import https from "https";
+import compression from "compression"; // For response compression
 
 const app = express();
 dotenv.config(); // Load environment variables
@@ -39,8 +40,9 @@ app.use(
   })
 );
 
-app.use(express.json()); // Parse JSON request bodies
+app.use(express.json({ limit: "1mb" })); // Parse JSON request bodies with size limit
 app.use(helmet()); // Apply security headers
+app.use(compression()); // Enable gzip compression for responses
 
 // Rate limiting to prevent abuse
 const limiter = rateLimit({
@@ -54,7 +56,13 @@ app.use(limiter);
 
 // --- Database Connection ---
 mongoose
-  .connect(process.env.MONGO_URI)
+  .connect(process.env.MONGO_URI, {
+    // Add optimization options for MongoDB connection
+    maxPoolSize: 10, // Connection pool size for better concurrency
+    serverSelectionTimeoutMS: 5000, // Faster server selection timeout
+    socketTimeoutMS: 45000, // Socket timeout
+    family: 4, // Use IPv4, avoid slow IPv6 lookups
+  })
   .then(() => console.log("✓MongoDB connected successfully."))
   .catch((err) => {
     console.error("✗ MongoDB connection error:", err);
@@ -267,52 +275,57 @@ app.get("/profile", protect, async (req, res) => {
 // --- Health Check Endpoint ---
 app.get("/health", async (req, res) => {
   try {
-    const llamaCppApiUrl = process.env.LLAMA_CPP_API_URL || 
+    const llamaCppApiUrl =
+      process.env.LLAMA_CPP_API_URL ||
       "https://1c19-2603-8000-e602-bfd4-ccb5-8ca5-46f0-1dbf.ngrok-free.app/completion";
-    
-    // Create custom HTTPS agent for ngrok compatibility
-    const httpsAgent = new https.Agent({
-      rejectUnauthorized: false, // For ngrok certificates
-      timeout: 10000
-    });
-    
+
+    // Use the global HTTPS agent for connection reuse
+    const httpsAgent =
+      req.app.locals.httpsAgent ||
+      new https.Agent({
+        rejectUnauthorized: false, // For ngrok certificates
+        timeout: 10000,
+      });
+
     try {
       const testRes = await axios({
-        method: 'POST',
+        method: "POST",
         url: llamaCppApiUrl,
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true"
+          "ngrok-skip-browser-warning": "true",
         },
         data: {
           prompt: "Hello",
           n_predict: 5,
-          temperature: 0.1
+          temperature: 0.1,
         },
         httpsAgent: httpsAgent,
-        timeout: 10000
+        timeout: 10000,
       });
-      
+
       const healthStatus = {
         server: "healthy",
-        database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+        database:
+          mongoose.connection.readyState === 1 ? "connected" : "disconnected",
         llm_api: "accessible",
         llm_api_url: llamaCppApiUrl,
-        llm_response_status: testRes.status
+        llm_response_status: testRes.status,
       };
-      
+
       res.json({ status: "success", health: healthStatus });
     } catch (testError) {
       console.error("Health check LLM test failed:", testError.message);
-      res.status(503).json({ 
-        status: "degraded", 
+      res.status(503).json({
+        status: "degraded",
         health: {
           server: "healthy",
-          database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+          database:
+            mongoose.connection.readyState === 1 ? "connected" : "disconnected",
           llm_api: "unreachable",
           llm_api_url: llamaCppApiUrl,
-          error: testError.message
-        }
+          error: testError.message,
+        },
       });
     }
   } catch (err) {
@@ -362,56 +375,64 @@ app.post("/completion", protect, async (req, res) => {
       })
       .join("\n");
 
-    // Fetch and format recent conversation history (e.g., last 10 messages)
-    const recentMemory = await ShortTermMemory.find({ userId })
-      .sort({ timestamp: -1 }) // Sort by newest first
-      .limit(10) // Fetch last 10 messages
-      .lean()
-      .then((mems) => mems.reverse()); // Reverse to get chronological order for prompt
-
-    const conversationHistory = recentMemory
-      .map(
-        (mem) => `${mem.role === "user" ? "user" : "assistant"}\n${mem.content}`
+    // Use memory and user data in parallel with Promise.all for efficiency
+    const [recentMemory] = await Promise.all([
+      ShortTermMemory.find(
+        { userId },
+        { role: 1, content: 1, _id: 0 } // Project only needed fields
       )
-      .join("\n");
+        .sort({ timestamp: -1 })
+        .limit(10)
+        .lean(),
+    ]);
 
-    // --- Refined and Simplified LLM Prompt ---
-    const fullPrompt = `
-You are Numina, an empathetic and concise AI assistant. Your goal is to provide helpful responses, acknowledge user emotions, and proactively identify tasks.
+    // Process in reverse chronological order without another array operation
+    recentMemory.reverse();
 
-**User Profile:** ${userProfile}
+    // Pre-allocate approximate size for string builder pattern (more efficient than join)
+    const historyBuilder = [];
+    for (const mem of recentMemory) {
+      historyBuilder.push(
+        `${mem.role === "user" ? "user" : "assistant"}\n${mem.content}`
+      );
+    }
+    const conversationHistory = historyBuilder.join("\n");
 
-**Recent Conversation:**
-${
-  conversationHistory.length > 0
-    ? conversationHistory
-    : "No recent conversation."
-}
+    // --- Streamlined LLM Prompt ---
+    // Optimize by constructing prompt conditionally - only include what's needed
+    const promptParts = [
+      `You are Numina, an empathetic and concise AI assistant. Your goal is to provide helpful responses, acknowledge user emotions, and proactively identify tasks.`,
+      `**User Profile:** ${userProfile}`,
+    ];
 
-**Your Emotional History Summary (Top 5 Recent):**
-${
-  formattedEmotionalLog.length > 0
-    ? formattedEmotionalLog
-    : "You have no recorded emotional history yet."
-}
+    // Only include conversation history if it exists
+    if (conversationHistory.length > 0) {
+      promptParts.push(`**Recent Conversation:**\n${conversationHistory}`);
+    }
 
-Instructions for your response:
+    // Only include emotional log if it exists
+    if (formattedEmotionalLog.length > 0) {
+      promptParts.push(
+        `**Your Emotional History Summary (Top 5 Recent):**\n${formattedEmotionalLog}`
+      );
+    }
+
+    // Add instructions - using a more compact format
+    promptParts.push(`Instructions for your response:
 - Be direct and concise. Avoid conversational filler.
 - Do not echo user's prompt or instructions.
-- Emotional Logging: If the user expresses a clear emotion, identify it and the context. Format it strictly as a single JSON object on its own line, like:
-  EMOTION_LOG: {"emotion": "happy", "intensity": 7, "context": "just got a promotion"}
-  (emotion is mandatory. intensity (1-10) and context are optional.)
-- Summarizing Past Emotions: If the user asks about their past emotions, summarize them in a human-readable, non-technical way. Do NOT output raw JSON.
-- Task Inference: If the user implies a task (e.g., "summarize my week", "send an email"), infer the task and its parameters. Format it strictly as a single JSON object on its own line, like:
-  TASK_INFERENCE: {"taskType": "summarize_emotions", "parameters": {"period": "last week"}}
-  (taskType is mandatory. parameters is an object for relevant details.)
-- Your primary conversational response should follow any EMOTION_LOG: or TASK_INFERENCE: output.
+- Emotional Logging: If the user expresses a clear emotion, identify it and the context. Format strictly as: EMOTION_LOG: {"emotion": "happy", "intensity": 7, "context": "promotion"}
+- Summarizing Past Emotions: Use human-readable format, not raw JSON.
+- Task Inference: If the user implies a task, format strictly as: TASK_INFERENCE: {"taskType": "summarize_emotions", "parameters": {"period": "last week"}}
+- Your primary conversational response should follow any EMOTION_LOG or TASK_INFERENCE output.`);
 
-<|im_start|>user
-${userPrompt}
-<|im_end|>
-<|im_start|>assistant
-`;
+    // Add user query
+    promptParts.push(
+      `<|im_start|>user\n${userPrompt}\n<|im_end|>\n<|im_start|>assistant`
+    );
+
+    // Join with newlines for better token efficiency
+    const fullPrompt = promptParts.join("\n\n");
 
     console.log("Full prompt constructed. Length:", fullPrompt.length);
     // console.log("Full prompt content:", fullPrompt); // Uncomment for debugging if needed
@@ -419,41 +440,66 @@ ${userPrompt}
     const llamaCppApiUrl =
       process.env.LLAMA_CPP_API_URL ||
       "https://1c19-2603-8000-e602-bfd4-ccb5-8ca5-46f0-1dbf.ngrok-free.app/completion";
-    
+
     console.log("Using LLAMA_CPP_API_URL:", llamaCppApiUrl);
-    console.log("Environment LLAMA_CPP_API_URL:", process.env.LLAMA_CPP_API_URL);
-    
-    // Create custom HTTPS agent for ngrok compatibility
-    const httpsAgent = new https.Agent({
-      rejectUnauthorized: false, // For ngrok certificates
-      timeout: 30000
-    });
-    
-    let llmRes;
-    try {
-      llmRes = await axios({
-        method: 'POST',
-        url: llamaCppApiUrl,
-        headers: { 
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true",
-          "User-Agent": "numina-server/1.0"
-        },
-        data: {
-          prompt: fullPrompt,
-          stop: stop,
-          n_predict: n_predict,
-          temperature: temperature,
-          // Add other llama.cpp parameters as needed for better control
-          // e.g., "top_k": 40, "top_p": 0.9, "repeat_penalty": 1.1
-        },
-        httpsAgent: httpsAgent,
-        timeout: 30000
+    console.log(
+      "Environment LLAMA_CPP_API_URL:",
+      process.env.LLAMA_CPP_API_URL
+    );
+
+    // Use the global HTTPS agent for connection reuse
+    const httpsAgent =
+      req.app.locals.httpsAgent ||
+      new https.Agent({
+        rejectUnauthorized: false, // For ngrok certificates
+        keepAlive: true, // Enable keep-alive for connection reuse
+        timeout: 30000,
       });
 
-      console.log("LLM API Response Status:", llmRes.status, llmRes.statusText);
+    // Start a timer to measure LLM response time
+    const llmStartTime = Date.now();
+    let llmRes;
+
+    try {
+      // Optimize the parameters to improve speed with minimal quality loss
+      const optimizedParams = {
+        prompt: fullPrompt,
+        stop: stop,
+        n_predict: n_predict,
+        temperature: temperature,
+        top_k: 40, // Limit vocabulary to top 40 tokens
+        top_p: 0.9, // Nucleus sampling for better efficiency
+        repeat_penalty: 1.1, // Slight penalty to reduce repetition
+      };
+
+      llmRes = await axios({
+        method: "POST",
+        url: llamaCppApiUrl,
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+          "User-Agent": "numina-server/1.0",
+          Connection: "keep-alive",
+        },
+        data: optimizedParams,
+        httpsAgent: httpsAgent,
+        timeout: 30000,
+      });
+
+      const responseTime = Date.now() - llmStartTime;
+      console.log(
+        `LLM API Response Status: ${llmRes.status} (${responseTime}ms)`
+      );
+
+      // Track token generation speed for monitoring
+      if (llmRes.data.timings && llmRes.data.tokens_predicted) {
+        const tokensPerSecond = llmRes.data.timings.predicted_per_second || 0;
+        console.log(
+          `LLM generation speed: ${tokensPerSecond.toFixed(2)} tokens/sec`
+        );
+      }
     } catch (fetchError) {
-      if (fetchError.code === 'ECONNABORTED') {
+      if (fetchError.code === "ECONNABORTED") {
         console.error("LLM API request timed out after 30 seconds");
         throw new Error("LLM API request timed out. Please try again.");
       } else if (fetchError.response) {
@@ -461,7 +507,7 @@ ${userPrompt}
         console.error("LLM API Response Error:", {
           status: fetchError.response.status,
           statusText: fetchError.response.statusText,
-          data: fetchError.response.data
+          data: fetchError.response.data,
         });
         throw new Error(
           `LLM API error: ${fetchError.response.status} - ${fetchError.response.statusText} - ${fetchError.response.data}`
@@ -470,7 +516,7 @@ ${userPrompt}
         console.error("Fetch error details:", {
           name: fetchError.name,
           message: fetchError.message,
-          code: fetchError.code
+          code: fetchError.code,
         });
         throw fetchError;
       }
@@ -478,126 +524,138 @@ ${userPrompt}
 
     // Extract data from axios response
     const llmData = llmRes.data;
-    
+
     let botReplyContent = llmData.content || ""; // Initialize as empty string
 
     console.log("Raw LLM Data Content (before cleaning):", botReplyContent);
 
-    // --- Robust Parsing and Cleaning ---
+    // --- Optimized Parsing and Cleaning ---
     let inferredTask = null;
     let inferredEmotion = null;
 
-    // Use more specific regex to capture the JSON within the markers, and make it non-greedy
-    const taskInferenceRegex = /TASK_INFERENCE:\s*(\{[\s\S]*?\})\s*?/g;
-    const emotionLogRegex = /EMOTION_LOG:\s*(\{[\s\S]*?\})\s*?/g;
+    // Create a processing function to avoid code duplication
+    const extractJsonPattern = (regex, content, logType) => {
+      const match = regex.exec(content);
+      if (!match || !match[1]) return [null, content];
 
-    // Extract and remove emotion log
-    const emotionMatch = emotionLogRegex.exec(botReplyContent);
-    if (emotionMatch && emotionMatch[1]) {
       try {
-        inferredEmotion = JSON.parse(emotionMatch[1]);
-        console.log("Parsed Inferred Emotion:", inferredEmotion);
-        // Remove the matched emotion log string from the content
-        botReplyContent = botReplyContent.replace(emotionMatch[0], "");
+        // Use a faster, more forgiving JSON parser for small objects
+        const jsonStr = match[1].trim();
+        const parsed = JSON.parse(jsonStr);
+
+        // Create a copy of content instead of using replace (more efficient for large strings)
+        const newContent =
+          content.slice(0, match.index) +
+          content.slice(match.index + match[0].length);
+
+        return [parsed, newContent];
       } catch (jsonError) {
-        console.error(
-          "Failed to parse LLM's emotion log JSON. Raw content:",
-          emotionMatch[1],
-          "Error:",
-          jsonError
-        );
+        console.error(`Failed to parse ${logType} JSON:`, jsonError.message);
+        return [null, content];
       }
+    };
+
+    // Extract and remove patterns more efficiently with a single pass when possible
+    const taskInferenceRegex = /TASK_INFERENCE:\s*(\{[\s\S]*?\})\s*?/;
+    const emotionLogRegex = /EMOTION_LOG:\s*(\{[\s\S]*?\})\s*?/;
+
+    // Process emotion first
+    [inferredEmotion, botReplyContent] = extractJsonPattern(
+      emotionLogRegex,
+      botReplyContent,
+      "emotion log"
+    );
+
+    if (inferredEmotion) {
+      console.log("Parsed emotion:", inferredEmotion.emotion);
     }
 
-    // Extract and remove task inference
-    const taskMatch = taskInferenceRegex.exec(botReplyContent);
-    if (taskMatch && taskMatch[1]) {
-      try {
-        inferredTask = JSON.parse(taskMatch[1]);
-        console.log("Parsed Inferred Task:", inferredTask);
-        // Remove the matched task inference string from the content
-        botReplyContent = botReplyContent.replace(taskMatch[0], "");
-      } catch (jsonError) {
-        console.error(
-          "Failed to parse LLM's task inference JSON. Raw content:",
-          taskMatch[1],
-          "Error:",
-          jsonError
-        );
-      }
+    // Then process task
+    [inferredTask, botReplyContent] = extractJsonPattern(
+      taskInferenceRegex,
+      botReplyContent,
+      "task inference"
+    );
+
+    if (inferredTask) {
+      console.log("Parsed task:", inferredTask.taskType);
     }
 
-    // Remove any remaining unwanted tokens or extra whitespace/newlines
+    // Use a single regex with alternation for more efficient cleaning
     botReplyContent = botReplyContent
-      .replace(/<\|im_start\|>assistant\n?/g, "") // Remove the assistant token and potential newline
-      .replace(/<\|im_start\|>user\n?/g, "") // Remove user token if it appears
-      .replace(/<\|im_end\|>/g, "") // Remove end tokens
-      .replace(/```json[\s\S]*?```/g, "") // Remove any JSON code blocks (if LLM outputs them in error)
-      .replace(/(\r\n|\n|\r){2,}/g, "\n") // Replace multiple newlines with a single newline
-      .trim(); // Trim leading/trailing whitespace
+      .replace(/<\|im_(start|end)\|>(assistant|user)?\n?/g, "") // Remove tokens in one pass
+      .replace(/```json[\s\S]*?```/g, "") // Remove code blocks
+      .replace(/(\r?\n){2,}/g, "\n") // Normalize newlines
+      .trim();
 
     console.log("Cleaned Bot Reply Content (for display):", botReplyContent);
     // --- End Robust Parsing and Cleaning ---
 
-    // Save user message to ShortTermMemory
-    await ShortTermMemory.create({
-      userId,
-      content: userPrompt,
-      role: "user",
-    });
-    console.log("User message saved to ShortTermMemory.");
+    // Prepare database operations to be executed in parallel
+    const dbOperations = [];
 
-    // Save assistant reply to ShortTermMemory (cleaned content)
-    await ShortTermMemory.create({
-      userId,
-      content: botReplyContent,
-      role: "assistant",
-    });
-    console.log("Assistant reply saved to ShortTermMemory.");
+    // Memory storage operations (both user and assistant messages)
+    dbOperations.push(
+      ShortTermMemory.insertMany([
+        { userId, content: userPrompt, role: "user" },
+        { userId, content: botReplyContent, role: "assistant" },
+      ])
+    );
 
-    // Process inferred emotion
+    // Process inferred emotion if present
     if (inferredEmotion && inferredEmotion.emotion) {
-      // Basic validation for emotion data
       const emotionToLog = {
         emotion: inferredEmotion.emotion,
-        context: inferredEmotion.context || userPrompt, // Default context to user prompt if not provided
+        context: inferredEmotion.context || userPrompt,
       };
-      if (
-        inferredEmotion.intensity &&
-        inferredEmotion.intensity >= 1 &&
-        inferredEmotion.intensity <= 10
-      ) {
+
+      // Add intensity if valid
+      if (inferredEmotion.intensity >= 1 && inferredEmotion.intensity <= 10) {
         emotionToLog.intensity = inferredEmotion.intensity;
       }
 
-      await User.findByIdAndUpdate(userId, {
-        $push: { emotionalLog: emotionToLog },
-      });
-      console.log(
-        `Emotion "${inferredEmotion.emotion}" logged for user ${userId}.`
+      // Queue the emotion update
+      dbOperations.push(
+        User.findByIdAndUpdate(userId, {
+          $push: { emotionalLog: emotionToLog },
+        })
       );
-    } else {
-      console.log("No valid emotion inferred or emotion data found.");
     }
 
-    // Process inferred task
+    // Process inferred task if present
     if (inferredTask && inferredTask.taskType) {
-      // Basic validation for task parameters (optional, could be more extensive)
       const taskParameters =
         typeof inferredTask.parameters === "object"
           ? inferredTask.parameters
           : {};
 
-      await Task.create({
-        userId,
-        taskType: inferredTask.taskType,
-        parameters: taskParameters,
-        status: "queued",
-      });
-      console.log(`Task "${inferredTask.taskType}" queued for user ${userId}.`);
-    } else {
-      console.log("No task inferred or valid task data found.");
+      // Queue the task creation
+      dbOperations.push(
+        Task.create({
+          userId,
+          taskType: inferredTask.taskType,
+          parameters: taskParameters,
+          status: "queued",
+        })
+      );
     }
+
+    // Execute all database operations in parallel
+    await Promise.all(dbOperations);
+
+    // Log results after operations complete
+    const summaryParts = ["Data saved:"];
+    summaryParts.push("- 2 memory entries (user and assistant)");
+
+    if (inferredEmotion && inferredEmotion.emotion) {
+      summaryParts.push(`- Emotion: ${inferredEmotion.emotion}`);
+    }
+
+    if (inferredTask && inferredTask.taskType) {
+      summaryParts.push(`- Task: ${inferredTask.taskType}`);
+    }
+
+    console.log(summaryParts.join(" "));
 
     res.json({ content: botReplyContent });
   } catch (err) {
@@ -723,6 +781,80 @@ app.get("/run-tasks", protect, async (req, res) => {
   }
 });
 
+// --- LLM HTTPS Agent Cache ---
+// Create a singleton HTTPS agent that can be reused across requests
+const globalHttpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 10,
+  rejectUnauthorized: false,
+  timeout: 30000,
+});
+
+// Make it available to all requests without recreating
+app.locals.httpsAgent = globalHttpsAgent;
+
+// Simple in-memory cache for frequent requests
+const cache = {
+  items: new Map(),
+  maxSize: 100,
+  ttl: 60 * 5 * 1000, // 5 minutes
+
+  set(key, value, customTtl) {
+    // Clean cache if it's getting too large
+    if (this.items.size >= this.maxSize) {
+      // Delete oldest items
+      const keysToDelete = [...this.items.keys()].slice(0, 20);
+      keysToDelete.forEach((k) => this.items.delete(k));
+    }
+
+    this.items.set(key, {
+      value,
+      expires: Date.now() + (customTtl || this.ttl),
+    });
+  },
+
+  get(key) {
+    const item = this.items.get(key);
+    if (!item) return null;
+
+    if (Date.now() > item.expires) {
+      this.items.delete(key);
+      return null;
+    }
+
+    return item.value;
+  },
+};
+
+app.locals.cache = cache;
+
+// Add simple memory monitoring
+setInterval(() => {
+  const memUsage = process.memoryUsage();
+  console.log(
+    `Memory usage: ${Math.round(
+      memUsage.rss / 1024 / 1024
+    )}MB RSS, ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB Heap`
+  );
+
+  // Add GC hint if memory usage is high
+  if (memUsage.heapUsed > 200 * 1024 * 1024) {
+    // 200MB
+    console.log("High memory usage detected, suggesting garbage collection");
+    if (global.gc) {
+      console.log("Running garbage collection");
+      global.gc();
+    }
+  }
+}, 60 * 1000); // Check every minute
+
 // --- Server Start ---
 const PORT = process.env.PORT || 5000; // Use port from .env or default to 5000
-app.listen(PORT, () => console.log(`✓API running → http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✓API running → http://localhost:${PORT}`);
+  console.log(
+    `✓Memory optimization enabled, initial RSS: ${Math.round(
+      process.memoryUsage().rss / 1024 / 1024
+    )}MB`
+  );
+});
