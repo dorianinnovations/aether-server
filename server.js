@@ -7,48 +7,69 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { body, validationResult } from "express-validator";
 import bcrypt from "bcrypt";
-import fetch from "node-fetch";
+import fetch from "node-fetch"; // Make sure node-fetch is installed: npm install node-fetch
 
 const app = express();
-dotenv.config();
+dotenv.config(); // Load environment variables
 
-// ── 1.  Global middleware
+// --- Security and Middleware Configuration ---
+
+// CORS configuration for production readiness
+const allowedOrigins = [
+  "https://leafy-centaur-370c2f.netlify.app", // Your Netlify production frontend
+  "http://localhost:5173", // Frontend development
+  "http://localhost:5000", // Backend development (if applicable)
+];
+
 app.use(
   cors({
-    origin: function (origin, callback) {
-      const allowedOrigins = [
-        "https://leafy-centaur-370c2f.netlify.app",
-        "http://localhost:5173",
-        "http://localhost:5000",
-      ];
-      console.log("CORS origin:", origin);
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        const msg = `The CORS policy for this site does not allow access from the specified Origin.`;
+        return callback(new Error(msg), false);
       }
+      return callback(null, true);
     },
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Explicitly list allowed methods
   })
 );
 
-app.use(express.json());
-app.use(helmet());
-app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 min
-    max: 100, // 100 requests / window / IP
-  })
-);
+app.use(express.json()); // Parse JSON request bodies
+app.use(helmet()); // Apply security headers
 
-// ── 2.  DB & user model
-await mongoose.connect(process.env.MONGO_URI);
-console.log("✓MongoDB connected");
+// Rate limiting to prevent abuse
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Max 100 requests per 15 minutes per IP
+  message: "Too many requests from this IP, please try again after 15 minutes",
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+app.use(limiter);
 
-// Add this to your userSchema definition
+// --- Database Connection ---
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("✓MongoDB connected successfully."))
+  .catch((err) => {
+    console.error("✗ MongoDB connection error:", err);
+    process.exit(1); // Exit process if DB connection fails
+  });
+
+// --- Mongoose Schemas and Models ---
+
 const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true, lowercase: true },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true,
+  },
   password: { type: String, required: true, minlength: 8 },
   profile: {
     type: Map,
@@ -56,23 +77,41 @@ const userSchema = new mongoose.Schema({
     default: {},
   },
   emotionalLog: [
-    // New field for emotional logging
     {
-      emotion: { type: String, required: true }, // e.g., 'happy', 'sad', 'anxious'
-      intensity: { type: Number, min: 1, max: 10, required: false }, // Optional: 1-10 scale
-      context: { type: String, required: false }, // User's message or a summary
+      emotion: { type: String, required: true, trim: true },
+      intensity: { type: Number, min: 1, max: 10, required: false },
+      context: { type: String, required: false, trim: true },
       timestamp: { type: Date, default: Date.now },
     },
   ],
 });
-// ... rest of your schema and model definitions ...
-const User = mongoose.model("User", userSchema);
 
-// --- Short-Term Memory Schema  ---
+// Pre-save hook to hash password
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  this.password = await bcrypt.hash(this.password, 12);
+  next();
+});
+
+// Method to compare passwords
+userSchema.methods.correctPassword = async function (
+  candidatePassword,
+  userPassword
+) {
+  return await bcrypt.compare(candidatePassword, userPassword);
+};
+
+const User = mongoose.model("User", userSchema);
+console.log("✓User schema and model defined.");
+
 const shortTermMemorySchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  conversationId: { type: String, required: false }, // To segment memory by conversation
-  timestamp: { type: Date, default: Date.now, expires: "24h" }, // TTL index for short-term memory
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  conversationId: { type: String, required: false, index: true }, // Add index for faster lookups
+  timestamp: { type: Date, default: Date.now, expires: "24h" }, // TTL index for 24 hours
   content: { type: String, required: true },
   role: { type: String, enum: ["user", "assistant"], required: true },
 });
@@ -80,161 +119,227 @@ const ShortTermMemory = mongoose.model(
   "ShortTermMemory",
   shortTermMemorySchema
 );
+console.log("✓ShortTermMemory schema and model defined.");
 
-
-// --- Task Queue Schema ---
 const taskSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  taskType: { type: String, required: true }, // e.g., 'summarize_emails', 'weekly_expense_report'
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  taskType: { type: String, required: true, trim: true },
   status: {
     type: String,
     enum: ["queued", "processing", "completed", "failed"],
     default: "queued",
   },
   createdAt: { type: Date, default: Date.now },
-  runAt: { type: Date, default: Date.now }, // For scheduled tasks
-  parameters: { type: Map, of: String }, // Any parameters for the task
-  result: { type: String }, // Store task results
-  priority: { type: Number, default: 0 }, // Optional: for task prioritization
+  runAt: { type: Date, default: Date.now },
+  parameters: { type: Map, of: String }, // Use Mixed type if parameters can be complex objects
+  result: { type: String },
+  priority: { type: Number, default: 0, min: 0, max: 10 }, // Example priority range
 });
 
-
-// Index for efficient polling by workers
-taskSchema.index({ runAt: 1, status: 1 });
+taskSchema.index({ runAt: 1, status: 1, priority: -1 }); // Compound index for efficient task retrieval
 const Task = mongoose.model("Task", taskSchema);
+console.log("✓Task schema and model defined.");
 
-// ── 3.  Helper: create JWT
+// --- JWT Authentication Utilities ---
 const signToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES,
+    expiresIn: process.env.JWT_EXPIRES_IN, // Renamed for clarity, ensure your .env uses this
   });
+console.log("✓JWT signing function ready.");
 
+// Middleware to protect routes
+const protect = (req, res, next) => {
+  let token;
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
+    token = req.headers.authorization.split(" ")[1];
+  }
 
-// ── 4.  Auth routes
+  if (!token) {
+    return res
+      .status(401)
+      .json({ message: "You are not logged in! Please log in to get access." });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded; // Attach user ID to request object
+    next();
+  } catch (error) {
+    console.error("JWT verification error:", error);
+    return res.status(401).json({ message: "Invalid or expired token." });
+  }
+};
+
+// --- Authentication Routes ---
+
 app.post(
   "/signup",
   [
-    body("email").isEmail().withMessage("Valid e-mail required"),
+    body("email").isEmail().withMessage("Valid email required."),
     body("password")
       .isLength({ min: 8 })
-      .withMessage("Password ≥ 8 chars required"),
+      .withMessage("Password must be at least 8 characters long."),
   ],
   async (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty())
+    if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
-    // destructure input
+    }
     const { email, password } = req.body;
-    // check if user already exists
     try {
-      if (await User.findOne({ email }))
-        return res.status(409).json({ message: "Email already used" });
-      // hash password
-      const hashed = await bcrypt.hash(password, 12);
-      const user = await User.create({ email, password: hashed });
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(409).json({ message: "Email already in use." });
+      }
+      const user = await User.create({ email, password });
       console.log("New user created:", user.email);
 
-      // respond with JWT
-      res.status(201).json({ token: signToken(user._id) });
+      res.status(201).json({
+        status: "success",
+        token: signToken(user._id),
+        data: { user: { id: user._id, email: user.email } },
+      });
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      console.error("Signup error:", err);
+      res
+        .status(500)
+        .json({ status: "error", message: "Failed to create user." });
     }
   }
 );
-
 
 app.post(
   "/login",
   [body("email").isEmail(), body("password").notEmpty()],
   async (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty())
+    if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
+    }
 
     const { email, password } = req.body;
-    console.log("Login attempt:", email);
+    console.log("Login attempt for:", email);
 
     try {
-      const user = await User.findOne({ email });
-      if (!user || !(await bcrypt.compare(password, user.password)))
-        return res.status(401).json({ message: "Invalid credentials" });
+      const user = await User.findOne({ email }).select("+password"); // Select password for comparison
+      if (!user || !(await user.correctPassword(password, user.password))) {
+        return res.status(401).json({ message: "Incorrect email or password." });
+      }
 
-      res.json({ token: signToken(user._id) });
+      res.json({
+        status: "success",
+        token: signToken(user._id),
+        data: { user: { id: user._id, email: user.email } },
+      });
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      console.error("Login error:", err);
+      res.status(500).json({ status: "error", message: "Login failed." });
     }
   }
 );
 
-
-// ── 5.  Auth-guard middleware & protected demo route
-const protect = (req, res, next) => {
-  const auth = req.headers.authorization || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (!token) return res.status(401).json({ message: "No token" });
-
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch {
-    res.status(401).json({ message: "Invalid or expired token" });
-  }
-};
-
-
+// --- User Profile Route ---
 app.get("/profile", protect, async (req, res) => {
-  const user = await User.findById(req.user.id).select("-password");
-  res.json(user);
-});
-
-
-// ---  LLM Completion and Task Inference Endpoint ---
-app.post("/completion", protect, async (req, res) => {
-  const userId = req.user.id;
-  const userPrompt = req.body.prompt;
-  const stop = req.body.stop || ["<|im_end|>"];
-  const n_predict = req.body.n_predict || 2048;
-  const temperature = req.body.temperature || 0.8;
-
   try {
-    // 1. Fetch user's profile and relevant long-term memory
-    const user = await User.findById(userId);
+    const user = await User.findById(req.user.id).select("-password -__v"); // Exclude sensitive fields
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
+    res.json({ status: "success", data: { user } });
+  } catch (err) {
+    console.error("Error fetching user profile:", err);
+    res
+      .status(500)
+      .json({ status: "error", message: "Failed to fetch profile." });
+  }
+});
+
+// --- LLM Completion Endpoint ---
+app.post("/completion", protect, async (req, res) => {
+  const userId = req.user.id;
+  const userPrompt = req.body.prompt;
+  // Sensible defaults for LLM parameters
+  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>"]; // Added common stop sequences
+  const n_predict = req.body.n_predict || 200; // Slightly reduced default prediction length
+  const temperature = req.body.temperature || 0.7; // Slightly reduced temperature for more focused responses
+
+  if (!userPrompt || typeof userPrompt !== "string") {
+    return res.status(400).json({ message: "Invalid or missing prompt." });
+  }
+
+  try {
+    console.log(`✓Completion request received for user ${userId}.`);
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
     const userProfile = user.profile ? JSON.stringify(user.profile) : "{}";
 
-    // 2. Fetch recent short-term memory (conversation history) for context
-    const recentMemory = await ShortTermMemory.find({ userId })
-      .sort({ timestamp: 1 })
-      .limit(10) // Adjust as needed to manage context window [cite: 2]
-      .lean();
+    // Limit emotional log to a relevant number of recent entries to keep prompt concise
+    const recentEmotionalLogEntries = user.emotionalLog
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 5); // Get most recent 5 entries
 
-    const conversationHistory = recentMemory
-      .map((mem) => `${mem.role}\n${mem.content}`)
+    const formattedEmotionalLog = recentEmotionalLogEntries
+      .map((entry) => {
+        const date = entry.timestamp.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+        return `On ${date}, you expressed feeling ${entry.emotion}${
+          entry.intensity ? ` (intensity ${entry.intensity})` : ""
+        } because: ${entry.context || "no specific context provided"}.`;
+      })
       .join("\n");
 
-    // 3. Construct the LLM prompt with memory and user intent inference instructions
+    // Fetch and format recent conversation history (e.g., last 10 messages)
+    const recentMemory = await ShortTermMemory.find({ userId })
+      .sort({ timestamp: -1 }) // Sort by newest first
+      .limit(10) // Fetch last 10 messages
+      .lean()
+      .then((mems) => mems.reverse()); // Reverse to get chronological order for prompt
+
+    const conversationHistory = recentMemory
+      .map((mem) => `${mem.role === "user" ? "user" : "assistant"}\n${mem.content}`)
+      .join("\n");
+
+    // --- Refined and Simplified LLM Prompt ---
     const fullPrompt = `
-You are Numina, an AI assistant focused on understanding user emotions and automating tasks.
-User Profile: ${userProfile}
+You are Numina, an empathetic and concise AI assistant. Your goal is to provide helpful responses, acknowledge user emotions, and proactively identify tasks.
 
-Recent Conversation History:
-${conversationHistory}
+**User Profile:** ${userProfile}
 
-Instructions:
-1. Respond to the user's message with a warm and friendly greeting, maintaining a supportive tone.
-2. **Emotional Logging**: If the user expresses a clear emotion (e.g., "I feel happy," "I'm anxious about this," "Today has been stressful"), infer the core emotion and its context.
-   If an emotion is detected, append a JSON object to the end of your response, on a new line, starting with "EMOTION_LOG:".
-   Example: {"emotion": "happy", "context": "Today was a good day at work."}
-   Example: {"emotion": "anxious", "context": "Thinking about the upcoming presentation."}
-   You can infer intensity (1-10) if clearly implied, otherwise omit it.
-3. **Emotional Retrieval**: If the user asks about their past emotions (e.g., "How have I been feeling lately?", "What emotions have I expressed this week?"), retrieve and summarize relevant entries from their history.
-   When summarizing past emotions, refer to them using a friendly, insightful tone, without simply listing raw data.
-4. **Task Inference**: If the user is asking for a specific task to be performed (e.g., "summarize my expenses", "send me my weekly report", "check my unread emails"), output a JSON object in a separate line, starting with "TASK_INFERENCE:".
-   The JSON should have a "taskType" and "parameters" field.
-   Example: {"taskType": "summarize_expenses", "parameters": {"period": "weekly"}}
-   Example: {"taskType": "send_email_summary", "parameters": {"filter": "unread", "category": "important"}}
+**Recent Conversation:**
+${conversationHistory.length > 0 ? conversationHistory : "No recent conversation."}
+
+**Your Emotional History Summary (Top 5 Recent):**
+${
+  formattedEmotionalLog.length > 0
+    ? formattedEmotionalLog
+    : "You have no recorded emotional history yet."
+}
+
+Instructions for your response:
+- Be direct and concise. Avoid conversational filler.
+- Do not echo user's prompt or instructions.
+- Emotional Logging: If the user expresses a clear emotion, identify it and the context. Format it strictly as a single JSON object on its own line, like:
+  EMOTION_LOG: {"emotion": "happy", "intensity": 7, "context": "just got a promotion"}
+  (emotion is mandatory. intensity (1-10) and context are optional.)
+- Summarizing Past Emotions: If the user asks about their past emotions, summarize them in a human-readable, non-technical way. Do NOT output raw JSON.
+- Task Inference: If the user implies a task (e.g., "summarize my week", "send an email"), infer the task and its parameters. Format it strictly as a single JSON object on its own line, like:
+  TASK_INFERENCE: {"taskType": "summarize_emotions", "parameters": {"period": "last week"}}
+  (taskType is mandatory. parameters is an object for relevant details.)
+- Your primary conversational response should follow any EMOTION_LOG: or TASK_INFERENCE: output.
 
 <|im_start|>user
 ${userPrompt}
@@ -242,7 +347,9 @@ ${userPrompt}
 <|im_start|>assistant
 `;
 
-    // 4. Send request to llama.cpp backend
+    console.log("Full prompt constructed. Length:", fullPrompt.length);
+    // console.log("Full prompt content:", fullPrompt); // Uncomment for debugging if needed
+
     const llamaCppApiUrl =
       process.env.LLAMA_CPP_API_URL || "http://localhost:8000/completion";
     const llmRes = await fetch(llamaCppApiUrl, {
@@ -253,137 +360,228 @@ ${userPrompt}
         stop: stop,
         n_predict: n_predict,
         temperature: temperature,
-        // This is where to can place other llama.cpp parameters as necessary, e.g., top_k, top_p, repeat_penalty
+        // Add other llama.cpp parameters as needed for better control
+        // e.g., "top_k": 40, "top_p": 0.9, "repeat_penalty": 1.1
       }),
     });
 
-    const llmData = await llmRes.json();
-    let botReplyContent = llmData.content || "[No response from model]";
+    if (!llmRes.ok) {
+      const errorData = await llmRes.text();
+      throw new Error(
+        `LLM API error: ${llmRes.status} - ${llmRes.statusText} - ${errorData}`
+      );
+    }
 
-    // 5. Save user message to short-term memory
+    const llmData = await llmRes.json();
+    let botReplyContent = llmData.content || ""; // Initialize as empty string
+
+    console.log("Raw LLM Data Content (before cleaning):", botReplyContent);
+
+    // --- Robust Parsing and Cleaning ---
+    let inferredTask = null;
+    let inferredEmotion = null;
+
+    // Use more specific regex to capture the JSON within the markers, and make it non-greedy
+    const taskInferenceRegex = /TASK_INFERENCE:\s*(\{[\s\S]*?\})\s*?/g;
+    const emotionLogRegex = /EMOTION_LOG:\s*(\{[\s\S]*?\})\s*?/g;
+
+    // Extract and remove emotion log
+    const emotionMatch = emotionLogRegex.exec(botReplyContent);
+    if (emotionMatch && emotionMatch[1]) {
+      try {
+        inferredEmotion = JSON.parse(emotionMatch[1]);
+        console.log("Parsed Inferred Emotion:", inferredEmotion);
+        // Remove the matched emotion log string from the content
+        botReplyContent = botReplyContent.replace(emotionMatch[0], "");
+      } catch (jsonError) {
+        console.error(
+          "Failed to parse LLM's emotion log JSON. Raw content:",
+          emotionMatch[1],
+          "Error:",
+          jsonError
+        );
+      }
+    }
+
+    // Extract and remove task inference
+    const taskMatch = taskInferenceRegex.exec(botReplyContent);
+    if (taskMatch && taskMatch[1]) {
+      try {
+        inferredTask = JSON.parse(taskMatch[1]);
+        console.log("Parsed Inferred Task:", inferredTask);
+        // Remove the matched task inference string from the content
+        botReplyContent = botReplyContent.replace(taskMatch[0], "");
+      } catch (jsonError) {
+        console.error(
+          "Failed to parse LLM's task inference JSON. Raw content:",
+          taskMatch[1],
+          "Error:",
+          jsonError
+        );
+      }
+    }
+
+    // Remove any remaining unwanted tokens or extra whitespace/newlines
+    botReplyContent = botReplyContent
+      .replace(/<\|im_start\|>assistant\n?/g, "") // Remove the assistant token and potential newline
+      .replace(/<\|im_start\|>user\n?/g, "") // Remove user token if it appears
+      .replace(/<\|im_end\|>/g, "") // Remove end tokens
+      .replace(/```json[\s\S]*?```/g, "") // Remove any JSON code blocks (if LLM outputs them in error)
+      .replace(/(\r\n|\n|\r){2,}/g, "\n") // Replace multiple newlines with a single newline
+      .trim(); // Trim leading/trailing whitespace
+
+    console.log("Cleaned Bot Reply Content (for display):", botReplyContent);
+    // --- End Robust Parsing and Cleaning ---
+
+    // Save user message to ShortTermMemory
     await ShortTermMemory.create({
       userId,
       content: userPrompt,
       role: "user",
-      // conversationId: 'some_id_if_needed'
     });
+    console.log("User message saved to ShortTermMemory.");
 
-    // 6. Extract potential task inference from the LLM's response
-    let inferredTask = null;
-    let inferredEmotion = null;
-
-    const taskInferenceRegex = /TASK_INFERENCE:(\{.*\})/;
-    const emotionLogRegex = /EMOTION_LOG:(\{.*\})/;
-
-    const taskMatch = botReplyContent.match(taskInferenceRegex);
-    const emotionMatch = botReplyContent.match(emotionLogRegex);
-
-    if (taskMatch && taskMatch[1]) {
-      try {
-        inferredTask = JSON.parse(taskMatch[1]);
-        botReplyContent = botReplyContent
-          .replace(taskInferenceRegex, "")
-          .trim();
-      } catch (jsonError) {
-        console.error("Failed to parse LLM's task inference JSON:", jsonError);
-      }
-    }
-
-    if (emotionMatch && emotionMatch[1]) {
-      try {
-        inferredEmotion = JSON.parse(emotionMatch[1]);
-        botReplyContent = botReplyContent.replace(emotionLogRegex, "").trim();
-      } catch (jsonError) {
-        console.error("Failed to parse LLM's emotion log JSON:", jsonError);
-      }
-    }
-    // 7. Save assistant reply to short-term memory
+    // Save assistant reply to ShortTermMemory (cleaned content)
     await ShortTermMemory.create({
       userId,
       content: botReplyContent,
       role: "assistant",
     });
+    console.log("Assistant reply saved to ShortTermMemory.");
 
-    // 8. If an emotion was inferred, log it to the user's profile
+    // Process inferred emotion
     if (inferredEmotion && inferredEmotion.emotion) {
+      // Basic validation for emotion data
+      const emotionToLog = {
+        emotion: inferredEmotion.emotion,
+        context: inferredEmotion.context || userPrompt, // Default context to user prompt if not provided
+      };
+      if (
+        inferredEmotion.intensity &&
+        inferredEmotion.intensity >= 1 &&
+        inferredEmotion.intensity <= 10
+      ) {
+        emotionToLog.intensity = inferredEmotion.intensity;
+      }
+
       await User.findByIdAndUpdate(userId, {
-        $push: {
-          emotionalLog: {
-            emotion: inferredEmotion.emotion,
-            intensity: inferredEmotion.intensity || undefined, // Only add if present
-            context: inferredEmotion.context || userPrompt, // Use inferred context or original prompt
-          },
-        },
+        $push: { emotionalLog: emotionToLog },
       });
       console.log(
         `Emotion "${inferredEmotion.emotion}" logged for user ${userId}.`
       );
+    } else {
+      console.log("No valid emotion inferred or emotion data found.");
     }
 
-    // 9. If a task was inferred, queue it in the Task collection
+    // Process inferred task
     if (inferredTask && inferredTask.taskType) {
+      // Basic validation for task parameters (optional, could be more extensive)
+      const taskParameters =
+        typeof inferredTask.parameters === "object"
+          ? inferredTask.parameters
+          : {};
+
       await Task.create({
         userId,
         taskType: inferredTask.taskType,
-        parameters: inferredTask.parameters,
+        parameters: taskParameters,
         status: "queued",
       });
       console.log(`Task "${inferredTask.taskType}" queued for user ${userId}.`);
+    } else {
+      console.log("No task inferred or valid task data found.");
     }
 
-    // 9. Send the clean bot reply to the frontend
     res.json({ content: botReplyContent });
   } catch (err) {
     console.error("Error in /completion endpoint:", err);
-    res.status(500).json({ message: "Error processing LLM request." });
+    res.status(500).json({
+      status: "error",
+      message: "Error processing LLM request. Please try again.",
+    });
   }
 });
 
+// --- Task Processing Endpoint ---
+// This endpoint is designed to be called periodically (e.g., by a cron job or a frontend poll)
 app.get("/run-tasks", protect, async (req, res) => {
   const userId = req.user.id;
   try {
-    // Find queued tasks for the user
     const tasksToProcess = await Task.find({
       userId,
       status: "queued",
-      runAt: { $lte: new Date() }, // Tasks ready to be run
-    }).sort({ priority: -1, createdAt: 1 });
+      runAt: { $lte: new Date() },
+    })
+      .sort({ priority: -1, createdAt: 1 }) // Process high priority, then older tasks
+      .limit(5); // Process a batch of tasks to avoid long-running requests
 
     if (tasksToProcess.length === 0) {
-      return res.status(200).json({ message: "No tasks to process." });
+      return res
+        .status(200)
+        .json({ status: "success", message: "No tasks to process." });
     }
 
     const results = [];
     for (const task of tasksToProcess) {
+      // Use findOneAndUpdate with status check to prevent race conditions
       const updatedTask = await Task.findOneAndUpdate(
         { _id: task._id, status: "queued" },
         { $set: { status: "processing" } },
-        { new: true }
+        { new: true } // Return the updated document
       );
 
       if (!updatedTask) {
+        // Task was already picked up by another process or updated
+        console.log(`Task ${task._id} already processed or status changed.`);
         continue;
       }
 
       console.log(
-        `Processing task: ${updatedTask.taskType} for user ${userId}`
+        `Processing task: ${updatedTask.taskType} (ID: ${updatedTask._id}) for user ${userId}`
       );
       let taskResult = "Task completed successfully.";
       let taskStatus = "completed";
 
       try {
-        // --- Simulate Task Execution ---
-        if (updatedTask.taskType === "summarize_expenses") {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          taskResult = `Your weekly expenses summary: Groceries $150, Utilities $80, Entertainment $50.`;
-        } else if (updatedTask.taskType === "send_email_summary") {
-          await new Promise((resolve) => setTimeout(resolve, 3000));
-          taskResult = `Summary of important unread emails: Meeting reminder from John, Project update from Sarah.`;
-        } else {
-          taskResult = `Unknown task type: ${updatedTask.taskType}.`;
-          taskStatus = "failed";
+        // --- Task Execution Logic (Simulated) ---
+        // In a real application, this would involve calling external services,
+        // complex data processing, etc.
+        switch (updatedTask.taskType) {
+          case "summarize_expenses":
+            await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate async work
+            taskResult = `Your weekly expenses summary: Groceries $150, Utilities $80, Entertainment $50.`;
+            break;
+          case "send_email_summary":
+            await new Promise((resolve) => setTimeout(resolve, 2500)); // Simulate async work
+            taskResult = `Summary of important unread emails: Meeting reminder from John, Project update from Sarah.`;
+            break;
+          case "summarize_emotions":
+            // Example: Fetch and summarize user's emotional log
+            const userEmotions = await User.findById(userId).select(
+              "emotionalLog"
+            );
+            if (userEmotions && userEmotions.emotionalLog.length > 0) {
+              const summary = userEmotions.emotionalLog
+                .slice(-5) // Last 5 emotions for example
+                .map(
+                  (e) =>
+                    `${e.emotion} on ${e.timestamp.toLocaleDateString()}`
+                )
+                .join(", ");
+              taskResult = `Your recent emotional trends include: ${summary}.`;
+            } else {
+              taskResult = "No emotional history to summarize.";
+            }
+            break;
+          // Add more task types as your application grows
+          default:
+            taskResult = `Unknown task type: ${updatedTask.taskType}.`;
+            taskStatus = "failed";
+            console.warn(`Attempted to process unknown task type: ${updatedTask.taskType}`);
+            break;
         }
-        // --- End Simulation ---
+        // --- End Task Execution Logic ---
       } catch (taskErr) {
         console.error(`Error processing task ${task._id}:`, taskErr);
         taskResult = `Error processing task: ${taskErr.message}`;
@@ -403,17 +601,21 @@ app.get("/run-tasks", protect, async (req, res) => {
       });
 
       console.log(
-        `Task ${updatedTask.taskType} completed. Result: ${taskResult}`
+        `Task ${updatedTask.taskType} (ID: ${updatedTask._id}) ${taskStatus}. Result: ${taskResult}`
       );
     }
 
-    res.status(200).json({ message: "Tasks processed.", results });
+    res.status(200).json({ status: "success", message: "Tasks processed.", results });
   } catch (err) {
     console.error("Error in /run-tasks endpoint:", err);
-    res.status(500).json({ message: "Error running background tasks." });
+    res
+      .status(500)
+      .json({ status: "error", message: "Error running background tasks." });
   }
 });
 
-app.listen(process.env.PORT, () =>
-  console.log(`API running → http://localhost:${process.env.PORT}`)
+// --- Server Start ---
+const PORT = process.env.PORT || 5000; // Use port from .env or default to 5000
+app.listen(PORT, () =>
+  console.log(`✓API running → http://localhost:${PORT}`)
 );
