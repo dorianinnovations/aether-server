@@ -147,7 +147,7 @@ console.log("✓Task schema and model defined.");
 // --- JWT Authentication Utilities ---
 const signToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN, // Renamed for clarity, ensure your .env uses this
+    expiresIn: "1d", // Default to 1 day
   });
 console.log("✓JWT signing function ready.");
 
@@ -230,7 +230,9 @@ app.post(
     try {
       const user = await User.findOne({ email }).select("+password"); // Select password for comparison
       if (!user || !(await user.correctPassword(password, user.password))) {
-        return res.status(401).json({ message: "Incorrect email or password." });
+        return res
+          .status(401)
+          .json({ message: "Incorrect email or password." });
       }
 
       res.json({
@@ -310,7 +312,9 @@ app.post("/completion", protect, async (req, res) => {
       .then((mems) => mems.reverse()); // Reverse to get chronological order for prompt
 
     const conversationHistory = recentMemory
-      .map((mem) => `${mem.role === "user" ? "user" : "assistant"}\n${mem.content}`)
+      .map(
+        (mem) => `${mem.role === "user" ? "user" : "assistant"}\n${mem.content}`
+      )
       .join("\n");
 
     // --- Refined and Simplified LLM Prompt ---
@@ -320,7 +324,11 @@ You are Numina, an empathetic and concise AI assistant. Your goal is to provide 
 **User Profile:** ${userProfile}
 
 **Recent Conversation:**
-${conversationHistory.length > 0 ? conversationHistory : "No recent conversation."}
+${
+  conversationHistory.length > 0
+    ? conversationHistory
+    : "No recent conversation."
+}
 
 **Your Emotional History Summary (Top 5 Recent):**
 ${
@@ -565,8 +573,7 @@ app.get("/run-tasks", protect, async (req, res) => {
               const summary = userEmotions.emotionalLog
                 .slice(-5) // Last 5 emotions for example
                 .map(
-                  (e) =>
-                    `${e.emotion} on ${e.timestamp.toLocaleDateString()}`
+                  (e) => `${e.emotion} on ${e.timestamp.toLocaleDateString()}`
                 )
                 .join(", ");
               taskResult = `Your recent emotional trends include: ${summary}.`;
@@ -578,7 +585,9 @@ app.get("/run-tasks", protect, async (req, res) => {
           default:
             taskResult = `Unknown task type: ${updatedTask.taskType}.`;
             taskStatus = "failed";
-            console.warn(`Attempted to process unknown task type: ${updatedTask.taskType}`);
+            console.warn(
+              `Attempted to process unknown task type: ${updatedTask.taskType}`
+            );
             break;
         }
         // --- End Task Execution Logic ---
@@ -605,7 +614,9 @@ app.get("/run-tasks", protect, async (req, res) => {
       );
     }
 
-    res.status(200).json({ status: "success", message: "Tasks processed.", results });
+    res
+      .status(200)
+      .json({ status: "success", message: "Tasks processed.", results });
   } catch (err) {
     console.error("Error in /run-tasks endpoint:", err);
     res
@@ -616,6 +627,4 @@ app.get("/run-tasks", protect, async (req, res) => {
 
 // --- Server Start ---
 const PORT = process.env.PORT || 5000; // Use port from .env or default to 5000
-app.listen(PORT, () =>
-  console.log(`✓API running → http://localhost:${PORT}`)
-);
+app.listen(PORT, () => console.log(`✓API running → http://localhost:${PORT}`));
