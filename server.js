@@ -419,7 +419,7 @@ app.post("/completion", protect, async (req, res) => {
 
     // Add instructions - using a more compact format
     promptParts.push(`Instructions for your response:
-- Be direct and concise. Avoid conversational filler.
+- Be direct and concise, but warm, sweet, witty, and playful.
 - Do not echo user's prompt or instructions.
 - Emotional Logging: If the user expresses a clear emotion, identify it and the context. Format strictly as: EMOTION_LOG: {"emotion": "happy", "intensity": 7, "context": "promotion"}
 - Summarizing Past Emotions: Use human-readable format, not raw JSON.
