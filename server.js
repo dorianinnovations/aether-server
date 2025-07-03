@@ -277,7 +277,7 @@ app.get("/health", async (req, res) => {
   try {
     const llamaCppApiUrl =
       process.env.LLAMA_CPP_API_URL ||
-      "https://1c19-2603-8000-e602-bfd4-ccb5-8ca5-46f0-1dbf.ngrok-free.app/completion";
+      "0d3b-2603-8000-e602-bfd4-6e29-dc5a-db0e-136f.ngrok-free.app/completion";
 
     // Use the global HTTPS agent for connection reuse
     const httpsAgent =
@@ -340,7 +340,7 @@ app.post("/completion", protect, async (req, res) => {
   const userPrompt = req.body.prompt;
   // Sensible defaults for LLM parameters
   const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>"];
-  const n_predict = req.body.n_predict || 128;
+  const n_predict = req.body.n_predict || 2048; // Increased for more comprehensive responses
   const temperature = req.body.temperature || 0.9;
 
   if (!userPrompt || typeof userPrompt !== "string") {
