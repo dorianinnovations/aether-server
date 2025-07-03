@@ -9,7 +9,7 @@ import { body, validationResult } from "express-validator";
 import bcrypt from "bcrypt";
 import axios from "axios";
 import https from "https";
-import compression from "compression"; // For response compression
+import compression from "compression"; 
 
 const app = express();
 dotenv.config(); // Load environment variables
@@ -18,15 +18,14 @@ dotenv.config(); // Load environment variables
 
 // CORS configuration for production readiness
 const allowedOrigins = [
-  "https://leafy-centaur-370c2f.netlify.app", // Your Netlify production frontend
-  "http://localhost:5173", // Frontend development
-  "http://localhost:5000", // Backend development (if applicable)
+  "https://numinaai.app", 
+  "http://localhost:5173",
+  "http://localhost:5000",
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
       if (allowedOrigins.indexOf(origin) === -1) {
         const msg = `The CORS policy for this site does not allow access from the specified Origin.`;
@@ -277,7 +276,7 @@ app.get("/health", async (req, res) => {
   try {
     const llamaCppApiUrl =
       process.env.LLAMA_CPP_API_URL ||
-      "0d3b-2603-8000-e602-bfd4-6e29-dc5a-db0e-136f.ngrok-free.app/completion";
+      "https://ee55-2603-8000-e602-bfd4-6e29-dc5a-db0e-136f.ngrok-free.app/health";
 
     // Use the global HTTPS agent for connection reuse
     const httpsAgent =
@@ -439,7 +438,7 @@ app.post("/completion", protect, async (req, res) => {
 
     const llamaCppApiUrl =
       process.env.LLAMA_CPP_API_URL ||
-      "https://1c19-2603-8000-e602-bfd4-ccb5-8ca5-46f0-1dbf.ngrok-free.app/completion";
+      "https://ee55-2603-8000-e602-bfd4-6e29-dc5a-db0e-136f.ngrok-free.app/completion";
 
     console.log("Using LLAMA_CPP_API_URL:", llamaCppApiUrl);
     console.log(
