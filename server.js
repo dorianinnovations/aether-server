@@ -339,8 +339,8 @@ app.post("/completion", protect, async (req, res) => {
   const userPrompt = req.body.prompt;
   // Sensible defaults for LLM parameters
   const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>"];
-  const n_predict = req.body.n_predict || 2048; // Increased for more comprehensive responses
-  const temperature = req.body.temperature || 0.9;
+  const n_predict = req.body.n_predict || 1024; 
+  const temperature = req.body.temperature || 0.7; 
 
   if (!userPrompt || typeof userPrompt !== "string") {
     return res.status(400).json({ message: "Invalid or missing prompt." });
@@ -481,7 +481,7 @@ app.post("/completion", protect, async (req, res) => {
         },
         data: optimizedParams,
         httpsAgent: httpsAgent,
-        timeout: 30000,
+        timeout: 45000, // 45 seconds timeout for LLM requests
       });
 
       const responseTime = Date.now() - llmStartTime;
@@ -841,7 +841,7 @@ const globalHttpsAgent = new https.Agent({
   keepAlive: true,
   maxSockets: 10,
   rejectUnauthorized: false,
-  timeout: 30000,
+  timeout: 60000, // 60 seconds timeout
 });
 
 // Make it available to all requests without recreating
