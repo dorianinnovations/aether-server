@@ -18,7 +18,7 @@ dotenv.config(); // Load environment variables
 
 // CORS configuration for production readiness
 const allowedOrigins = [
-  "https://numinaai.app", 
+  "https://numinaai.netlify.app",
   "http://localhost:5173",
   "http://localhost:5000",
 ];
