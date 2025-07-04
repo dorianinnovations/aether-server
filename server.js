@@ -276,7 +276,7 @@ app.get("/health", async (req, res) => {
   try {
     const llamaCppApiUrl =
       process.env.LLAMA_CPP_API_URL ||
-      "https://ee55-2603-8000-e602-bfd4-6e29-dc5a-db0e-136f.ngrok-free.app/health";
+      "https://ce3f-2603-8000-e602-bfd4-c815-ece4-63db-da3a.ngrok-free.app/health";
 
     // Use the global HTTPS agent for connection reuse
     const httpsAgent =
@@ -438,7 +438,7 @@ app.post("/completion", protect, async (req, res) => {
 
     const llamaCppApiUrl =
       process.env.LLAMA_CPP_API_URL ||
-      "https://ee55-2603-8000-e602-bfd4-6e29-dc5a-db0e-136f.ngrok-free.app/completion";
+      "https://ce3f-2603-8000-e602-bfd4-c815-ece4-63db-da3a.ngrok-free.app/completion";
 
     console.log("Using LLAMA_CPP_API_URL:", llamaCppApiUrl);
     console.log(
