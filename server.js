@@ -26,11 +26,14 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
+      console.log(`CORS request from origin: ${origin}`);
       if (!origin) return callback(null, true);
       if (allowedOrigins.indexOf(origin) === -1) {
-        const msg = `The CORS policy for this site does not allow access from the specified Origin.`;
+        const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
+        console.log(`CORS blocked: ${msg}`);
         return callback(new Error(msg), false);
       }
+      console.log(`CORS allowed for origin: ${origin}`);
       return callback(null, true);
     },
     credentials: true,
