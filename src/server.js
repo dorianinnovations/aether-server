@@ -63,12 +63,16 @@ app.use(errorLogger);
 app.use(globalErrorHandler);
 
 // --- Server Start ---
-const PORT = process.env.PORT || 5000; // Use port from .env or default to 5000
-app.listen(PORT, () => {
-  console.log(`✓API running → http://localhost:${PORT}`);
-  console.log(
-    `✓Memory optimization enabled, initial RSS: ${Math.round(
-      process.memoryUsage().rss / 1024 / 1024
-    )}MB`
-  );
-}); 
+if (process.env.NODE_ENV !== 'test') {
+  const PORT = process.env.PORT || 5000; // Use port from .env or default to 5000
+  app.listen(PORT, () => {
+    console.log(`✓API running → http://localhost:${PORT}`);
+    console.log(
+      `✓Memory optimization enabled, initial RSS: ${Math.round(
+        process.memoryUsage().rss / 1024 / 1024
+      )}MB`
+    );
+  });
+}
+
+export default app;

@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { setTimeout } from 'node:timers/promises';
 
 // Load test environment variables
 dotenv.config({ path: '.env.test' });
@@ -16,5 +17,7 @@ global.console = {
   error: () => {},
 };
 
-// Global test timeout
-jest.setTimeout(30000); 
+// Use the Jest global if available, otherwise fallback
+if (typeof jest !== 'undefined') {
+  jest.setTimeout(30000);
+} 

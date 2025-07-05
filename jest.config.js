@@ -1,10 +1,7 @@
-module.exports = {
+export default {
   testEnvironment: 'node',
-  transform: {},
-  globals: {
-    'ts-jest': {
-      useESM: true,
-    },
+  transform: {
+    '^.+\\.js$': 'babel-jest',
   },
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',

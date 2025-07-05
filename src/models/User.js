@@ -77,7 +77,6 @@ const userSchema = new mongoose.Schema({
 });
 
 // Indexes for better performance
-userSchema.index({ email: 1 });
 userSchema.index({ "stats.lastActive": -1 });
 userSchema.index({ status: 1 });
 

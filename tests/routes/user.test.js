@@ -3,20 +3,21 @@ import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import app from '../../src/server.js';
 import User from '../../src/models/User.js';
+import jwt from 'jsonwebtoken';
 
 let mongoServer;
 let authToken;
 let testUser;
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryServer.create({ binary: { version: '7.0.3' } });
   const mongoUri = mongoServer.getUri();
   await mongoose.connect(mongoUri);
 });
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongoServer.stop();
+  if (mongoServer) await mongoServer.stop();
 });
 
 beforeEach(async () => {
@@ -69,7 +70,6 @@ describe('User Profile Routes', () => {
 
     it('should return 404 for non-existent user', async () => {
       // Create a token for a non-existent user
-      const jwt = require('jsonwebtoken');
       const fakeToken = jwt.sign({ id: new mongoose.Types.ObjectId() }, process.env.JWT_SECRET || 'test-secret');
 
       const response = await request(app)
