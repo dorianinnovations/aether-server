@@ -6,8 +6,8 @@ const shortTermMemorySchema = new mongoose.Schema({
     ref: "User",
     required: true,
   },
-  conversationId: { type: String, required: false, index: true }, // Add index for faster lookups
-  timestamp: { type: Date, default: Date.now, expires: "24h" }, // TTL index for 24 hours
+  conversationId: { type: String, required: false, index: true },
+  timestamp: { type: Date, default: Date.now, expires: "24h" }, 
   content: { type: String, required: true },
   role: { type: String, enum: ["user", "assistant"], required: true },
 });

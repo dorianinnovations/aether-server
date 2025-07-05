@@ -32,15 +32,22 @@ src/
 ## Features
 
 - **Modular Architecture**: Clean separation of concerns with dedicated modules
-- **Authentication**: JWT-based user authentication
+- **Advanced Authentication**: JWT-based auth with account locking and security features
+- **Enhanced User Profiles**: Rich user profiles with preferences and statistics
 - **LLM Integration**: Integration with external language model API
 - **Memory Management**: Short-term conversation memory with TTL
-- **Emotional Logging**: Track user emotions and context
-- **Task Processing**: Background task queue system
-- **Security**: CORS, rate limiting, and security headers
-- **Performance**: Connection pooling, caching, and memory monitoring
+- **Emotional Intelligence**: Advanced emotional tracking with insights and analysis
+- **Task Scheduling**: Advanced task system with cron jobs and priority queues
+- **Analytics & Metrics**: Comprehensive analytics and performance tracking
+- **Advanced Logging**: Structured logging with Winston and performance monitoring
+- **Error Handling**: Centralized error handling with custom error classes
+- **API Documentation**: Interactive API docs and testing interface
+- **Security**: CORS, rate limiting, security headers, and input validation
+- **Performance**: Connection pooling, caching, memory monitoring, and optimization
 
 ## Getting Started
+
+### Local Development
 
 1. Install dependencies:
    ```bash
@@ -65,6 +72,24 @@ src/
    npm start
    ```
 
+### SaaS Deployment
+
+For the easiest deployment as a SaaS application:
+
+1. **Quick Deploy (Recommended)**: Use our deployment script:
+   ```bash
+   ./scripts/deploy.sh
+   ```
+
+2. **Manual Deploy**: Follow the [Quick Start Guide](QUICK_START.md) for step-by-step instructions.
+
+3. **Platform Options**:
+   - **Railway** (Recommended): Zero-config deployment
+   - **Render**: Free tier with easy setup
+   - **Heroku**: Traditional platform with extensive docs
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment strategies.
+
 ## API Endpoints
 
 ### Authentication
@@ -73,13 +98,21 @@ src/
 
 ### User Management
 - `GET /profile` - Get user profile (protected)
+- `PUT /profile` - Update user profile (protected)
 
 ### LLM Integration
 - `POST /completion` - Get AI completion (protected)
 
-### System
-- `GET /health` - Health check
+### Task Management
 - `GET /run-tasks` - Process background tasks (protected)
+- `POST /tasks` - Schedule new task (protected)
+
+### System & Analytics
+- `GET /health` - Health check
+- `GET /metrics` - System metrics (protected)
+- `GET /status` - API status
+- `GET /docs` - API documentation
+- `GET /test` - Interactive API testing
 
 ## Development
 

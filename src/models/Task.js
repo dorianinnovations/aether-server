@@ -14,12 +14,12 @@ const taskSchema = new mongoose.Schema({
   },
   createdAt: { type: Date, default: Date.now },
   runAt: { type: Date, default: Date.now },
-  parameters: { type: Map, of: String }, // Use Mixed type if parameters can be complex objects
+  parameters: { type: Map, of: String },
   result: { type: String },
-  priority: { type: Number, default: 0, min: 0, max: 10 }, // Example priority range
+  priority: { type: Number, default: 0, min: 0, max: 10 },
 });
 
-taskSchema.index({ runAt: 1, status: 1, priority: -1 }); // Compound index for efficient task retrieval
+taskSchema.index({ runAt: 1, status: 1, priority: -1 });
 const Task = mongoose.model("Task", taskSchema);
 console.log("✓Task schema and model defined.");
 
