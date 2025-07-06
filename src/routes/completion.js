@@ -10,12 +10,11 @@ import axios from "axios";
 const router = express.Router();
 const llmService = createLLMService();
 
-// LLM Completion Endpoint
 router.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   const stream = req.body.stream === true;
-  // Sensible defaults for LLM parameters
+  // Sensible defaults fr LLM parameters
   const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>"];
   const n_predict = req.body.n_predict || 1024;
   const temperature = req.body.temperature || 0.7;
@@ -25,9 +24,7 @@ router.post("/completion", protect, async (req, res) => {
   }
 
   if (stream) {
-    // --- Streaming Mode ---
     try {
-      // Build the full prompt as before (reuse your logic)
       const user = await User.findById(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found." });
