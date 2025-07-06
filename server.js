@@ -477,67 +477,61 @@ app.post("/completion", protect, async (req, res) => {
       };
 
       if (stream) {
-        // Handle streaming response
+        // Handle streaming response - use Server-Sent Events
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('Access-Control-Allow-Origin', '*');
         
-        llmRes = await axios({
-          method: "POST",
-          url: llamaCppApiUrl,
-          headers: {
-            "Content-Type": "application/json",
-            "ngrok-skip-browser-warning": "true",
-            "User-Agent": "numina-server/1.0",
-            Connection: "keep-alive",
-          },
-          data: optimizedParams,
-          httpsAgent: httpsAgent,
-          timeout: 45000,
-          responseType: 'stream', // Important for streaming
-        });
-        
-        // Stream the response
-        llmRes.data.on('data', (chunk) => {
-          const chunkStr = chunk.toString();
-          console.log('Raw chunk:', chunkStr); // Debug log
+        try {
+          // Get the regular response first, then simulate streaming
+          const regularResponse = await axios({
+            method: "POST",
+            url: llamaCppApiUrl,
+            headers: {
+              "Content-Type": "application/json",
+              "ngrok-skip-browser-warning": "true",
+              "User-Agent": "numina-server/1.0",
+              Connection: "keep-alive",
+            },
+            data: optimizedParams,
+            httpsAgent: httpsAgent,
+            timeout: 45000,
+          });
           
-          // Handle different streaming formats
-          if (chunkStr.includes('data: ')) {
-            // Already in SSE format
-            res.write(chunkStr);
-          } else {
-            // Try to parse as JSON and convert to SSE
-            const lines = chunkStr.split('\n');
-            for (const line of lines) {
-              if (line.trim()) {
-                try {
-                  const parsed = JSON.parse(line);
-                  if (parsed.content) {
-                    res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
-                  }
-                } catch (e) {
-                  // If not JSON, treat as plain text
-                  res.write(`data: ${JSON.stringify({ content: line })}\n\n`);
-                }
-              }
-            }
+          const botReplyContent = regularResponse.data.content || "";
+          console.log('Got response, streaming it:', botReplyContent.length, 'chars');
+          
+          // Stream the response word by word
+          const words = botReplyContent.split(' ');
+          let currentText = '';
+          
+          for (let i = 0; i < words.length; i++) {
+            currentText += (i > 0 ? ' ' : '') + words[i];
+            res.write(`data: ${JSON.stringify({ content: currentText })}\n\n`);
+            
+            // Small delay between words for streaming effect
+            await new Promise(resolve => setTimeout(resolve, 50));
           }
-        });
-        
-        llmRes.data.on('end', () => {
+          
           res.write('data: [DONE]\n\n');
           res.end();
-        });
-        
-        llmRes.data.on('error', (error) => {
-          console.error('Stream error:', error);
+          
+          // Save to memory after streaming
+          await Promise.all([
+            ShortTermMemory.insertMany([
+              { userId, content: userPrompt, role: "user" },
+              { userId, content: botReplyContent, role: "assistant" },
+            ])
+          ]);
+          
+          return;
+        } catch (error) {
+          console.error('Streaming error:', error);
           res.write('data: [ERROR]\n\n');
           res.end();
-        });
-        
-        return; // Exit early for streaming
+          return;
+        }
       } else {
         // Regular non-streaming request
         llmRes = await axios({
