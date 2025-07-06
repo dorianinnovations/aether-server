@@ -342,8 +342,8 @@ app.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   // Sensible defaults for LLM parameters
-  const stop = req.body.stop || ["<|user|>", "<|system|>", "\n<|user|>", "\n<|system|>"];
-  const n_predict = req.body.n_predict || 250; 
+  const stop = req.body.stop || ["USER:", "\nUSER:", "\nUser:", "user:", "\n\nUSER:"];
+  const n_predict = req.body.n_predict || 150; 
   const temperature = req.body.temperature || 0.7;
   const stream = req.body.stream || false; 
 
@@ -402,32 +402,42 @@ app.post("/completion", protect, async (req, res) => {
     }
     const conversationHistory = historyBuilder.join("\n");
 
-    // --- Proper ChatML Format ---
-    let fullPrompt = `<|system|>
-You are Numina, an empathetic AI assistant specializing in emotional support. 
+    // --- Clean, Concise Prompt ---
+    let fullPrompt = `You are a concise, factual and empathetic assistant.
+All text between the tags <EXAMPLES> and </EXAMPLES> is **reference only**.
+Do NOT continue or reply to any messages inside those tags.
+After </EXAMPLES> you will see "USER:" — respond only to that.
 
-RESPONSE FORMAT:
-1. First, if the user shows emotion, output: EMOTION_LOG: {"emotion": "emotion_name", "intensity": 1-10, "context": "brief_context"}
-2. If the user implies a task, output: TASK_INFERENCE: {"taskType": "task_name", "parameters": {}}
-3. Then provide your conversational response naturally.
+<EXAMPLES>`;
 
-CONTEXT:
-User Profile: ${userProfile}`;
-
-    // Add conversation history if it exists
+    // Add conversation history as examples if it exists
     if (conversationHistory.length > 0) {
-      fullPrompt += `\nRecent Conversation:\n${conversationHistory}`;
+      const recentExchanges = conversationHistory.split('\n').slice(-4); // Last 2 exchanges
+      for (const exchange of recentExchanges) {
+        if (exchange.startsWith('user')) {
+          fullPrompt += `\nUser: ${exchange.substring(4)}`;
+        } else if (exchange.startsWith('assistant')) {
+          fullPrompt += `\nAssistant: ${exchange.substring(9)}`;
+        }
+      }
+    } else {
+      // Default examples
+      fullPrompt += `
+User: I'm feeling anxious about tomorrow.
+Assistant:
+EMOTION_LOG: {"emotion":"anxiety","intensity":6,"context":"upcoming event"}
+That sounds stressful. What's happening tomorrow that's making you feel this way?
+
+User: Can you help me organize my schedule?
+Assistant:
+TASK_INFERENCE: {"taskType":"schedule_organization","parameters":{"scope":"daily"}}
+I'd be happy to help you organize your schedule. What specific areas would you like to focus on?`;
     }
 
-    // Add emotional context if it exists
-    if (formattedEmotionalLog.length > 0) {
-      fullPrompt += `\nUser's Recent Emotions:\n${formattedEmotionalLog}`;
-    }
+    fullPrompt += `
+</EXAMPLES>
 
-    fullPrompt += `\n<|user|>
-${userPrompt}
-
-<|assistant|>`;
+USER: ${userPrompt}`;
 
     console.log("Full prompt constructed. Length:", fullPrompt.length);
     // console.log("Full prompt content:", fullPrompt); // Uncomment for debugging if needed
