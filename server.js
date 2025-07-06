@@ -342,8 +342,8 @@ app.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   // Sensible defaults for LLM parameters
-  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>", "\n\n", "user:", "User:", "assistant:", "Assistant:"];
-  const n_predict = req.body.n_predict || 150; 
+  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>", "User:", "user:", "Numina:", "Human:", "Assistant:"];
+  const n_predict = req.body.n_predict || 80; 
   const temperature = req.body.temperature || 0.7;
   const stream = req.body.stream || false; 
 
@@ -427,9 +427,9 @@ app.post("/completion", protect, async (req, res) => {
 - If user shows emotion, format: EMOTION_LOG: {"emotion": "happy", "intensity": 7, "context": "reason"}
 - If user implies task, format: TASK_INFERENCE: {"taskType": "task_name", "parameters": {}}`);
 
-    // Add user query with cleaner format
+    // Add user query with clear instruction format
     promptParts.push(
-      `User: ${userPrompt}\nNumina:`
+      `Current user message: "${userPrompt}"\n\nRespond as Numina (do not include "User:" or "Numina:" labels in your response):`
     );
 
     // Join with newlines for better token efficiency
