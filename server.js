@@ -474,55 +474,78 @@ app.post("/completion", protect, async (req, res) => {
       };
 
       if (stream) {
-        // Simplified streaming - just test if we can get ANY response
-        console.log('Testing basic ngrok connection...');
+        console.log('Starting REAL streaming...');
+        
+        // Set streaming headers
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('Access-Control-Allow-Origin', '*');
         
         try {
-          // First test non-streaming to see if ngrok works at all
-          const testParams = { ...optimizedParams, stream: false };
-          const testResponse = await axios({
+          const streamResponse = await axios({
             method: "POST",
             url: llamaCppApiUrl,
             headers: {
               "Content-Type": "application/json",
               "ngrok-skip-browser-warning": "true",
             },
-            data: testParams,
+            data: optimizedParams, // includes stream: true
             httpsAgent: httpsAgent,
-            timeout: 30000,
+            timeout: 45000,
+            responseType: 'stream',
           });
           
-          console.log('Basic ngrok test successful, response length:', testResponse.data.content?.length || 0);
+          let fullContent = '';
+          let buffer = '';
           
-          // If basic works, set streaming headers and simulate streaming
-          res.setHeader('Content-Type', 'text/event-stream');
-          res.setHeader('Cache-Control', 'no-cache');
-          res.setHeader('Connection', 'keep-alive');
-          res.setHeader('Access-Control-Allow-Origin', '*');
+          streamResponse.data.on('data', (chunk) => {
+            buffer += chunk.toString();
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ') && line.length > 6) {
+                try {
+                  const jsonStr = line.substring(6);
+                  const parsed = JSON.parse(jsonStr);
+                  
+                  if (parsed.content) {
+                    fullContent += parsed.content;
+                    const sanitized = sanitizeResponse(fullContent);
+                    console.log('Streaming token:', parsed.content);
+                    res.write(`data: ${JSON.stringify({ content: sanitized })}\n\n`);
+                  }
+                } catch (e) {
+                  // Skip invalid JSON
+                }
+              }
+            }
+          });
           
-          const rawContent = testResponse.data.content || "";
-          const content = sanitizeResponse(rawContent);
+          streamResponse.data.on('end', () => {
+            console.log('Stream complete. Total length:', fullContent.length);
+            res.write('data: [DONE]\n\n');
+            res.end();
+            
+            // Save to memory
+            Promise.all([
+              ShortTermMemory.insertMany([
+                { userId, content: userPrompt, role: "user" },
+                { userId, content: sanitizeResponse(fullContent), role: "assistant" },
+              ])
+            ]).catch(err => console.error('Memory save error:', err));
+          });
           
-          // Send as one chunk for now to test
-          res.write(`data: ${JSON.stringify({ content })}\n\n`);
-          res.write('data: [DONE]\n\n');
-          res.end();
-          
-          // Save to memory
-          await Promise.all([
-            ShortTermMemory.insertMany([
-              { userId, content: userPrompt, role: "user" },
-              { userId, content, role: "assistant" },
-            ])
-          ]);
+          streamResponse.data.on('error', (error) => {
+            console.error('Stream error:', error);
+            res.write('data: [ERROR]\n\n');
+            res.end();
+          });
           
           return;
         } catch (error) {
-          console.error('Even basic ngrok test failed:', error.message);
-          res.setHeader('Content-Type', 'text/event-stream');
-          res.setHeader('Cache-Control', 'no-cache');
-          res.setHeader('Connection', 'keep-alive');
-          res.setHeader('Access-Control-Allow-Origin', '*');
+          console.error('Streaming failed:', error.message);
           res.write('data: [ERROR]\n\n');
           res.end();
           return;
