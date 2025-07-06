@@ -505,7 +505,7 @@ app.post("/completion", protect, async (req, res) => {
           // Forward the real stream from llama.cpp
           streamResponse.data.on('data', (chunk) => {
             const chunkStr = chunk.toString();
-            console.log('Real stream chunk:', chunkStr.substring(0, 100) + '...');
+            console.log('Raw chunk received:', chunkStr);
             
             // Parse the streaming data from llama.cpp
             const lines = chunkStr.split('\n');
@@ -517,11 +517,13 @@ app.post("/completion", protect, async (req, res) => {
                   
                   if (parsed.content) {
                     fullContent += parsed.content;
+                    console.log('Sending to frontend:', fullContent);
                     // Forward to frontend in SSE format
                     res.write(`data: ${JSON.stringify({ content: fullContent })}\n\n`);
+                    res.flush(); // Force send immediately
                   }
                 } catch (e) {
-                  // Skip unparseable lines
+                  console.log('Parse error for line:', line, 'Error:', e.message);
                 }
               }
             }
