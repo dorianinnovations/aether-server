@@ -364,7 +364,7 @@ app.post("/completion", protect, async (req, res) => {
     // Limit emotional log to a relevant number of recent entries to keep prompt concise
     const recentEmotionalLogEntries = user.emotionalLog
       .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, 3); // Get most recent 5 entries
+      .slice(0, 2); // Get most recent 2 entries only
 
     const formattedEmotionalLog = recentEmotionalLogEntries
       .map((entry) => {
@@ -386,7 +386,7 @@ app.post("/completion", protect, async (req, res) => {
         { role: 1, content: 1, _id: 0 } // Project only needed fields
       )
         .sort({ timestamp: -1 })
-        .limit(6)
+        .limit(3) // Reduce to 3 messages to keep prompt smaller
         .lean(),
     ]);
 
@@ -422,13 +422,10 @@ app.post("/completion", protect, async (req, res) => {
     }
 
     // Add instructions - using a more compact format
-    promptParts.push(`Instructions for your response:
-- Be direct and concise, but warm, sweet, witty, and playful.
-- Do not echo user's prompt or instructions.
-- Emotional Logging: If the user expresses a clear emotion, identify it and the context. Format strictly as: EMOTION_LOG: {"emotion": "happy", "intensity": 7, "context": "promotion"}
-- Summarizing Past Emotions: Use human-readable format, not raw JSON.
-- Task Inference: If the user implies a task, format strictly as: TASK_INFERENCE: {"taskType": "summarize_emotions", "parameters": {"period": "last week"}}
-- Your primary conversational response should follow any EMOTION_LOG or TASK_INFERENCE output.`);
+    promptParts.push(`Instructions:
+- Be warm and helpful.
+- If user shows emotion, format: EMOTION_LOG: {"emotion": "happy", "intensity": 7, "context": "reason"}
+- If user implies task, format: TASK_INFERENCE: {"taskType": "task_name", "parameters": {}}`);
 
     // Add user query
     promptParts.push(
@@ -517,9 +514,10 @@ app.post("/completion", protect, async (req, res) => {
                   
                   if (parsed.content) {
                     fullContent += parsed.content;
-                    console.log('Sending to frontend:', fullContent);
-                    // Forward to frontend in SSE format
-                    res.write(`data: ${JSON.stringify({ content: fullContent })}\n\n`);
+                    // Sanitize before sending to frontend
+                    const sanitizedContent = sanitizeResponse(fullContent);
+                    console.log('Sending to frontend:', sanitizedContent);
+                    res.write(`data: ${JSON.stringify({ content: sanitizedContent })}\n\n`);
                     res.flush(); // Force send immediately
                   }
                 } catch (e) {
@@ -569,7 +567,8 @@ app.post("/completion", protect, async (req, res) => {
               timeout: 45000,
             });
             
-            const content = fallbackResponse.data.content || "";
+            const rawContent = fallbackResponse.data.content || "";
+            const content = sanitizeResponse(rawContent);
             res.write(`data: ${JSON.stringify({ content })}\n\n`);
             res.write('data: [DONE]\n\n');
             res.end();
