@@ -551,10 +551,44 @@ app.post("/completion", protect, async (req, res) => {
           
           return;
         } catch (error) {
-          console.error('Streaming request error:', error);
-          res.write('data: [ERROR]\n\n');
-          res.end();
-          return;
+          console.error('Streaming failed, falling back to non-streaming:', error.message);
+          
+          // Fallback to non-streaming mode
+          try {
+            const nonStreamParams = { ...optimizedParams, stream: false };
+            const fallbackResponse = await axios({
+              method: "POST",
+              url: llamaCppApiUrl,
+              headers: {
+                "Content-Type": "application/json",
+                "ngrok-skip-browser-warning": "true",
+                "User-Agent": "numina-server/1.0",
+              },
+              data: nonStreamParams,
+              httpsAgent: httpsAgent,
+              timeout: 45000,
+            });
+            
+            const content = fallbackResponse.data.content || "";
+            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+            
+            // Save to memory
+            await Promise.all([
+              ShortTermMemory.insertMany([
+                { userId, content: userPrompt, role: "user" },
+                { userId, content, role: "assistant" },
+              ])
+            ]);
+            
+            return;
+          } catch (fallbackError) {
+            console.error('Fallback also failed:', fallbackError);
+            res.write('data: [ERROR]\n\n');
+            res.end();
+            return;
+          }
         }
       } else {
         // Regular non-streaming request
