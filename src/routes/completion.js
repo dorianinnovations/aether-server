@@ -98,21 +98,42 @@ router.post("/completion", protect, async (req, res) => {
           stream: true,
         },
         responseType: "stream",
+        timeout: 30000, // 30 second timeout
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        }
       });
 
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Headers", "Cache-Control");
+      res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
 
-      llamaRes.data.pipe(res);
-      llamaRes.data.on("end", () => res.end());
+      // Handle streaming data chunk by chunk
+      llamaRes.data.on('data', (chunk) => {
+        res.write(chunk);
+        res.flush && res.flush(); // Ensure immediate sending
+      });
+      llamaRes.data.on("end", () => {
+        res.end();
+      });
       llamaRes.data.on("error", (err) => {
-        res.write(`\n[ERROR]: ${err.message}\n`);
+        console.error("Stream error:", err.message);
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+        }
+        res.write(`data: {"error": "${err.message}"}\n\n`);
         res.end();
       });
     } catch (err) {
-      console.error("Streaming error:", err);
-      res.status(500).json({ status: "error", message: "Streaming failed." });
+      console.error("Streaming request failed:", err.message);
+      res.status(500).json({ 
+        status: "error", 
+        message: "Streaming failed: " + err.message
+      });
     }
     return;
   }
@@ -205,8 +226,6 @@ router.post("/completion", protect, async (req, res) => {
     // Join with newlines for better token efficiency
     const fullPrompt = promptParts.join("\n\n");
 
-    console.log("Full prompt constructed. Length:", fullPrompt.length);
-
     // Make LLM request
     const llmData = await llmService.makeLLMRequest(fullPrompt, {
       stop,
@@ -216,10 +235,7 @@ router.post("/completion", protect, async (req, res) => {
 
     let botReplyContent = llmData.content || ""; // Initialize as empty string
 
-    console.log("Raw LLM Data Content (before cleaning):", botReplyContent);
-
     // --- Begin Robust Parsing and Cleaning ---
-    console.log("Raw LLM response:", botReplyContent);
 
     // Declare variables to store parsed information
     let inferredTask = null;
@@ -257,20 +273,12 @@ router.post("/completion", protect, async (req, res) => {
       "emotion log"
     );
 
-    if (inferredEmotion) {
-      console.log("Parsed emotion:", inferredEmotion.emotion);
-    }
-
     // Then process task - use the first match if multiple exist
     [inferredTask, botReplyContent] = extractJsonPattern(
       taskInferenceRegex,
       botReplyContent,
       "task inference"
     );
-
-    if (inferredTask) {
-      console.log("Parsed task:", inferredTask.taskType);
-    }
 
     // Ensure ALL marker patterns are completely removed, even if parsing failed
     // This is a more aggressive approach to ensure no markers leak to the UI
@@ -294,9 +302,7 @@ router.post("/completion", protect, async (req, res) => {
       botReplyContent.includes("TASK_INFERENCE") ||
       botReplyContent.includes("EMOTION_LOG")
     ) {
-      console.warn(
-        "WARNING: Markers still present after cleaning. Applying emergency cleanup."
-      );
+      console.warn("Markers detected - applying emergency cleanup");
       // Emergency fallback: split by lines and filter out any line containing markers
       botReplyContent = botReplyContent
         .split("\n")
@@ -310,8 +316,6 @@ router.post("/completion", protect, async (req, res) => {
 
     // Use the dedicated sanitizer for a final pass
     botReplyContent = sanitizeResponse(botReplyContent);
-
-    console.log("Cleaned Bot Reply Content (for display):", botReplyContent);
     // --- End Robust Parsing and Cleaning ---
 
     // Prepare database operations to be executed in parallel
@@ -373,19 +377,7 @@ router.post("/completion", protect, async (req, res) => {
     // Execute all database operations in parallel
     await Promise.all(dbOperations);
 
-    // Log results after operations complete
-    const summaryParts = ["Data saved:"];
-    summaryParts.push("- 2 memory entries (user and assistant)");
-
-    if (inferredEmotion && inferredEmotion.emotion) {
-      summaryParts.push(`- Emotion: ${inferredEmotion.emotion}`);
-    }
-
-    if (inferredTask && inferredTask.taskType) {
-      summaryParts.push(`- Task: ${inferredTask.taskType}`);
-    }
-
-    console.log(summaryParts.join(" "));
+    // Database operations completed successfully
 
     // Final safety check before sending response to client
     botReplyContent = sanitizeResponse(botReplyContent);
@@ -395,9 +387,7 @@ router.post("/completion", protect, async (req, res) => {
       botReplyContent.includes("TASK_INFERENCE") ||
       botReplyContent.includes("EMOTION_LOG")
     ) {
-      console.error(
-        "CRITICAL ERROR: Markers still present despite sanitization"
-      );
+      console.error("Response sanitization failed - markers still present");
       botReplyContent =
         "I'm sorry, I wasn't able to provide a proper response. Please try again.";
     }

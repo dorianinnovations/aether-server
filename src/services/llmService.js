@@ -15,11 +15,11 @@ const globalHttpsAgent = new https.Agent({
 export const createLLMService = () => {
   const llamaCppApiUrl =
     process.env.LLAMA_CPP_API_URL ||
-    "https://4eeb-2603-8000-e602-bfd4-c815-ece4-63db-da3a.ngrok-free.app/completion";
+    "http://localhost:8000/completion";
 
   const healthCheckUrl =
     process.env.LLAMA_CPP_API_URL?.replace("/completion", "/health") ||
-    "https://4eeb-2603-8000-e602-bfd4-c815-ece4-63db-da3a.ngrok-free.app/health";
+    "http://localhost:8000/health";
 
   const makeLLMRequest = async (prompt, options = {}) => {
     const {
