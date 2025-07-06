@@ -342,8 +342,8 @@ app.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   // Sensible defaults for LLM parameters
-  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>"];
-  const n_predict = req.body.n_predict || 512; 
+  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>", "\n\n", "user:", "User:", "assistant:", "Assistant:"];
+  const n_predict = req.body.n_predict || 150; 
   const temperature = req.body.temperature || 0.7;
   const stream = req.body.stream || false; 
 
@@ -427,9 +427,9 @@ app.post("/completion", protect, async (req, res) => {
 - If user shows emotion, format: EMOTION_LOG: {"emotion": "happy", "intensity": 7, "context": "reason"}
 - If user implies task, format: TASK_INFERENCE: {"taskType": "task_name", "parameters": {}}`);
 
-    // Add user query
+    // Add user query with cleaner format
     promptParts.push(
-      `<|im_start|>user\n${userPrompt}\n<|im_end|>\n<|im_start|>assistant`
+      `User: ${userPrompt}\nNumina:`
     );
 
     // Join with newlines for better token efficiency
@@ -468,8 +468,10 @@ app.post("/completion", protect, async (req, res) => {
         n_predict: n_predict,
         temperature: temperature,
         top_k: 40, // Limit vocabulary to top 40 tokens
-        top_p: 0.9, // Nucleus sampling for better efficiency
-        repeat_penalty: 1.1, // Slight penalty to reduce repetition
+        top_p: 0.8, // More focused sampling
+        repeat_penalty: 1.15, // Stronger penalty to reduce repetition
+        frequency_penalty: 0.1, // Penalize repeated tokens
+        presence_penalty: 0.1, // Encourage diverse content
         stream: stream, // Add streaming parameter
       };
 
