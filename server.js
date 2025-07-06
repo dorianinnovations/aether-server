@@ -477,57 +477,79 @@ app.post("/completion", protect, async (req, res) => {
       };
 
       if (stream) {
-        // Handle streaming response - use Server-Sent Events
+        // Handle REAL streaming response from llama.cpp
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('Access-Control-Allow-Origin', '*');
         
         try {
-          // Get the regular response first, then simulate streaming
-          const regularResponse = await axios({
+          console.log('Starting real streaming request to llama.cpp...');
+          
+          const streamResponse = await axios({
             method: "POST",
             url: llamaCppApiUrl,
             headers: {
               "Content-Type": "application/json",
               "ngrok-skip-browser-warning": "true",
               "User-Agent": "numina-server/1.0",
-              Connection: "keep-alive",
             },
-            data: optimizedParams,
+            data: optimizedParams, // This includes stream: true
             httpsAgent: httpsAgent,
             timeout: 45000,
+            responseType: 'stream',
           });
           
-          const botReplyContent = regularResponse.data.content || "";
-          console.log('Got response, streaming it:', botReplyContent.length, 'chars');
+          let fullContent = '';
           
-          // Stream the response word by word
-          const words = botReplyContent.split(' ');
-          let currentText = '';
-          
-          for (let i = 0; i < words.length; i++) {
-            currentText += (i > 0 ? ' ' : '') + words[i];
-            res.write(`data: ${JSON.stringify({ content: currentText })}\n\n`);
+          // Forward the real stream from llama.cpp
+          streamResponse.data.on('data', (chunk) => {
+            const chunkStr = chunk.toString();
+            console.log('Real stream chunk:', chunkStr.substring(0, 100) + '...');
             
-            // Small delay between words for streaming effect
-            await new Promise(resolve => setTimeout(resolve, 50));
-          }
+            // Parse the streaming data from llama.cpp
+            const lines = chunkStr.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const jsonStr = line.substring(6); // Remove "data: "
+                  const parsed = JSON.parse(jsonStr);
+                  
+                  if (parsed.content) {
+                    fullContent += parsed.content;
+                    // Forward to frontend in SSE format
+                    res.write(`data: ${JSON.stringify({ content: fullContent })}\n\n`);
+                  }
+                } catch (e) {
+                  // Skip unparseable lines
+                }
+              }
+            }
+          });
           
-          res.write('data: [DONE]\n\n');
-          res.end();
+          streamResponse.data.on('end', () => {
+            console.log('Stream ended, full content:', fullContent.length, 'chars');
+            res.write('data: [DONE]\n\n');
+            res.end();
+            
+            // Save to memory after streaming completes
+            Promise.all([
+              ShortTermMemory.insertMany([
+                { userId, content: userPrompt, role: "user" },
+                { userId, content: fullContent, role: "assistant" },
+              ])
+            ]).catch(err => console.error('Error saving to memory:', err));
+          });
           
-          // Save to memory after streaming
-          await Promise.all([
-            ShortTermMemory.insertMany([
-              { userId, content: userPrompt, role: "user" },
-              { userId, content: botReplyContent, role: "assistant" },
-            ])
-          ]);
+          streamResponse.data.on('error', (error) => {
+            console.error('Real stream error:', error);
+            res.write('data: [ERROR]\n\n');
+            res.end();
+          });
           
           return;
         } catch (error) {
-          console.error('Streaming error:', error);
+          console.error('Streaming request error:', error);
           res.write('data: [ERROR]\n\n');
           res.end();
           return;
