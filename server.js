@@ -280,7 +280,7 @@ app.get("/health", async (req, res) => {
   try {
     const llamaCppApiUrl =
       process.env.LLAMA_CPP_API_URL ||
-      "https://4eeb-2603-8000-e602-bfd4-c815-ece4-63db-da3a.ngrok-free.app/health";
+      "https://numina.ngrok.app/health";
 
     // Use the global HTTPS agent for connection reuse
     const httpsAgent =
@@ -440,7 +440,7 @@ app.post("/completion", protect, async (req, res) => {
 
     const llamaCppApiUrl =
       process.env.LLAMA_CPP_API_URL ||
-      "https://4eeb-2603-8000-e602-bfd4-c815-ece4-63db-da3a.ngrok-free.app/completion";
+      "https://numina.ngrok.app/completion";
 
     console.log("Using LLAMA_CPP_API_URL:", llamaCppApiUrl);
     console.log(
