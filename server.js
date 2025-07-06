@@ -505,22 +505,14 @@ app.post("/completion", protect, async (req, res) => {
           console.log('📡 Stream connected, waiting for tokens...');
           
           streamResponse.data.on('data', (chunk) => {
-            const chunkStr = chunk.toString();
-            console.log('🔍 RAW CHUNK:', JSON.stringify(chunkStr.substring(0, 200)));
-            
-            buffer += chunkStr;
+            buffer += chunk.toString();
             const lines = buffer.split('\n');
             buffer = lines.pop() || ''; // Keep incomplete line for next chunk
             
-            console.log('📋 PROCESSING', lines.length, 'lines');
-            
             for (const line of lines) {
-              console.log('📄 LINE:', JSON.stringify(line.substring(0, 100)));
-              
               if (line.startsWith('data: ') && line.length > 6) {
                 try {
                   const jsonStr = line.substring(6).trim();
-                  console.log('🧩 JSON STRING:', JSON.stringify(jsonStr));
                   
                   if (jsonStr === '[DONE]') {
                     console.log('🏁 Stream ended by llama.cpp');
@@ -528,9 +520,9 @@ app.post("/completion", protect, async (req, res) => {
                   }
                   
                   const parsed = JSON.parse(jsonStr);
-                  console.log('✅ PARSED:', parsed);
                   
-                  if (parsed.content) {
+                  // Only process if there's actual content (not just token IDs)
+                  if (parsed.content && parsed.content.trim()) {
                     fullContent += parsed.content;
                     tokenCount++;
                     
@@ -538,7 +530,6 @@ app.post("/completion", protect, async (req, res) => {
                     const sanitized = sanitizeResponse(fullContent);
                     
                     console.log(`⚡ Token ${tokenCount}:`, JSON.stringify(parsed.content));
-                    console.log(`📝 Full content so far:`, JSON.stringify(fullContent.substring(0, 100)));
                     
                     // Send immediately to frontend
                     res.write(`data: ${JSON.stringify({ content: sanitized })}\n\n`);
@@ -547,7 +538,7 @@ app.post("/completion", protect, async (req, res) => {
                     if (res.flush) res.flush();
                   }
                 } catch (e) {
-                  console.log('⚠️ Parse error:', e.message, 'Line:', line.substring(0, 50));
+                  // Skip invalid JSON
                 }
               }
             }
