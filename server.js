@@ -342,8 +342,8 @@ app.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   // Sensible defaults for LLM parameters
-  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>", "User:", "user:", "Numina:", "Human:", "Assistant:"];
-  const n_predict = req.body.n_predict || 80; 
+  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>", "\nUser:", "\nuser:", "\nNumina:", "\nHuman:", "\nAssistant:", "\n\nUser:", "\n\nuser:"];
+  const n_predict = req.body.n_predict || 200; 
   const temperature = req.body.temperature || 0.7;
   const stream = req.body.stream || false; 
 
@@ -469,9 +469,9 @@ app.post("/completion", protect, async (req, res) => {
         temperature: temperature,
         top_k: 40, // Limit vocabulary to top 40 tokens
         top_p: 0.8, // More focused sampling
-        repeat_penalty: 1.15, // Stronger penalty to reduce repetition
-        frequency_penalty: 0.1, // Penalize repeated tokens
-        presence_penalty: 0.1, // Encourage diverse content
+        repeat_penalty: 1.2, // Strong penalty to reduce repetition
+        frequency_penalty: 0.3, // Strong penalty for repeated tokens  
+        presence_penalty: 0.2, // Encourage diverse content
         stream: stream, // Add streaming parameter
       };
 
