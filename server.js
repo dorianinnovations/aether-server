@@ -344,7 +344,8 @@ app.post("/completion", protect, async (req, res) => {
   // Sensible defaults for LLM parameters
   const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>"];
   const n_predict = req.body.n_predict || 1024; 
-  const temperature = req.body.temperature || 0.7; 
+  const temperature = req.body.temperature || 0.7;
+  const stream = req.body.stream || false; 
 
   if (!userPrompt || typeof userPrompt !== "string") {
     return res.status(400).json({ message: "Invalid or missing prompt." });
@@ -472,21 +473,69 @@ app.post("/completion", protect, async (req, res) => {
         top_k: 40, // Limit vocabulary to top 40 tokens
         top_p: 0.9, // Nucleus sampling for better efficiency
         repeat_penalty: 1.1, // Slight penalty to reduce repetition
+        stream: stream, // Add streaming parameter
       };
 
-      llmRes = await axios({
-        method: "POST",
-        url: llamaCppApiUrl,
-        headers: {
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true",
-          "User-Agent": "numina-server/1.0",
-          Connection: "keep-alive",
-        },
-        data: optimizedParams,
-        httpsAgent: httpsAgent,
-        timeout: 45000, // 45 seconds timeout for LLM requests
-      });
+      if (stream) {
+        // Handle streaming response
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        
+        llmRes = await axios({
+          method: "POST",
+          url: llamaCppApiUrl,
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+            "User-Agent": "numina-server/1.0",
+            Connection: "keep-alive",
+          },
+          data: optimizedParams,
+          httpsAgent: httpsAgent,
+          timeout: 45000,
+          responseType: 'stream', // Important for streaming
+        });
+        
+        // Stream the response
+        llmRes.data.on('data', (chunk) => {
+          const lines = chunk.toString().split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              res.write(line + '\n');
+            }
+          }
+        });
+        
+        llmRes.data.on('end', () => {
+          res.write('data: [DONE]\n\n');
+          res.end();
+        });
+        
+        llmRes.data.on('error', (error) => {
+          console.error('Stream error:', error);
+          res.write('data: [ERROR]\n\n');
+          res.end();
+        });
+        
+        return; // Exit early for streaming
+      } else {
+        // Regular non-streaming request
+        llmRes = await axios({
+          method: "POST",
+          url: llamaCppApiUrl,
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+            "User-Agent": "numina-server/1.0",
+            Connection: "keep-alive",
+          },
+          data: optimizedParams,
+          httpsAgent: httpsAgent,
+          timeout: 45000, // 45 seconds timeout for LLM requests
+        });
+      }
 
       const responseTime = Date.now() - llmStartTime;
       console.log(
