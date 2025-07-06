@@ -341,8 +341,19 @@ app.get("/health", async (req, res) => {
 app.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
-  // Sensible defaults for LLM parameters
-  const stop = req.body.stop || ["USER:", "\nUSER:", "\nUser:", "user:", "\n\nUSER:"];
+  // Comprehensive stop sequences to prevent runaway generation
+  const stop = req.body.stop || [
+    "USER:", "\nUSER:", "\nUser:", "user:", "\n\nUSER:",
+    "Human:", "\nHuman:", "\nhuman:", "human:",
+    "\n\nUser:", "\n\nHuman:", "\n\nuser:", "\n\nhuman:",
+    "Q:", "\nQ:", "\nQuestion:", "Question:",
+    "\n\n\n", // Prevent excessive newlines
+    "---", // Common separator
+    "***", // Another common separator
+    "```", // Code block endings
+    "</EXAMPLES>", // Ensure we don't continue past examples
+    "SYSTEM:", "\nSYSTEM:", "system:", "\nsystem:",
+  ];
   const n_predict = req.body.n_predict || 150; 
   const temperature = req.body.temperature || 0.7;
   const stream = req.body.stream || false; 
@@ -469,14 +480,20 @@ USER: ${userPrompt}`;
       const optimizedParams = {
         prompt: fullPrompt,
         stop: stop,
-        n_predict: n_predict,
-        temperature: temperature,
+        n_predict: Math.min(n_predict, 200), // Cap at 200 tokens to prevent runaway generation
+        temperature: Math.min(temperature, 0.8), // Cap temperature to reduce hallucination
         top_k: 40, // Limit vocabulary to top 40 tokens
         top_p: 0.8, // More focused sampling
-        repeat_penalty: 1.2, // Strong penalty to reduce repetition
-        frequency_penalty: 0.3, // Strong penalty for repeated tokens  
-        presence_penalty: 0.2, // Encourage diverse content
+        repeat_penalty: 1.3, // Stronger penalty to reduce repetition
+        frequency_penalty: 0.4, // Stronger penalty for repeated tokens  
+        presence_penalty: 0.3, // Encourage diverse content
         stream: stream, // Add streaming parameter
+        // Additional parameters for better control
+        min_p: 0.1, // Minimum probability threshold
+        typical_p: 0.9, // Typical sampling parameter
+        mirostat: 2, // Enable mirostat sampling for better coherence
+        mirostat_tau: 5.0, // Target entropy
+        mirostat_eta: 0.1, // Learning rate
       };
 
       if (stream) {
@@ -507,10 +524,25 @@ USER: ${userPrompt}`;
           let fullContent = '';
           let buffer = '';
           let tokenCount = 0;
+          let streamEnded = false;
+          let metadataBuffer = ''; // Buffer for metadata detection
           
           console.log('📡 Stream connected, waiting for tokens...');
           
+          // Set up a timeout to prevent infinite streams
+          const streamTimeout = setTimeout(() => {
+            if (!streamEnded) {
+              console.log('⏰ Stream timeout reached, ending stream');
+              streamEnded = true;
+              res.write('data: [DONE]\n\n');
+              res.end();
+              streamResponse.data.destroy();
+            }
+          }, 45000); // 45 second timeout
+          
           streamResponse.data.on('data', (chunk) => {
+            if (streamEnded) return;
+            
             buffer += chunk.toString();
             const lines = buffer.split('\n');
             buffer = lines.pop() || ''; // Keep incomplete line for next chunk
@@ -522,31 +554,85 @@ USER: ${userPrompt}`;
                   
                   if (jsonStr === '[DONE]') {
                     console.log('🏁 Stream ended by llama.cpp');
-                    continue;
+                    streamEnded = true;
+                    clearTimeout(streamTimeout);
+                    break;
                   }
                   
                   const parsed = JSON.parse(jsonStr);
                   
+                  // Check if stream should stop based on parsed data
+                  if (parsed.stop === true || parsed.stopped === true) {
+                    console.log('🛑 Stream stopped by model');
+                    streamEnded = true;
+                    clearTimeout(streamTimeout);
+                    break;
+                  }
+                  
                   // Only process if there's actual content (not just token IDs)
                   if (parsed.content && parsed.content.trim()) {
                     fullContent += parsed.content;
+                    metadataBuffer += parsed.content;
                     tokenCount++;
                     
                     console.log(`⚡ Token ${tokenCount}:`, JSON.stringify(parsed.content));
                     
-                    // Check if this token contains metadata markers
-                    const hasMetadata = parsed.content.includes('EMOTION_LOG') || 
-                                       parsed.content.includes('TASK_INFERENCE');
+                                         // Check for stop sequences in the accumulated content
+                     let shouldStop = false;
+                     for (const stopSeq of stop) {
+                       if (metadataBuffer.includes(stopSeq)) {
+                         console.log(`🛑 Stop sequence detected: "${stopSeq}" in buffer`);
+                         shouldStop = true;
+                         streamEnded = true;
+                         clearTimeout(streamTimeout);
+                         break;
+                       }
+                     }
+                     
+                     // Additional safety check for excessive token generation
+                     if (tokenCount > 300) {
+                       console.log(`🚨 Token limit exceeded (${tokenCount}), stopping stream`);
+                       shouldStop = true;
+                       streamEnded = true;
+                       clearTimeout(streamTimeout);
+                     }
                     
-                    // Only send token to frontend if it doesn't contain metadata
-                    if (!hasMetadata) {
-                      res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
-                      
-                      // Force flush for real-time delivery
-                      if (res.flush) res.flush();
-                    }
+                    if (shouldStop) break;
+                    
+                                         // Look for metadata markers in accumulated buffer
+                     const hasMetadataStart = metadataBuffer.includes('EMOTION_LOG') || 
+                                            metadataBuffer.includes('TASK_INFERENCE');
+                     
+                     // If we detect metadata, don't send this token but continue collecting
+                     if (hasMetadataStart) {
+                       // Check if we have a complete JSON object
+                       const emotionMatch = metadataBuffer.match(/EMOTION_LOG:?\s*(\{[^}]*\})/);
+                       const taskMatch = metadataBuffer.match(/TASK_INFERENCE:?\s*(\{[^}]*\})/);
+                       
+                       if (emotionMatch || taskMatch) {
+                         // We have complete metadata, clear the buffer but don't send
+                         console.log('🔍 Complete metadata detected:', emotionMatch ? 'EMOTION_LOG' : 'TASK_INFERENCE');
+                         metadataBuffer = '';
+                       } else {
+                         console.log('🔍 Partial metadata detected, buffering...');
+                       }
+                       // If incomplete metadata, just continue buffering
+                     } else {
+                       // No metadata detected, safe to send
+                       res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
+                       
+                       // Force flush for real-time delivery
+                       if (res.flush) res.flush();
+                       
+                       // Reset metadata buffer periodically to prevent overflow
+                       if (metadataBuffer.length > 500) {
+                         metadataBuffer = metadataBuffer.slice(-200);
+                         console.log('📝 Metadata buffer reset to prevent overflow');
+                       }
+                     }
                   }
                 } catch (e) {
+                  console.error('JSON parse error in stream:', e);
                   // Skip invalid JSON
                 }
               }
@@ -554,26 +640,28 @@ USER: ${userPrompt}`;
           });
           
           streamResponse.data.on('end', () => {
-            console.log(`✅ Stream complete! ${tokenCount} tokens, ${fullContent.length} chars`);
-            res.write('data: [DONE]\n\n');
-            res.end();
+            if (!streamEnded) {
+              streamEnded = true;
+              clearTimeout(streamTimeout);
+              console.log(`✅ Stream complete! ${tokenCount} tokens, ${fullContent.length} chars`);
+              res.write('data: [DONE]\n\n');
+              res.end();
+            }
             
-            // Save to memory (sanitize the full content for storage)
+            // Process the complete response for metadata and save to memory
             if (fullContent.trim()) {
-              const sanitizedFullContent = sanitizeResponse(fullContent);
-              Promise.all([
-                ShortTermMemory.insertMany([
-                  { userId, content: userPrompt, role: "user" },
-                  { userId, content: sanitizedFullContent, role: "assistant" },
-                ])
-              ]).catch(err => console.error('Memory save error:', err));
+              processStreamResponse(fullContent, userPrompt, userId);
             }
           });
           
           streamResponse.data.on('error', (error) => {
-            console.error('❌ Stream error:', error);
-            res.write('data: [ERROR]\n\n');
-            res.end();
+            if (!streamEnded) {
+              streamEnded = true;
+              clearTimeout(streamTimeout);
+              console.error('❌ Stream error:', error);
+              res.write('data: [ERROR]\n\n');
+              res.end();
+            }
           });
           
           return;
@@ -1019,6 +1107,141 @@ setInterval(() => {
 }, 60 * 1000); // Check every minute
 
 // --- Helper Functions ---
+
+// Process streaming response for metadata and memory storage
+const processStreamResponse = async (fullContent, userPrompt, userId) => {
+  try {
+    console.log("Processing complete stream response for metadata...");
+    
+    // Declare variables to store parsed information
+    let inferredTask = null;
+    let inferredEmotion = null;
+
+    // Helper function for JSON extraction with error handling
+    const extractJsonPattern = (regex, content, logType) => {
+      const match = content.match(regex);
+      if (!match || !match[1]) {
+        return [null, content];
+      }
+
+      try {
+        // Extract JSON and remove the match from content
+        const jsonString = match[1].trim();
+        const parsed = JSON.parse(jsonString);
+        // Remove the entire pattern (marker + JSON)
+        const newContent = content.replace(match[0], "");
+
+        return [parsed, newContent];
+      } catch (jsonError) {
+        console.error(`Failed to parse ${logType} JSON:`, jsonError.message);
+        return [null, content];
+      }
+    };
+
+    // Extract and remove patterns with comprehensive patterns to catch all variations
+    const taskInferenceRegex = /TASK_INFERENCE:?\s*(\{[\s\S]*?\})\s*?/g;
+    const emotionLogRegex = /EMOTION_LOG:?\s*(\{[\s\S]*?\})\s*?/g;
+
+    let processedContent = fullContent;
+
+    // Process emotion first - use the first match if multiple exist
+    [inferredEmotion, processedContent] = extractJsonPattern(
+      emotionLogRegex,
+      processedContent,
+      "emotion log"
+    );
+
+    if (inferredEmotion) {
+      console.log("Parsed emotion from stream:", inferredEmotion.emotion);
+    }
+
+    // Then process task - use the first match if multiple exist
+    [inferredTask, processedContent] = extractJsonPattern(
+      taskInferenceRegex,
+      processedContent,
+      "task inference"
+    );
+
+    if (inferredTask) {
+      console.log("Parsed task from stream:", inferredTask.taskType);
+    }
+
+    // Sanitize the content for storage
+    const sanitizedContent = sanitizeResponse(processedContent);
+
+    // Prepare database operations to be executed in parallel
+    const dbOperations = [];
+
+    // Memory storage operations (both user and assistant messages)
+    dbOperations.push(
+      ShortTermMemory.insertMany([
+        { userId, content: userPrompt, role: "user" },
+        {
+          userId,
+          content: sanitizedContent || "I'm sorry, I wasn't able to provide a proper response.",
+          role: "assistant",
+        },
+      ])
+    );
+
+    // Process inferred emotion if present
+    if (inferredEmotion && inferredEmotion.emotion) {
+      const emotionToLog = {
+        emotion: inferredEmotion.emotion,
+        context: inferredEmotion.context || userPrompt,
+      };
+
+      // Add intensity if valid
+      if (inferredEmotion.intensity >= 1 && inferredEmotion.intensity <= 10) {
+        emotionToLog.intensity = inferredEmotion.intensity;
+      }
+
+      // Queue the emotion update
+      dbOperations.push(
+        User.findByIdAndUpdate(userId, {
+          $push: { emotionalLog: emotionToLog },
+        })
+      );
+    }
+
+    // Process inferred task if present
+    if (inferredTask && inferredTask.taskType) {
+      const taskParameters =
+        typeof inferredTask.parameters === "object"
+          ? inferredTask.parameters
+          : {};
+
+      // Queue the task creation
+      dbOperations.push(
+        Task.create({
+          userId,
+          taskType: inferredTask.taskType,
+          parameters: taskParameters,
+          status: "queued",
+        })
+      );
+    }
+
+    // Execute all database operations in parallel
+    await Promise.all(dbOperations);
+
+    // Log results after operations complete
+    const summaryParts = ["Stream data saved:"];
+    summaryParts.push("- 2 memory entries (user and assistant)");
+
+    if (inferredEmotion && inferredEmotion.emotion) {
+      summaryParts.push(`- Emotion: ${inferredEmotion.emotion}`);
+    }
+
+    if (inferredTask && inferredTask.taskType) {
+      summaryParts.push(`- Task: ${inferredTask.taskType}`);
+    }
+
+    console.log(summaryParts.join(" "));
+  } catch (error) {
+    console.error('Error processing stream response:', error);
+  }
+};
 
 // Helper function to ensure all special markers are removed from text
 const sanitizeResponse = (text) => {
