@@ -500,10 +500,28 @@ app.post("/completion", protect, async (req, res) => {
         
         // Stream the response
         llmRes.data.on('data', (chunk) => {
-          const lines = chunk.toString().split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              res.write(line + '\n');
+          const chunkStr = chunk.toString();
+          console.log('Raw chunk:', chunkStr); // Debug log
+          
+          // Handle different streaming formats
+          if (chunkStr.includes('data: ')) {
+            // Already in SSE format
+            res.write(chunkStr);
+          } else {
+            // Try to parse as JSON and convert to SSE
+            const lines = chunkStr.split('\n');
+            for (const line of lines) {
+              if (line.trim()) {
+                try {
+                  const parsed = JSON.parse(line);
+                  if (parsed.content) {
+                    res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
+                  }
+                } catch (e) {
+                  // If not JSON, treat as plain text
+                  res.write(`data: ${JSON.stringify({ content: line })}\n\n`);
+                }
+              }
             }
           }
         });
