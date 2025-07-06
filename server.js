@@ -342,8 +342,8 @@ app.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   // Sensible defaults for LLM parameters
-  const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>", "\nUser:", "\nuser:", "\nNumina:", "\nHuman:", "\nAssistant:", "\n\nUser:", "\n\nuser:"];
-  const n_predict = req.body.n_predict || 200; 
+  const stop = req.body.stop || ["<|user|>", "<|system|>", "\n<|user|>", "\n<|system|>"];
+  const n_predict = req.body.n_predict || 250; 
   const temperature = req.body.temperature || 0.7;
   const stream = req.body.stream || false; 
 
@@ -402,38 +402,32 @@ app.post("/completion", protect, async (req, res) => {
     }
     const conversationHistory = historyBuilder.join("\n");
 
-    // --- Streamlined LLM Prompt ---
-    // Optimize by constructing prompt conditionally - only include what's needed
-    const promptParts = [
-      `You are Numina, an empathetic and concise AI assistant. Your goal is to provide helpful responses, acknowledge user emotions, and proactively identify tasks.`,
-      `**User Profile:** ${userProfile}`,
-    ];
+    // --- Proper ChatML Format ---
+    let fullPrompt = `<|system|>
+You are Numina, an empathetic AI assistant specializing in emotional support. 
 
-    // Only include conversation history if it exists
+RESPONSE FORMAT:
+1. First, if the user shows emotion, output: EMOTION_LOG: {"emotion": "emotion_name", "intensity": 1-10, "context": "brief_context"}
+2. If the user implies a task, output: TASK_INFERENCE: {"taskType": "task_name", "parameters": {}}
+3. Then provide your conversational response naturally.
+
+CONTEXT:
+User Profile: ${userProfile}`;
+
+    // Add conversation history if it exists
     if (conversationHistory.length > 0) {
-      promptParts.push(`**Recent Conversation:**\n${conversationHistory}`);
+      fullPrompt += `\nRecent Conversation:\n${conversationHistory}`;
     }
 
-    // Only include emotional log if it exists
+    // Add emotional context if it exists
     if (formattedEmotionalLog.length > 0) {
-      promptParts.push(
-        `**Your Emotional History Summary (Top 5 Recent):**\n${formattedEmotionalLog}`
-      );
+      fullPrompt += `\nUser's Recent Emotions:\n${formattedEmotionalLog}`;
     }
 
-    // Add instructions - using a more compact format
-    promptParts.push(`Instructions:
-- Be warm and helpful.
-- If user shows emotion, format: EMOTION_LOG: {"emotion": "happy", "intensity": 7, "context": "reason"}
-- If user implies task, format: TASK_INFERENCE: {"taskType": "task_name", "parameters": {}}`);
+    fullPrompt += `\n<|user|>
+${userPrompt}
 
-    // Add user query with clear instruction format
-    promptParts.push(
-      `Current user message: "${userPrompt}"\n\nRespond as Numina (do not include "User:" or "Numina:" labels in your response):`
-    );
-
-    // Join with newlines for better token efficiency
-    const fullPrompt = promptParts.join("\n\n");
+<|assistant|>`;
 
     console.log("Full prompt constructed. Length:", fullPrompt.length);
     // console.log("Full prompt content:", fullPrompt); // Uncomment for debugging if needed
