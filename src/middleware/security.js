@@ -8,6 +8,7 @@ const allowedOrigins = [
   "https://numinaai.netlify.app",
   "http://localhost:5173",
   "http://localhost:5000",
+  "https://e33a-2603-8000-e602-bfd4-a221-b141-7962-1ebc.ngrok-free.app",
 ];
 
 export const corsMiddleware = cors({
