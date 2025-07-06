@@ -474,13 +474,14 @@ app.post("/completion", protect, async (req, res) => {
       };
 
       if (stream) {
-        console.log('Starting REAL streaming...');
+        console.log('🚀 NGROK PRO STREAMING - Starting real-time token stream...');
         
-        // Set streaming headers
+        // Set streaming headers optimized for real-time
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
         
         try {
           const streamResponse = await axios({
@@ -489,63 +490,83 @@ app.post("/completion", protect, async (req, res) => {
             headers: {
               "Content-Type": "application/json",
               "ngrok-skip-browser-warning": "true",
+              "Accept": "text/event-stream",
             },
             data: optimizedParams, // includes stream: true
             httpsAgent: httpsAgent,
-            timeout: 45000,
+            timeout: 60000, // Longer timeout for streaming
             responseType: 'stream',
           });
           
           let fullContent = '';
           let buffer = '';
+          let tokenCount = 0;
+          
+          console.log('📡 Stream connected, waiting for tokens...');
           
           streamResponse.data.on('data', (chunk) => {
             buffer += chunk.toString();
             const lines = buffer.split('\n');
-            buffer = lines.pop() || ''; // Keep incomplete line
+            buffer = lines.pop() || ''; // Keep incomplete line for next chunk
             
             for (const line of lines) {
               if (line.startsWith('data: ') && line.length > 6) {
                 try {
-                  const jsonStr = line.substring(6);
+                  const jsonStr = line.substring(6).trim();
+                  if (jsonStr === '[DONE]') {
+                    console.log('🏁 Stream ended by llama.cpp');
+                    continue;
+                  }
+                  
                   const parsed = JSON.parse(jsonStr);
                   
                   if (parsed.content) {
                     fullContent += parsed.content;
+                    tokenCount++;
+                    
+                    // Apply sanitization but keep live streaming
                     const sanitized = sanitizeResponse(fullContent);
-                    console.log('Streaming token:', parsed.content);
+                    
+                    console.log(`⚡ Token ${tokenCount}:`, JSON.stringify(parsed.content));
+                    
+                    // Send immediately to frontend
                     res.write(`data: ${JSON.stringify({ content: sanitized })}\n\n`);
+                    
+                    // Force flush for real-time delivery
+                    if (res.flush) res.flush();
                   }
                 } catch (e) {
-                  // Skip invalid JSON
+                  console.log('⚠️ Parse error:', e.message, 'Line:', line.substring(0, 50));
                 }
               }
             }
           });
           
           streamResponse.data.on('end', () => {
-            console.log('Stream complete. Total length:', fullContent.length);
+            console.log(`✅ Stream complete! ${tokenCount} tokens, ${fullContent.length} chars`);
             res.write('data: [DONE]\n\n');
             res.end();
             
             // Save to memory
-            Promise.all([
-              ShortTermMemory.insertMany([
-                { userId, content: userPrompt, role: "user" },
-                { userId, content: sanitizeResponse(fullContent), role: "assistant" },
-              ])
-            ]).catch(err => console.error('Memory save error:', err));
+            if (fullContent.trim()) {
+              Promise.all([
+                ShortTermMemory.insertMany([
+                  { userId, content: userPrompt, role: "user" },
+                  { userId, content: sanitizeResponse(fullContent), role: "assistant" },
+                ])
+              ]).catch(err => console.error('Memory save error:', err));
+            }
           });
           
           streamResponse.data.on('error', (error) => {
-            console.error('Stream error:', error);
+            console.error('❌ Stream error:', error);
             res.write('data: [ERROR]\n\n');
             res.end();
           });
           
           return;
         } catch (error) {
-          console.error('Streaming failed:', error.message);
+          console.error('💥 Streaming failed:', error.message);
           res.write('data: [ERROR]\n\n');
           res.end();
           return;
