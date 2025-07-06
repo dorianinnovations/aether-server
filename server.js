@@ -530,11 +530,17 @@ app.post("/completion", protect, async (req, res) => {
                     
                     console.log(`⚡ Token ${tokenCount}:`, JSON.stringify(parsed.content));
                     
-                    // Send ONLY the new token content to frontend
-                    res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
+                    // Check if this token contains metadata markers
+                    const hasMetadata = parsed.content.includes('EMOTION_LOG') || 
+                                       parsed.content.includes('TASK_INFERENCE');
                     
-                    // Force flush for real-time delivery
-                    if (res.flush) res.flush();
+                    // Only send token to frontend if it doesn't contain metadata
+                    if (!hasMetadata) {
+                      res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
+                      
+                      // Force flush for real-time delivery
+                      if (res.flush) res.flush();
+                    }
                   }
                 } catch (e) {
                   // Skip invalid JSON
