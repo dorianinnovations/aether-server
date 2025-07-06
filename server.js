@@ -343,7 +343,7 @@ app.post("/completion", protect, async (req, res) => {
   const userPrompt = req.body.prompt;
   // Sensible defaults for LLM parameters
   const stop = req.body.stop || ["<|im_end|>", "\n<|im_start|>"];
-  const n_predict = req.body.n_predict || 1024; 
+  const n_predict = req.body.n_predict || 512; 
   const temperature = req.body.temperature || 0.7;
   const stream = req.body.stream || false; 
 
@@ -474,120 +474,58 @@ app.post("/completion", protect, async (req, res) => {
       };
 
       if (stream) {
-        // Handle REAL streaming response from llama.cpp
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        // Simplified streaming - just test if we can get ANY response
+        console.log('Testing basic ngrok connection...');
         
         try {
-          console.log('Starting real streaming request to llama.cpp...');
-          
-          const streamResponse = await axios({
+          // First test non-streaming to see if ngrok works at all
+          const testParams = { ...optimizedParams, stream: false };
+          const testResponse = await axios({
             method: "POST",
             url: llamaCppApiUrl,
             headers: {
               "Content-Type": "application/json",
               "ngrok-skip-browser-warning": "true",
-              "User-Agent": "numina-server/1.0",
             },
-            data: optimizedParams, // This includes stream: true
+            data: testParams,
             httpsAgent: httpsAgent,
-            timeout: 45000,
-            responseType: 'stream',
+            timeout: 30000,
           });
           
-          let fullContent = '';
+          console.log('Basic ngrok test successful, response length:', testResponse.data.content?.length || 0);
           
-          // Forward the real stream from llama.cpp
-          streamResponse.data.on('data', (chunk) => {
-            const chunkStr = chunk.toString();
-            console.log('Raw chunk received:', chunkStr);
-            
-            // Parse the streaming data from llama.cpp
-            const lines = chunkStr.split('\n');
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const jsonStr = line.substring(6); // Remove "data: "
-                  const parsed = JSON.parse(jsonStr);
-                  
-                  if (parsed.content) {
-                    fullContent += parsed.content;
-                    // Sanitize before sending to frontend
-                    const sanitizedContent = sanitizeResponse(fullContent);
-                    console.log('Sending to frontend:', sanitizedContent);
-                    res.write(`data: ${JSON.stringify({ content: sanitizedContent })}\n\n`);
-                    res.flush(); // Force send immediately
-                  }
-                } catch (e) {
-                  console.log('Parse error for line:', line, 'Error:', e.message);
-                }
-              }
-            }
-          });
+          // If basic works, set streaming headers and simulate streaming
+          res.setHeader('Content-Type', 'text/event-stream');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Connection', 'keep-alive');
+          res.setHeader('Access-Control-Allow-Origin', '*');
           
-          streamResponse.data.on('end', () => {
-            console.log('Stream ended, full content:', fullContent.length, 'chars');
-            res.write('data: [DONE]\n\n');
-            res.end();
-            
-            // Save to memory after streaming completes
-            Promise.all([
-              ShortTermMemory.insertMany([
-                { userId, content: userPrompt, role: "user" },
-                { userId, content: fullContent, role: "assistant" },
-              ])
-            ]).catch(err => console.error('Error saving to memory:', err));
-          });
+          const rawContent = testResponse.data.content || "";
+          const content = sanitizeResponse(rawContent);
           
-          streamResponse.data.on('error', (error) => {
-            console.error('Real stream error:', error);
-            res.write('data: [ERROR]\n\n');
-            res.end();
-          });
+          // Send as one chunk for now to test
+          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          res.write('data: [DONE]\n\n');
+          res.end();
+          
+          // Save to memory
+          await Promise.all([
+            ShortTermMemory.insertMany([
+              { userId, content: userPrompt, role: "user" },
+              { userId, content, role: "assistant" },
+            ])
+          ]);
           
           return;
         } catch (error) {
-          console.error('Streaming failed, falling back to non-streaming:', error.message);
-          
-          // Fallback to non-streaming mode
-          try {
-            const nonStreamParams = { ...optimizedParams, stream: false };
-            const fallbackResponse = await axios({
-              method: "POST",
-              url: llamaCppApiUrl,
-              headers: {
-                "Content-Type": "application/json",
-                "ngrok-skip-browser-warning": "true",
-                "User-Agent": "numina-server/1.0",
-              },
-              data: nonStreamParams,
-              httpsAgent: httpsAgent,
-              timeout: 45000,
-            });
-            
-            const rawContent = fallbackResponse.data.content || "";
-            const content = sanitizeResponse(rawContent);
-            res.write(`data: ${JSON.stringify({ content })}\n\n`);
-            res.write('data: [DONE]\n\n');
-            res.end();
-            
-            // Save to memory
-            await Promise.all([
-              ShortTermMemory.insertMany([
-                { userId, content: userPrompt, role: "user" },
-                { userId, content, role: "assistant" },
-              ])
-            ]);
-            
-            return;
-          } catch (fallbackError) {
-            console.error('Fallback also failed:', fallbackError);
-            res.write('data: [ERROR]\n\n');
-            res.end();
-            return;
-          }
+          console.error('Even basic ngrok test failed:', error.message);
+          res.setHeader('Content-Type', 'text/event-stream');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Connection', 'keep-alive');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.write('data: [ERROR]\n\n');
+          res.end();
+          return;
         }
       } else {
         // Regular non-streaming request
