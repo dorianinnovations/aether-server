@@ -528,13 +528,10 @@ app.post("/completion", protect, async (req, res) => {
                     fullContent += parsed.content;
                     tokenCount++;
                     
-                    // Apply sanitization but keep live streaming
-                    const sanitized = sanitizeResponse(fullContent);
-                    
                     console.log(`⚡ Token ${tokenCount}:`, JSON.stringify(parsed.content));
                     
-                    // Send immediately to frontend
-                    res.write(`data: ${JSON.stringify({ content: sanitized })}\n\n`);
+                    // Send ONLY the new token content to frontend
+                    res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
                     
                     // Force flush for real-time delivery
                     if (res.flush) res.flush();
@@ -551,12 +548,13 @@ app.post("/completion", protect, async (req, res) => {
             res.write('data: [DONE]\n\n');
             res.end();
             
-            // Save to memory
+            // Save to memory (sanitize the full content for storage)
             if (fullContent.trim()) {
+              const sanitizedFullContent = sanitizeResponse(fullContent);
               Promise.all([
                 ShortTermMemory.insertMany([
                   { userId, content: userPrompt, role: "user" },
-                  { userId, content: sanitizeResponse(fullContent), role: "assistant" },
+                  { userId, content: sanitizedFullContent, role: "assistant" },
                 ])
               ]).catch(err => console.error('Memory save error:', err));
             }
