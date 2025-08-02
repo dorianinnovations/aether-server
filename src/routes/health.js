@@ -1,7 +1,6 @@
 import express from "express";
 import mongoose from "mongoose";
 import { createLLMService } from "../services/llmService.js";
-import websocketService from "../services/websocketService.js";
 import { log } from "../utils/logger.js";
 import AppAudit from "../utils/appAudit.js";
 
@@ -30,26 +29,16 @@ router.get("/health", async (req, res) => {
       response_status: "available"
     };
 
-    // Check WebSocket health
-    const wsStats = websocketService.getServerStats();
-    const wsHealth = {
-      status: websocketService.io ? "active" : "inactive",
-      connected_users: wsStats.connectedUsers,
-      total_rooms: wsStats.totalRooms,
-      uptime: wsStats.serverUptime
-    };
-
     const healthStatus = {
       server: "healthy",
       database: dbHealth,
       llm_api: llmHealth.status,
       llm_service: llmHealth.service,
       llm_response_status: llmHealth.response_status,
-      websocket: wsHealth.status,
-      websocket_stats: wsHealth
+      server_uptime: Math.floor(process.uptime())
     };
 
-    const overallStatus = (dbHealth === "connected" && llmHealth.status === "accessible" && wsHealth.status === "active") 
+    const overallStatus = (dbHealth === "connected" && llmHealth.status === "accessible") 
       ? "success" 
       : "degraded";
 
@@ -69,33 +58,6 @@ router.get("/health", async (req, res) => {
   }
 });
 
-// WebSocket specific health check
-router.get("/websocket", async (req, res) => {
-  try {
-    const wsStats = websocketService.getServerStats();
-    const wsHealth = {
-      status: websocketService.io ? "active" : "inactive",
-      connected_users: wsStats.connectedUsers,
-      total_rooms: wsStats.totalRooms,
-      uptime: wsStats.serverUptime,
-      server_ready: !!websocketService.io,
-      socket_io_version: websocketService.io ? "5.x" : "unknown"
-    };
-
-    res.json({
-      success: true,
-      websocket: wsHealth,
-      test_endpoint: `wss://${req.get('host')}`,
-      instructions: "Use this URL to test WebSocket connection"
-    });
-  } catch (error) {
-    log.error("WebSocket health check error", error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
 
 // Comprehensive app audit endpoint
 router.get("/audit", async (req, res) => {

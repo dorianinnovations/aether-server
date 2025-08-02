@@ -60,8 +60,8 @@ import { createCache, setupMemoryMonitoring } from "./utils/cache.js";
 log.debug("Utility modules imported");
 
 // import taskScheduler from "./services/taskScheduler.js"; // REMOVED - phased out
+// import websocketService from "./services/websocketService.js"; // REMOVED - phased out
 
-import websocketService from "./services/websocketService.js";
 import redisService from "./services/redisService.js";
 // Removed: pushNotificationService (archived service)
 // Removed: offlineSyncService and dataProcessingPipeline (archived services)
@@ -303,20 +303,14 @@ const initializeServer = async () => {
     // Starting HTTP server
     const PORT = process.env.PORT || 5000;
     
-    // Create HTTP server for WebSocket integration
+    // Create HTTP server
     const server = http.createServer(app);
-    
-    // Initialize WebSocket service for real-time features
-    // Initializing WebSocket service
-    websocketService.initialize(server);
     
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
-      // WebSocket service active
       // Performance optimizations enabled
       // Memory usage logged
       // Redis service status checked
-      // Push notifications status checked
       // Server initialization completed
     });
   }
