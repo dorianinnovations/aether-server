@@ -2,7 +2,6 @@ import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import User from '../models/User.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
 import logger from '../utils/logger.js';
-import websocketService from './websocketService.js';
 import unifiedCognitiveEngine from './unifiedCognitiveEngine.js';
 
 /**
@@ -868,10 +867,7 @@ class UBPMService {
       timestamp: new Date()
     };
 
-    // Send via WebSocket if user is online
-    websocketService.sendToUser(userId, 'ubpm_notification', notification);
-
-    // Notification sent
+    // Notifications disabled - legacy feature removed
   }
 
   /**

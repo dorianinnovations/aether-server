@@ -2,7 +2,7 @@ import express from 'express';
 import Post from '../models/Post.js';
 import { protect } from '../middleware/auth.js';
 import { log } from '../utils/logger.js';
-import websocketService from '../services/websocketService.js';
+import socialCognitiveFusion from '../services/socialCognitiveFusion.js';
 
 const router = express.Router();
 
@@ -136,14 +136,24 @@ router.post('/', protect, async (req, res) => {
       return res.status(400).json({ error: 'Community and title are required' });
     }
 
-    // Get user archetype (you might want to fetch this from user profile)
-    const userArchetype = req.user.archetype || 'Curious';
+    // Get user archetype from cognitive analysis (with fallback)
+    let userArchetype;
+    try {
+      userArchetype = await socialCognitiveFusion.getSocialArchetype(req.user.id);
+    } catch (error) {
+      log.warn(`Failed to get user archetype for ${req.user.id}:`, error.message);
+      userArchetype = 'Curious'; // Default fallback
+    }
+    
+    if (!userArchetype) {
+      userArchetype = 'Curious';
+    }
 
     const post = new Post({
       community,
       title,
       content,
-      author: req.user.username || req.user.email.split('@')[0],
+      author: req.user.username || (req.user.email ? req.user.email.split('@')[0] : 'Anonymous'),
       authorId: req.user.id,
       authorArchetype: userArchetype,
       badge,
@@ -169,11 +179,11 @@ router.post('/', protect, async (req, res) => {
       comments: []
     };
 
-    // Emit real-time event for new post
-    websocketService.emitToAll('post:created', {
-      post: formattedPost,
-      userId: req.user.id
-    });
+    // WebSocket emissions disabled for now
+    // websocketService.emitToAll('post:created', {
+    //   post: formattedPost,
+    //   userId: req.user.id
+    // });
 
     res.status(201).json(formattedPost);
     log.info(`Post created by user ${req.user.id}: ${post._id}`);
@@ -230,11 +240,11 @@ router.put('/:id', protect, async (req, res) => {
       }))
     };
 
-    // Emit real-time event for post update
-    websocketService.emitToAll('post:updated', {
-      post: formattedPost,
-      userId: req.user.id
-    });
+    // WebSocket emissions disabled for now
+    // websocketService.emitToAll('post:updated', {
+    //   post: formattedPost,
+    //   userId: req.user.id
+    // });
 
     res.json(formattedPost);
     log.info(`Post updated by user ${req.user.id}: ${post._id}`);
@@ -262,11 +272,11 @@ router.delete('/:id', protect, async (req, res) => {
     post.isDeleted = true;
     await post.save();
 
-    // Emit real-time event for post deletion
-    websocketService.emitToAll('post:deleted', {
-      postId: post._id.toString(),
-      userId: req.user.id
-    });
+    // WebSocket emissions disabled for now
+    // websocketService.emitToAll('post:deleted', {
+    //   postId: post._id.toString(),
+    //   userId: req.user.id
+    // });
 
     res.json({ message: 'Post deleted successfully' });
     log.info(`Post deleted by user ${req.user.id}: ${post._id}`);
@@ -291,10 +301,20 @@ router.post('/:id/comments', protect, async (req, res) => {
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    const userArchetype = req.user.archetype || 'Curious';
+    let userArchetype;
+    try {
+      userArchetype = await socialCognitiveFusion.getSocialArchetype(req.user.id);
+    } catch (error) {
+      log.warn(`Failed to get user archetype for ${req.user.id}:`, error.message);
+      userArchetype = 'Curious'; // Default fallback
+    }
+    
+    if (!userArchetype) {
+      userArchetype = 'Curious';
+    }
 
     const comment = {
-      author: req.user.username || req.user.email.split('@')[0],
+      author: req.user.username || (req.user.email ? req.user.email.split('@')[0] : 'Anonymous'),
       authorId: req.user.id,
       authorArchetype: userArchetype,
       content: content.trim(),
@@ -315,12 +335,12 @@ router.post('/:id/comments', protect, async (req, res) => {
       profilePic: newComment.profilePic
     };
 
-    // Emit real-time event for new comment
-    websocketService.emitToAll('comment:created', {
-      postId: post._id.toString(),
-      comment: formattedComment,
-      userId: req.user.id
-    });
+    // WebSocket emissions disabled for now
+    // websocketService.emitToAll('comment:created', {
+    //   postId: post._id.toString(),
+    //   comment: formattedComment,
+    //   userId: req.user.id
+    // });
 
     res.status(201).json(formattedComment);
     log.info(`Comment added to post ${post._id} by user ${req.user.id}`);
@@ -357,18 +377,40 @@ router.delete('/:postId/comments/:commentId', protect, async (req, res) => {
     post.comments.pull(req.params.commentId);
     await post.save();
 
-    // Emit real-time event for comment deletion
-    websocketService.emitToAll('comment:deleted', {
-      postId: post._id.toString(),
-      commentId: req.params.commentId,
-      userId: req.user.id
-    });
+    // WebSocket emissions disabled for now
+    // websocketService.emitToAll('comment:deleted', {
+    //   postId: post._id.toString(),
+    //   commentId: req.params.commentId,
+    //   userId: req.user.id
+    // });
 
     res.json({ message: 'Comment deleted successfully' });
     log.info(`Comment deleted from post ${post._id} by user ${req.user.id}`);
   } catch (error) {
     log.error('Error deleting comment:', error);
     res.status(500).json({ error: 'Failed to delete comment' });
+  }
+});
+
+// Get community suggestions based on cognitive profile
+router.get('/suggestions/communities', protect, async (req, res) => {
+  try {
+    const suggestions = await socialCognitiveFusion.suggestCommunities(req.user.id);
+    
+    res.json({
+      success: true,
+      data: {
+        archetype: suggestions.archetype,
+        recommended: suggestions.primary,
+        currentlyActive: suggestions.active,
+        message: `Based on your cognitive profile, you might enjoy these communities:`
+      }
+    });
+    
+    log.info(`Community suggestions provided for user ${req.user.id}: ${suggestions.archetype}`);
+  } catch (error) {
+    log.error('Error getting community suggestions:', error);
+    res.status(500).json({ error: 'Failed to get community suggestions' });
   }
 });
 
