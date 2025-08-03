@@ -62,7 +62,7 @@ numina-server/
 │   │   ├── cacheMiddleware.js        # Response caching
 │   │   └── tierLimiter.js            # Subscription tier limits
 │   ├── tools/
-│   │   ├── insaneWebSearch.js        # Advanced web search
+│   │   ├── webSearchTool.js          # Advanced web search
 │   │   ├── realUBPMAnalysis.js       # Real-time UBPM analysis
 │   │   └── [other tools...]          # Additional specialized tools
 │   ├── utils/

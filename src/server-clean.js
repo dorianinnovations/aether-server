@@ -116,7 +116,7 @@ const initializeServer = async () => {
             for (let i = 0; i < words.length; i++) {
               const word = words[i];
               res.write(`data: ${JSON.stringify({content: word})}\n\n`);
-              await new Promise(resolve => setTimeout(resolve, 80)); // 80ms delay
+              await new Promise(resolve => setTimeout(resolve, 25)); // Much faster: 25ms delay
             }
             
             // Send completion signal

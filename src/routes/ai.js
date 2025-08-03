@@ -9,6 +9,7 @@ import { protect } from '../middleware/auth.js';
 import { checkTierLimits } from '../middleware/tierLimiter.js';
 import { createLLMService } from '../services/llmService.js';
 import conversationService from '../services/conversationService.js';
+import webSearchTool from '../tools/webSearchTool.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -70,7 +71,7 @@ router.post('/chat', protect, checkTierLimits, fileUpload.any(), async (req, res
     }
 
     // Build simple system prompt
-    const systemPrompt = `You are Aether, an AI assistant on the Aether platform. You are helpful, intelligent, and engaging. 
+    let systemPrompt = `You are Aether, an AI assistant on the Aether platform. You are helpful, intelligent, and engaging. 
 You have access to the user's recent conversation history to maintain context.
 Keep responses conversational and natural.`;
 
@@ -90,6 +91,83 @@ Keep responses conversational and natural.`;
 
     const finalMessage = userMessage + fileContent;
 
+    // Check if web search should be triggered
+    let webSearchResults = null;
+    let toolResults = [];
+    
+    // Define search patterns (simplified version from webSearchTool)
+    const searchTriggers = [
+      /(?:search|find|look up|google|bing)\s+(?:for\s+)?(.+)/i,
+      /(?:what'?s|latest|recent|current|news about|happening with)\s+(.+)/i,
+      /(?:when|where|who|what|how|why)\s+(?:is|are|was|were|did|does|do)\s+(.+)/i,
+      /(?:what is|define|meaning of|explain)\s+(.+)/i,
+      /(?:statistics|data|numbers|facts about)\s+(.+)/i,
+      /(?:compare|difference between|vs|versus)\s+(.+)/i
+    ];
+    
+    const noSearchPatterns = [
+      /^(?:hello|hi|hey|thanks|thank you|ok|okay|yes|no|maybe)$/i,
+      /^(?:how are you|good morning|good afternoon|good evening)$/i,
+      /^(?:i think|i feel|i believe|in my opinion).*$/i,
+      /^(?:can you help|could you|would you|please).*(?:with|me).*$/i
+    ];
+    
+    // Check if should trigger search
+    let shouldSearch = false;
+    const forceSearch = userMessage.includes('[FORCE_SEARCH]');
+    const cleanMessage = userMessage.replace('[FORCE_SEARCH]', '').trim();
+    
+    if (forceSearch) {
+      shouldSearch = true;
+    } else {
+      // Skip search for conversational messages
+      const isConversational = noSearchPatterns.some(pattern => pattern.test(cleanMessage));
+      if (!isConversational) {
+        // Check for search triggers
+        shouldSearch = searchTriggers.some(pattern => pattern.test(cleanMessage));
+        
+        // Also check for search keywords
+        if (!shouldSearch) {
+          const searchKeywords = ['current', 'latest', 'recent', 'news', 'update', 'today', 'now', 'price', 'cost', 'statistics', 'data', 'facts'];
+          shouldSearch = searchKeywords.some(keyword => cleanMessage.toLowerCase().includes(keyword));
+        }
+      }
+    }
+    
+    // Perform web search if needed
+    if (shouldSearch) {
+      console.log('🔍 Triggering web search for:', cleanMessage);
+      try {
+        const searchResult = await webSearchTool({ query: cleanMessage }, { userId });
+        if (searchResult.success) {
+          webSearchResults = searchResult;
+          toolResults.push({
+            tool: 'webSearchTool',
+            success: true,
+            data: searchResult,
+            query: cleanMessage,
+            processingTime: Date.now() - Date.now()
+          });
+          
+          // Add search results to system prompt
+          const searchContext = `Recent web search results for "${cleanMessage}":
+${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
+
+Use this information to provide current, accurate responses.`;
+          
+          systemPrompt = systemPrompt + '\n\n' + searchContext;
+        }
+      } catch (error) {
+        console.error('Web search failed:', error);
+        toolResults.push({
+          tool: 'webSearchTool',
+          success: false,
+          error: error.message,
+          query: cleanMessage
+        });
+      }
+    }
+
     // Build messages array
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -99,9 +177,9 @@ Keep responses conversational and natural.`;
 
     // Handle streaming vs non-streaming
     if (stream) {
-      return await handleStreaming(res, messages, userMessage, userId, conversationId, userTier);
+      return await handleStreaming(res, messages, userMessage, userId, conversationId, userTier, toolResults);
     } else {
-      return await handleNonStreaming(res, messages, userMessage, userId, conversationId, userTier);
+      return await handleNonStreaming(res, messages, userMessage, userId, conversationId, userTier, toolResults);
     }
 
   } catch (error) {
@@ -123,7 +201,7 @@ Keep responses conversational and natural.`;
   }
 });
 
-async function handleStreaming(res, messages, userMessage, userId, conversationId, userTier) {
+async function handleStreaming(res, messages, userMessage, userId, conversationId, userTier, toolResults = []) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -198,7 +276,7 @@ async function handleStreaming(res, messages, userMessage, userId, conversationI
   }
 }
 
-async function handleNonStreaming(res, messages, userMessage, userId, conversationId, userTier) {
+async function handleNonStreaming(res, messages, userMessage, userId, conversationId, userTier, toolResults = []) {
   try {
     const maxTokens = userTier === 'aether' ? 4000 : 2000;
     const response = await llmService.makeLLMRequest(messages, {
@@ -210,15 +288,23 @@ async function handleNonStreaming(res, messages, userMessage, userId, conversati
 
     // Save conversation
     try {
-      await conversationService.addMessage(userId, conversationId, 'user', userMessage);
-      await conversationService.addMessage(userId, conversationId, 'assistant', assistantResponse);
+      if (conversationService.addMessage) {
+        await conversationService.addMessage(userId, conversationId, 'user', userMessage);
+        await conversationService.addMessage(userId, conversationId, 'assistant', assistantResponse);
+      }
     } catch (saveError) {
       console.error('Save error:', saveError.message);
     }
 
     return res.json({
       success: true,
-      content: assistantResponse,
+      data: {
+        response: assistantResponse,
+        toolResults: toolResults,
+        hasTools: toolResults.length > 0,
+        toolsUsed: toolResults.length
+      },
+      content: assistantResponse,  // Keep for backward compatibility
       tier: userTier,
       model: response.model
     });
