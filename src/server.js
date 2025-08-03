@@ -35,6 +35,7 @@ import analyticsLLMRoutes from "./routes/analyticsLLM.js"; // PRESERVED: Your st
 // Removed: personalizedAIRoutes (duplicated adaptive-chat functionality)
 import conversationRoutes from "./routes/conversation.js"; // CRITICAL: Conversation management
 import postsRoutes from "./routes/posts.js"; // NEW: Social posts management
+import eventsRoutes from "./routes/events.js"; // NEW: Server-Sent Events for real-time sync
 import { protect } from "./middleware/auth.js";
 // Removed: syncRoutes (offline sync not needed)
 // Removed: toolsRoutes (contained CreditPool dependencies)
@@ -199,6 +200,7 @@ const initializeServer = async () => {
   // Removed: personalizedAI routes (functionality duplicated in adaptive-chat)
   app.use("/", conversationRoutes); // CRITICAL: Conversation management endpoints
   app.use("/posts", postsRoutes); // NEW: Social posts endpoints
+  app.use("/events", eventsRoutes); // NEW: Server-Sent Events for real-time sync
   
   // Register mobile-optimized routes
   // Removed: sync routes

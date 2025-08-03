@@ -81,6 +81,29 @@ const postSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  likes: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  likesCount: {
+    type: Number,
+    default: 0
+  },
+  commentsCount: {
+    type: Number,
+    default: 0
+  },
+  sharesCount: {
+    type: Number,
+    default: 0
+  },
   comments: [commentSchema],
   isDeleted: {
     type: Boolean,
@@ -111,6 +134,20 @@ postSchema.virtual('timeAgo').get(function() {
   if (hours > 0) return `${hours}h`;
   if (minutes > 0) return `${minutes}m`;
   return 'now';
+});
+
+// Middleware to update counts
+postSchema.pre('save', function(next) {
+  // Update likes count
+  this.likesCount = this.likes.length;
+  
+  // Update comments count
+  this.commentsCount = this.comments.length;
+  
+  // Update legacy engagement field (for backward compatibility)
+  this.engagement = this.likesCount + this.commentsCount;
+  
+  next();
 });
 
 // Include virtuals in JSON output

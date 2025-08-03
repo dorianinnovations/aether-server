@@ -3,6 +3,7 @@ import Post from '../models/Post.js';
 import { protect } from '../middleware/auth.js';
 import { log } from '../utils/logger.js';
 import socialCognitiveFusion from '../services/socialCognitiveFusion.js';
+import { broadcastEvent } from './events.js';
 
 const router = express.Router();
 
@@ -58,7 +59,11 @@ router.get('/', protect, async (req, res) => {
       author: post.author,
       authorArchetype: post.authorArchetype,
       time: post.timeAgo,
-      engagement: post.comments.length.toString(),
+      engagement: post.comments.length.toString(), // Legacy field
+      likesCount: post.likesCount || 0,
+      commentsCount: post.commentsCount || 0,
+      sharesCount: post.sharesCount || 0,
+      userHasLiked: post.likes.some(like => like.userId.toString() === req.user.id),
       badge: post.badge,
       image: post.image,
       comments: post.comments.map(comment => ({
@@ -106,7 +111,11 @@ router.get('/:id', protect, async (req, res) => {
       author: post.author,
       authorArchetype: post.authorArchetype,
       time: post.timeAgo,
-      engagement: post.comments.length.toString(),
+      engagement: post.comments.length.toString(), // Legacy field
+      likesCount: post.likesCount || 0,
+      commentsCount: post.commentsCount || 0,
+      sharesCount: post.sharesCount || 0,
+      userHasLiked: post.likes.some(like => like.userId.toString() === req.user.id),
       badge: post.badge,
       image: post.image,
       comments: post.comments.map(comment => ({
@@ -173,17 +182,21 @@ router.post('/', protect, async (req, res) => {
       author: post.author,
       authorArchetype: post.authorArchetype,
       time: post.timeAgo,
-      engagement: '0',
+      engagement: '0', // Legacy field
+      likesCount: 0,
+      commentsCount: 0,
+      sharesCount: 0,
+      userHasLiked: false,
       badge: post.badge,
       image: post.image,
       comments: []
     };
 
-    // WebSocket emissions disabled for now
-    // websocketService.emitToAll('post:created', {
-    //   post: formattedPost,
-    //   userId: req.user.id
-    // });
+    // Broadcast real-time event
+    broadcastEvent('post:created', {
+      post: formattedPost,
+      userId: req.user.id
+    }, req.user.id);
 
     log.api(`Post created by user ${req.user.id}: ${post._id}`);
     res.status(201).json(formattedPost);
@@ -227,7 +240,11 @@ router.put('/:id', protect, async (req, res) => {
       author: post.author,
       authorArchetype: post.authorArchetype,
       time: post.timeAgo,
-      engagement: post.comments.length.toString(),
+      engagement: post.comments.length.toString(), // Legacy field
+      likesCount: post.likesCount || 0,
+      commentsCount: post.commentsCount || 0,
+      sharesCount: post.sharesCount || 0,
+      userHasLiked: post.likes.some(like => like.userId.toString() === req.user.id),
       badge: post.badge,
       image: post.image,
       comments: post.comments.map(comment => ({
@@ -335,12 +352,13 @@ router.post('/:id/comments', protect, async (req, res) => {
       profilePic: newComment.profilePic
     };
 
-    // WebSocket emissions disabled for now
-    // websocketService.emitToAll('comment:created', {
-    //   postId: post._id.toString(),
-    //   comment: formattedComment,
-    //   userId: req.user.id
-    // });
+    // Broadcast real-time event
+    broadcastEvent('comment:created', {
+      postId: post._id.toString(),
+      comment: formattedComment,
+      userId: req.user.id,
+      commentsCount: post.commentsCount
+    }, req.user.id);
 
     log.api(`Comment added to post ${post._id} by user ${req.user.id}`);
     res.status(201).json(formattedComment);
@@ -389,6 +407,88 @@ router.delete('/:postId/comments/:commentId', protect, async (req, res) => {
   } catch (error) {
     log.error('Error deleting comment:', error);
     res.status(500).json({ error: 'Failed to delete comment' });
+  }
+});
+
+// Like/Unlike post
+router.post('/:id/like', protect, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+
+    if (!post || post.isDeleted) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    // Check if user already liked the post
+    const existingLike = post.likes.find(like => like.userId.toString() === req.user.id);
+
+    if (existingLike) {
+      // Unlike the post
+      post.likes.pull(existingLike._id);
+      await post.save();
+      
+      log.api(`Post unliked by user ${req.user.id}: ${post._id}`);
+      res.json({ 
+        message: 'Post unliked', 
+        liked: false, 
+        likesCount: post.likesCount 
+      });
+    } else {
+      // Like the post
+      post.likes.push({ userId: req.user.id });
+      await post.save();
+      
+      log.api(`Post liked by user ${req.user.id}: ${post._id}`);
+      res.json({ 
+        message: 'Post liked', 
+        liked: true, 
+        likesCount: post.likesCount 
+      });
+    }
+
+    // Broadcast real-time event
+    broadcastEvent('post:liked', {
+      postId: post._id.toString(),
+      userId: req.user.id,
+      liked: !existingLike,
+      likesCount: post.likesCount
+    }, req.user.id);
+
+  } catch (error) {
+    log.error('Error liking post:', error);
+    res.status(500).json({ error: 'Failed to like post' });
+  }
+});
+
+// Share post (increment share count)
+router.post('/:id/share', protect, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+
+    if (!post || post.isDeleted) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    // Increment share count
+    post.sharesCount += 1;
+    await post.save();
+
+    log.api(`Post shared by user ${req.user.id}: ${post._id}`);
+    res.json({ 
+      message: 'Post shared', 
+      sharesCount: post.sharesCount 
+    });
+
+    // Broadcast real-time event
+    broadcastEvent('post:shared', {
+      postId: post._id.toString(),
+      userId: req.user.id,
+      sharesCount: post.sharesCount
+    }, req.user.id);
+
+  } catch (error) {
+    log.error('Error sharing post:', error);
+    res.status(500).json({ error: 'Failed to share post' });
   }
 });
 
