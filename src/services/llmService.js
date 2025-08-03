@@ -54,11 +54,13 @@ export const createLLMService = () => {
       userId = null // NEW: user ID for tracking
     } = options;
 
-    // Model selection with fallback hierarchy
-    let selectedModel = "openai/gpt-4o-mini";
+    // Model selection with fallback hierarchy - RESTORED FOR ENGAGING AI
+    let selectedModel = "openai/gpt-4o"; // Use full GPT-4o for better personality
     
-    if (requiresGPT4 || (tools && tools.length > 0)) {
-      selectedModel = "openai/gpt-4o";
+    // Only use mini for simple operations (keep some cost optimization)
+    if (!requiresGPT4 && (!tools || tools.length === 0) && !attachments && 
+        options.simple === true) {
+      selectedModel = "openai/gpt-4o-mini";
     }
     
     // Force GPT-4 for vision requests

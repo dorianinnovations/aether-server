@@ -597,17 +597,16 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
 
   try {
     const tierConfig = {
-      core: { n_predict: 1500, temperature: 0.7, tools: [] }, // Increased for in-depth responses
-  
-      aether: { n_predict: 3000, temperature: 0.8, tools: [] } // Increased for in-depth responses
+      core: { n_predict: 2500, temperature: 0.85, tools: [REAL_UBPM_TOOL] }, // Restored engaging responses
+      aether: { n_predict: 4000, temperature: 0.9, tools: [REAL_UBPM_TOOL, INSANE_SEARCH_TOOL] } // Full personality for premium users
     };
 
     const config = tierConfig[userTier] || tierConfig.core;
 
     const streamResponse = await llmService.makeStreamingRequest(messages, {
       ...config,
-      tools: [], // Force disable all tools in streaming
-      tool_choice: undefined
+      tools: config.tools, // RESTORED: Enable tools in streaming for personality
+      tool_choice: config.tools.length > 0 ? "auto" : undefined
     });
 
     streamResponse.on('data', (chunk) => {
