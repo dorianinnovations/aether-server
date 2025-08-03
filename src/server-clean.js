@@ -83,60 +83,45 @@ const initializeServer = async () => {
           await messageService.saveMessage(userId, message, 'user');
         }
         
-        if (stream) {
-          // Set up Server-Sent Events
-          res.writeHead(200, {
-            'Content-Type': 'text/plain; charset=utf-8',
-            'Transfer-Encoding': 'chunked',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Cache-Control'
-          });
-          
-          // Get streaming AI response
-          const aiResponse = await aiService.chatStream(message);
+        // Set up Server-Sent Events streaming
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': '*'
+        });
+        
+        try {
+          // Get AI response
+          const aiResponse = await aiService.chat(message);
           
           if (aiResponse.success) {
-            // Stream the response word by word
+            // Stream response word by word in SSE format
             const words = aiResponse.response.split(' ');
             for (let i = 0; i < words.length; i++) {
-              res.write(words[i]);
-              if (i < words.length - 1) res.write(' ');
-              await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay between words
+              const word = words[i];
+              res.write(`data: ${JSON.stringify({content: word})}\n\n`);
+              await new Promise(resolve => setTimeout(resolve, 80)); // 80ms delay
             }
+            
+            // Send completion signal
+            res.write(`data: [DONE]\n\n`);
             
             // Save AI response if authenticated
             if (userId) {
               await messageService.saveMessage(userId, aiResponse.response, 'ai', aiResponse.model);
             }
+          } else {
+            res.write(`data: ${JSON.stringify({content: 'Sorry, I encountered an error. Please try again.'})}\n\n`);
+            res.write(`data: [DONE]\n\n`);
           }
           
           res.end();
-        } else {
-          // Non-streaming fallback
-          const aiResponse = await aiService.chat(message);
-          
-          if (aiResponse.success) {
-            if (userId) {
-              await messageService.saveMessage(userId, aiResponse.response, 'ai', aiResponse.model);
-            }
-            
-            res.json({
-              success: true,
-              response: aiResponse.response,
-              thinking: aiResponse.thinking,
-              timestamp: new Date().toISOString(),
-              model: aiResponse.model,
-              usage: aiResponse.usage
-            });
-          } else {
-            res.status(500).json({ 
-              success: false, 
-              error: 'AI service unavailable',
-              details: aiResponse.error 
-            });
-          }
+        } catch (streamError) {
+          res.write(`data: ${JSON.stringify({content: 'Error occurred during streaming.'})}\n\n`);
+          res.write(`data: [DONE]\n\n`);
+          res.end();
         }
         
       } catch (error) {
