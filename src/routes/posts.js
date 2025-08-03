@@ -71,6 +71,8 @@ router.get('/', protect, async (req, res) => {
       }))
     }));
 
+    log.api(`Retrieved ${formattedPosts.length} posts for user ${req.user.id}`);
+    
     res.json({
       posts: formattedPosts,
       pagination: {
@@ -80,8 +82,6 @@ router.get('/', protect, async (req, res) => {
         pages: Math.ceil(total / limit)
       }
     });
-
-    log.info(`Retrieved ${formattedPosts.length} posts for user ${req.user.id}`);
   } catch (error) {
     log.error('Error fetching posts:', error);
     res.status(500).json({ error: 'Failed to fetch posts' });
@@ -185,8 +185,8 @@ router.post('/', protect, async (req, res) => {
     //   userId: req.user.id
     // });
 
+    log.api(`Post created by user ${req.user.id}: ${post._id}`);
     res.status(201).json(formattedPost);
-    log.info(`Post created by user ${req.user.id}: ${post._id}`);
   } catch (error) {
     log.error('Error creating post:', error);
     res.status(500).json({ error: 'Failed to create post' });
@@ -246,8 +246,8 @@ router.put('/:id', protect, async (req, res) => {
     //   userId: req.user.id
     // });
 
+    log.api(`Post updated by user ${req.user.id}: ${post._id}`);
     res.json(formattedPost);
-    log.info(`Post updated by user ${req.user.id}: ${post._id}`);
   } catch (error) {
     log.error('Error updating post:', error);
     res.status(500).json({ error: 'Failed to update post' });
@@ -278,8 +278,8 @@ router.delete('/:id', protect, async (req, res) => {
     //   userId: req.user.id
     // });
 
+    log.api(`Post deleted by user ${req.user.id}: ${post._id}`);
     res.json({ message: 'Post deleted successfully' });
-    log.info(`Post deleted by user ${req.user.id}: ${post._id}`);
   } catch (error) {
     log.error('Error deleting post:', error);
     res.status(500).json({ error: 'Failed to delete post' });
@@ -342,8 +342,8 @@ router.post('/:id/comments', protect, async (req, res) => {
     //   userId: req.user.id
     // });
 
+    log.api(`Comment added to post ${post._id} by user ${req.user.id}`);
     res.status(201).json(formattedComment);
-    log.info(`Comment added to post ${post._id} by user ${req.user.id}`);
   } catch (error) {
     log.error('Error adding comment:', error);
     res.status(500).json({ error: 'Failed to add comment' });
@@ -384,8 +384,8 @@ router.delete('/:postId/comments/:commentId', protect, async (req, res) => {
     //   userId: req.user.id
     // });
 
+    log.api(`Comment deleted from post ${post._id} by user ${req.user.id}`);
     res.json({ message: 'Comment deleted successfully' });
-    log.info(`Comment deleted from post ${post._id} by user ${req.user.id}`);
   } catch (error) {
     log.error('Error deleting comment:', error);
     res.status(500).json({ error: 'Failed to delete comment' });
@@ -407,7 +407,7 @@ router.get('/suggestions/communities', protect, async (req, res) => {
       }
     });
     
-    log.info(`Community suggestions provided for user ${req.user.id}: ${suggestions.archetype}`);
+    log.api(`Community suggestions provided for user ${req.user.id}: ${suggestions.archetype}`);
   } catch (error) {
     log.error('Error getting community suggestions:', error);
     res.status(500).json({ error: 'Failed to get community suggestions' });
