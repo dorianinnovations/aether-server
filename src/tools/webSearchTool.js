@@ -1,6 +1,6 @@
 /**
- * INSANE WEB SEARCH - The Only Tool That Matters
- * Advanced web search with structured output and deep content analysis
+ * WEB SEARCH TOOL - Enhanced with GPT-4o Integration
+ * Advanced web search with structured output, deep content analysis, and intelligent context filtering
  */
 
 import axios from 'axios';
@@ -9,19 +9,86 @@ import { createLLMService } from '../services/llmService.js';
 
 const llmService = createLLMService();
 
+// Context filtering patterns to prevent excessive web search calls
+const SEARCH_TRIGGERS = [
+  // Direct search requests
+  /(?:search|find|look up|google|bing)\s+(?:for\s+)?(.+)/i,
+  // Current events/news
+  /(?:what'?s|latest|recent|current|news about|happening with)\s+(.+)/i,
+  // Factual queries
+  /(?:when|where|who|what|how|why)\s+(?:is|are|was|were|did|does|do)\s+(.+)/i,
+  // Definitions
+  /(?:what is|define|meaning of|explain)\s+(.+)/i,
+  // Statistics/data
+  /(?:statistics|data|numbers|facts about)\s+(.+)/i,
+  // Comparisons
+  /(?:compare|difference between|vs|versus)\s+(.+)/i
+];
+
+// Topics that should NOT trigger web search
+const NO_SEARCH_PATTERNS = [
+  /^(?:hello|hi|hey|thanks|thank you|ok|okay|yes|no|maybe)$/i,
+  /^(?:how are you|good morning|good afternoon|good evening)$/i,
+  /^(?:i think|i feel|i believe|in my opinion).*$/i,
+  /^(?:can you help|could you|would you|please).*(?:with|me).*$/i
+];
+
 // Lightweight cache for search results (1 minute TTL, max 10 entries)
 const searchCache = new Map();
 const CACHE_TTL = 60 * 1000; // 1 minute
 const MAX_CACHE_SIZE = 10;
 
-export default async function insaneWebSearch(args, userContext) {
-  const { query } = args;
+// Smart context filtering to determine if web search is needed
+function shouldTriggerWebSearch(query, userContext) {
+  // Skip search for simple conversational messages
+  for (const pattern of NO_SEARCH_PATTERNS) {
+    if (pattern.test(query.trim())) {
+      return false;
+    }
+  }
+  
+  // Check for explicit search triggers
+  for (const pattern of SEARCH_TRIGGERS) {
+    if (pattern.test(query)) {
+      return true;
+    }
+  }
+  
+  // Use GPT-4o to determine if web search would be helpful
+  const searchKeywords = [
+    'current', 'latest', 'recent', 'news', 'update', 'today', 'now',
+    'price', 'cost', 'statistics', 'data', 'facts', 'compare', 'vs',
+    'who is', 'what is', 'when did', 'where is', 'how to'
+  ];
+  
+  const hasSearchKeywords = searchKeywords.some(keyword => 
+    query.toLowerCase().includes(keyword)
+  );
+  
+  return hasSearchKeywords;
+}
+
+export default async function webSearchTool(args, userContext) {
+  const { query, forceSearch = false } = args;
   
   if (!query) {
     return { success: false, structure: { results: [] } };
   }
 
-  console.log(`🔍 Searching for: "${query}"`);
+  // Context filtering - only search when truly needed
+  if (!forceSearch && !shouldTriggerWebSearch(query, userContext)) {
+    console.log(`🚫 Skipping web search for conversational query: "${query}"`);
+    return { 
+      success: false, 
+      structure: { 
+        results: [], 
+        skipped: true, 
+        reason: 'Query does not require web search' 
+      } 
+    };
+  }
+
+  console.log(`🔍 Web search triggered for: "${query}"`);
   
   // Try SerpAPI first if available
   if (process.env.SERPAPI_API_KEY) {
