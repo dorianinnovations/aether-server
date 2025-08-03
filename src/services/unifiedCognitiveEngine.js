@@ -18,13 +18,13 @@ import logger from '../utils/logger.js';
 
 class UnifiedCognitiveEngine {
   constructor() {
-    // Analysis configuration
+    // Analysis configuration - drastically scaled back
     this.config = {
-      minInteractions: 3,
-      patternConfidence: 0.6,
-      cacheExpiry: 300, // 5 minutes
-      backgroundInterval: 300000, // 5 minutes - reduced for memory optimization
-      highConfidenceThreshold: 0.85
+      minInteractions: 5, // Increased threshold
+      patternConfidence: 0.7, // Higher confidence required
+      cacheExpiry: 1800, // 30 minutes - much longer cache
+      backgroundInterval: 7200000, // 2 hours - dramatically reduced frequency
+      highConfidenceThreshold: 0.90 // Higher threshold
     };
 
     // Processing queues and metrics
@@ -508,14 +508,12 @@ class UnifiedCognitiveEngine {
     setInterval(async () => {
       try {
         const activeUsers = await ShortTermMemory.distinct('userId', {
-          timestamp: { $gte: new Date(Date.now() - 60 * 60 * 1000) }
+          timestamp: { $gte: new Date(Date.now() - 2 * 60 * 60 * 1000) } // Last 2 hours
         });
 
-        const usersToProcess = activeUsers.slice(0, 3); // Reduced from 10 to 3 for memory optimization
-        
-        for (const userId of usersToProcess) {
-          if (this.analysisQueue.has(userId)) continue;
-          
+        // Process only 1 user every 2 hours to drastically reduce load
+        if (activeUsers.length > 0 && !this.analysisQueue.has(activeUsers[0])) {
+          const userId = activeUsers[0];
           this.analysisQueue.set(userId, Date.now());
           
           this.analyzeCognitiveProfile(userId, [], { background: true })

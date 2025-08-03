@@ -70,19 +70,19 @@ export const TASK_CONFIG = {
   }
 };
 
-// Memory and Performance Configuration (Fixed for critical memory leaks)
+// Memory and Performance Configuration (Relaxed for server stability)
 export const MEMORY_CONFIG = {
-  CACHE_TTL: 300000, // 5 minutes (reduced from 15 to prevent buildup)
-  GC_THRESHOLD: 80000000, // 80MB (reduced from 128MB for earlier cleanup)
-  MEMORY_MONITORING_INTERVAL: 10000, // 10 seconds (more frequent monitoring)
+  CACHE_TTL: 600000, // 10 minutes (increased - less aggressive cleanup)
+  GC_THRESHOLD: 120000000, // 120MB (increased threshold)
+  MEMORY_MONITORING_INTERVAL: 300000, // 5 minutes (much less frequent)
   MAX_RESPONSE_SIZE: 25000, // 25KB
-  MAX_CACHE_SIZE: 200, // Reduced cache size further (from 500 to 200)
-  CACHE_CLEANUP_INTERVAL: 120000, // 2 minutes (more frequent cleanup)
-  HEAP_USAGE_THRESHOLD: 0.90, // 90% before cleanup (normal Node.js usage)
+  MAX_CACHE_SIZE: 300, // Increased cache size for better performance
+  CACHE_CLEANUP_INTERVAL: 600000, // 10 minutes (much less frequent cleanup)
+  HEAP_USAGE_THRESHOLD: 0.95, // 95% before cleanup (relaxed threshold)
   COMPRESSION_THRESHOLD: 512, // 512B compression
-  FORCE_GC_THRESHOLD: 0.85, // Force GC at 85% (reasonable threshold)
-  LOW_MEMORY_MODE: true, // Enable memory conservation mode
-  GC_COOLDOWN_MS: 30000 // 30 seconds cooldown (shorter for faster response)
+  FORCE_GC_THRESHOLD: 0.92, // Force GC at 92% (much more relaxed)
+  LOW_MEMORY_MODE: false, // Disable aggressive memory conservation
+  GC_COOLDOWN_MS: 120000 // 2 minutes cooldown (longer for stability)
 };
 
 // Security Configuration

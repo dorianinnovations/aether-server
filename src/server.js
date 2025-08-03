@@ -163,39 +163,35 @@ const initializeServer = async () => {
   app.locals.cache = createCache();
   setupMemoryMonitoring();
   
-  // Aggressive memory monitoring for 512MB limit
+  // Relaxed memory monitoring - scaled back for server stability
   setInterval(() => {
     const memoryUsage = process.memoryUsage();
     const heapUsedMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
     const heapTotalMB = Math.round(memoryUsage.heapTotal / 1024 / 1024);
     const rssMB = Math.round(memoryUsage.rss / 1024 / 1024);
     
-    // Critical: Act at 80% to prevent 512MB crashes
-    if (heapUsedMB > 400 || rssMB > 450) {
-      console.error(`🚨 CRITICAL MEMORY: RSS:${rssMB}MB Heap:${heapUsedMB}/${heapTotalMB}MB - FORCING CLEANUP`);
+    // Only act on truly critical memory situations (90%+ of 512MB)
+    if (heapUsedMB > 460 || rssMB > 480) {
+      console.error(`🚨 CRITICAL MEMORY: RSS:${rssMB}MB Heap:${heapUsedMB}/${heapTotalMB}MB - CLEANUP REQUIRED`);
       
-      // Aggressive cleanup
+      // Gentle cleanup - no aggressive multiple GC cycles
       app.locals.cache.clear();
-      
-      // Force multiple GC cycles
       if (global.gc) {
         global.gc();
-        setTimeout(() => global.gc(), 100);
-        setTimeout(() => global.gc(), 500);
       }
       
-      // Log after cleanup
+      // Single delayed log
       setTimeout(() => {
         const afterGC = process.memoryUsage();
         console.log(`🧹 After cleanup: RSS:${Math.round(afterGC.rss/1024/1024)}MB Heap:${Math.round(afterGC.heapUsed/1024/1024)}MB`);
-      }, 1000);
+      }, 2000);
       
-    } else if (heapUsedMB > 300) {
+    } else if (heapUsedMB > 380) {
       console.warn(`⚠️ High memory: RSS:${rssMB}MB Heap:${heapUsedMB}/${heapTotalMB}MB`);
+      // Just clear cache, no forced GC
       app.locals.cache.clear();
-      if (global.gc) global.gc();
     }
-  }, 10000); // Check every 10 seconds - more frequent
+  }, 60000); // Check every 60 seconds - much less frequent
   // Cache and memory monitoring initialized
 
   // Root health endpoint for monitoring

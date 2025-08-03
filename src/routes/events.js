@@ -85,7 +85,7 @@ router.get('/stream', sseAuth, (req, res) => {
       connections.delete(connectionId);
       log.api(`SSE heartbeat failed for ${connectionId}, connection removed`);
     }
-  }, 60000); // 60 second heartbeat - reduced frequency
+  }, 120000); // 2 minute heartbeat - further reduced frequency
 
   // Handle client disconnect
   req.on('close', () => {
@@ -184,10 +184,10 @@ router.get('/status', sseAuth, (req, res) => {
   });
 });
 
-// Aggressive cleanup of stale connections - critical for memory management
+// Relaxed cleanup of stale connections
 setInterval(() => {
   const now = Date.now();
-  const staleThreshold = 3 * 60 * 1000; // 3 minutes - more aggressive
+  const staleThreshold = 10 * 60 * 1000; // 10 minutes - much more relaxed
   const staleConnections = [];
 
   for (const [connectionId, connection] of connections.entries()) {
@@ -216,6 +216,6 @@ setInterval(() => {
   if (connections.size > 10) {
     log.api(`⚠️ High SSE connection count: ${connections.size} active connections`);
   }
-}, 60 * 1000); // Check every minute - more frequent cleanup
+}, 5 * 60 * 1000); // Check every 5 minutes - much less frequent cleanup
 
 export default router;

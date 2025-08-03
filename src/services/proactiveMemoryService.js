@@ -691,24 +691,21 @@ class ProactiveMemoryService {
   startPatternAnalyzer() {
     setInterval(async () => {
       try {
-        // Memory-optimized pattern analysis - reduce frequency and scope
+        // Drastically scaled back pattern analysis
         const activeUsers = await ShortTermMemory.distinct('userId', {
-          timestamp: { $gte: new Date(Date.now() - 1800000) } // Last 30 minutes only
+          timestamp: { $gte: new Date(Date.now() - 3600000) } // Last hour only
         });
         
-        // Process fewer users to reduce memory pressure
-        for (const userId of activeUsers.slice(0, 3)) {
-          await this.analyzeUserPatterns(userId);
+        // Process only 1 user to minimize server load
+        if (activeUsers.length > 0) {
+          await this.analyzeUserPatterns(activeUsers[0]);
         }
         
-        // Force cleanup after pattern analysis
-        if (global.gc) {
-          global.gc();
-        }
+        // No forced GC - let Node.js handle it naturally
       } catch (error) {
         logger.error('Pattern analyzer error:', error);
       }
-    }, 600000); // Every 10 minutes - reduced frequency
+    }, 1800000); // Every 30 minutes - dramatically reduced frequency
   }
   
   async analyzeUserPatterns(userId) {
