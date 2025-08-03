@@ -74,11 +74,12 @@ const initializeServer = async () => {
     // Create social-chat endpoint with streaming support
     app.post('/social-chat', protect, async (req, res) => {
       try {
-        const { message, stream = true } = req.body;
+        const { message, prompt, stream = true } = req.body;
+        const userMessage = message || prompt;
         const userId = req.user?.id; // From auth middleware
         
         console.log('🔍 DEBUG - Social Chat Request:', {
-          message,
+          message: userMessage,
           stream,
           userId,
           hasUser: !!req.user,
@@ -86,14 +87,14 @@ const initializeServer = async () => {
           headers: req.headers.authorization ? 'present' : 'missing'
         });
         
-        if (!message) {
-          console.log('❌ DEBUG - Missing message parameter');
-          return res.status(400).json({ error: 'Message is required' });
+        if (!userMessage) {
+          console.log('❌ DEBUG - Missing message/prompt parameter');
+          return res.status(400).json({ error: 'Message or prompt is required' });
         }
         
         // Save user message if authenticated
         if (userId) {
-          await messageService.saveMessage(userId, message, 'user');
+          await messageService.saveMessage(userId, userMessage, 'user');
         }
         
         // Set up Server-Sent Events streaming
@@ -107,7 +108,7 @@ const initializeServer = async () => {
         
         try {
           // Get AI response
-          const aiResponse = await aiService.chat(message);
+          const aiResponse = await aiService.chat(userMessage);
           
           if (aiResponse.success) {
             // Stream response word by word in SSE format
