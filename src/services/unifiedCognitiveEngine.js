@@ -23,7 +23,7 @@ class UnifiedCognitiveEngine {
       minInteractions: 3,
       patternConfidence: 0.6,
       cacheExpiry: 300, // 5 minutes
-      backgroundInterval: 30000, // 30 seconds
+      backgroundInterval: 300000, // 5 minutes - reduced for memory optimization
       highConfidenceThreshold: 0.85
     };
 
@@ -511,7 +511,7 @@ class UnifiedCognitiveEngine {
           timestamp: { $gte: new Date(Date.now() - 60 * 60 * 1000) }
         });
 
-        const usersToProcess = activeUsers.slice(0, 10);
+        const usersToProcess = activeUsers.slice(0, 3); // Reduced from 10 to 3 for memory optimization
         
         for (const userId of usersToProcess) {
           if (this.analysisQueue.has(userId)) continue;

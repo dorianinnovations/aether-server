@@ -903,7 +903,7 @@ Your responses should feel like they come from someone who truly knows them - no
       } catch (error) {
         logger.error('Signature processor error:', error);
       }
-    }, 60000); // Run every minute
+    }, 300000); // Run every 5 minutes - reduced frequency for memory
   }
   
   // Utility methods

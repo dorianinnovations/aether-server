@@ -66,9 +66,15 @@ router.get('/stream', sseAuth, (req, res) => {
     connectionId
   })}\\n\\n`);
 
-  // Send periodic heartbeat
+  // Send periodic heartbeat - reduced frequency to save memory
   const heartbeat = setInterval(() => {
     try {
+      // Check if connection still exists before writing
+      if (!connections.has(connectionId)) {
+        clearInterval(heartbeat);
+        return;
+      }
+      
       res.write(`data: ${JSON.stringify({
         type: 'heartbeat',
         timestamp: new Date().toISOString()
@@ -79,7 +85,7 @@ router.get('/stream', sseAuth, (req, res) => {
       connections.delete(connectionId);
       log.api(`SSE heartbeat failed for ${connectionId}, connection removed`);
     }
-  }, 30000); // 30 second heartbeat
+  }, 60000); // 60 second heartbeat - reduced frequency
 
   // Handle client disconnect
   req.on('close', () => {
@@ -178,15 +184,23 @@ router.get('/status', sseAuth, (req, res) => {
   });
 });
 
-// Cleanup stale connections (run periodically)
+// Aggressive cleanup of stale connections - critical for memory management
 setInterval(() => {
   const now = Date.now();
-  const staleThreshold = 5 * 60 * 1000; // 5 minutes
+  const staleThreshold = 3 * 60 * 1000; // 3 minutes - more aggressive
   const staleConnections = [];
 
   for (const [connectionId, connection] of connections.entries()) {
     if (now - connection.lastPing > staleThreshold) {
       staleConnections.push(connectionId);
+      // Try to close the response if still open
+      try {
+        if (connection.response && !connection.response.destroyed) {
+          connection.response.end();
+        }
+      } catch (error) {
+        // Ignore errors when force-closing connections
+      }
     }
   }
 
@@ -195,8 +209,13 @@ setInterval(() => {
   });
 
   if (staleConnections.length > 0) {
-    log.api(`Cleaned up ${staleConnections.length} stale SSE connections`);
+    log.api(`🧹 Cleaned up ${staleConnections.length} stale SSE connections`);
   }
-}, 2 * 60 * 1000); // Check every 2 minutes
+  
+  // Log current connection count for monitoring
+  if (connections.size > 10) {
+    log.api(`⚠️ High SSE connection count: ${connections.size} active connections`);
+  }
+}, 60 * 1000); // Check every minute - more frequent cleanup
 
 export default router;
