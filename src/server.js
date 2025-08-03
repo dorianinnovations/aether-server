@@ -163,19 +163,39 @@ const initializeServer = async () => {
   app.locals.cache = createCache();
   setupMemoryMonitoring();
   
-  // Conservative memory monitoring for small instances
+  // Aggressive memory monitoring for 512MB limit
   setInterval(() => {
     const memoryUsage = process.memoryUsage();
-    const heapUsedPercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
+    const heapUsedMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
+    const heapTotalMB = Math.round(memoryUsage.heapTotal / 1024 / 1024);
+    const rssMB = Math.round(memoryUsage.rss / 1024 / 1024);
     
-    if (heapUsedPercent > 90) {
-      console.warn(`Memory cleanup: ${heapUsedPercent.toFixed(1)}% heap used (${Math.round(memoryUsage.heapUsed/1024/1024)}MB/${Math.round(memoryUsage.heapTotal/1024/1024)}MB)`);
+    // Critical: Act at 80% to prevent 512MB crashes
+    if (heapUsedMB > 400 || rssMB > 450) {
+      console.error(`🚨 CRITICAL MEMORY: RSS:${rssMB}MB Heap:${heapUsedMB}/${heapTotalMB}MB - FORCING CLEANUP`);
+      
+      // Aggressive cleanup
       app.locals.cache.clear();
+      
+      // Force multiple GC cycles
       if (global.gc) {
         global.gc();
+        setTimeout(() => global.gc(), 100);
+        setTimeout(() => global.gc(), 500);
       }
+      
+      // Log after cleanup
+      setTimeout(() => {
+        const afterGC = process.memoryUsage();
+        console.log(`🧹 After cleanup: RSS:${Math.round(afterGC.rss/1024/1024)}MB Heap:${Math.round(afterGC.heapUsed/1024/1024)}MB`);
+      }, 1000);
+      
+    } else if (heapUsedMB > 300) {
+      console.warn(`⚠️ High memory: RSS:${rssMB}MB Heap:${heapUsedMB}/${heapTotalMB}MB`);
+      app.locals.cache.clear();
+      if (global.gc) global.gc();
     }
-  }, 15000); // Check every 15 seconds
+  }, 10000); // Check every 10 seconds - more frequent
   // Cache and memory monitoring initialized
 
   // Root health endpoint for monitoring

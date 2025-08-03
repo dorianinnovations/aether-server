@@ -36,9 +36,9 @@ const llmService = createLLMService();
 const fileUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB per file - memory optimized
-    files: 3, // Max 3 files per request
-    fieldSize: 5 * 1024 * 1024 // 5MB field size
+    fileSize: 2 * 1024 * 1024, // 2MB per file - critical memory optimization
+    files: 2, // Max 2 files per request
+    fieldSize: 2 * 1024 * 1024 // 2MB field size
   },
   fileFilter: (req, file, cb) => {
     console.log(`📁 File upload attempt: ${file.fieldname} - ${file.mimetype} - ${file.originalname}`);
@@ -379,6 +379,12 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
 
     // Using conversation context
 
+    // Handle attachments with non-streaming response (required for vision)
+    if (hasVisionContent || (req.files && req.files.length > 0)) {
+      console.log('🖼️ VISION: Using non-streaming response for image processing');
+      return await handleOptimizedNonStreaming(res, messages, userMessage, userId, conversationId, startTime, userTier, toolGuidance);
+    }
+    
     // Simple search detection and execution - route to AI with search context
     if (/search|find|price|news|what's|latest/i.test(userMessage)) {
       return await handleSearchWithAI(res, messages, userMessage, userId, conversationId, userTier, proactiveInsights);
@@ -401,7 +407,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       });
     }
   } finally {
-    // Aggressive memory cleanup after processing
+    // Critical memory cleanup - immediate and thorough
     if (req.files) {
       req.files.forEach(file => {
         if (file.buffer) {
@@ -411,11 +417,20 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       req.files = null;
     }
     if (req.body) {
+      if (req.body.attachments) req.body.attachments = null;
       req.body = null;
     }
-    // Force garbage collection if available
+    // Clear local variables
+    if (typeof allAttachments !== 'undefined') allAttachments = null;
+    if (typeof textContent !== 'undefined') textContent = null;
+    if (typeof messages !== 'undefined') messages = null;
+    
+    // Force immediate garbage collection
     if (global.gc) {
-      setImmediate(() => global.gc());
+      setImmediate(() => {
+        global.gc();
+        console.log(`🧹 Forced GC after request - Memory: ${Math.round(process.memoryUsage().heapUsed/1024/1024)}MB`);
+      });
     }
   }
 });
@@ -544,8 +559,10 @@ async function handleOptimizedNonStreaming(res, messages, userMessage, userId, c
   const duration = Date.now() - startTime;
   console.log(`✅ OPTIMIZED response generated in ${duration}ms for ${userTier} user`);
 
-  res.json({
+  // Return consistent format for vision API responses
+  return res.json({
     success: true,
+    content: assistantResponse, // Add this for frontend compatibility
     data: {
       response: assistantResponse,
       tone: 'adaptive',
@@ -556,6 +573,11 @@ async function handleOptimizedNonStreaming(res, messages, userMessage, userId, c
       tier: userTier,
       responseTime: duration,
       cognitiveEngineUsed: true
+    },
+    metadata: {
+      toolResults: toolResults,
+      tier: userTier,
+      responseTime: duration
     }
   });
 }
@@ -571,6 +593,7 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
   });
 
   let accumulatedContent = '';
+  const maxContentLength = userTier === 'aether' ? 50000 : 25000; // Memory safety limits
 
   try {
     const tierConfig = {
@@ -607,9 +630,21 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
             const choice = parsed.choices?.[0];
             
             if (choice?.delta?.content) {
-              accumulatedContent += choice.delta.content;
+              // Memory safety check - prevent unbounded accumulation
+              if (accumulatedContent.length < maxContentLength) {
+                accumulatedContent += choice.delta.content;
+              } else {
+                console.warn(`⚠️ Content truncated at ${maxContentLength} chars to prevent memory overflow`);
+                // Send truncation notice
+                res.write(`data: ${JSON.stringify({
+                  content: "\n\n[Response truncated to prevent memory issues]",
+                  tier: userTier,
+                  truncated: true
+                })}\n\n`);
+                return; // Stop processing more chunks
+              }
+              
               // Proper SSE format that mobile app expects
-              // Add cognitive signature metadata periodically
               const chunkData = { 
                 content: choice.delta.content,
                 tier: userTier,
@@ -661,32 +696,23 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
     });
 
     streamResponse.on('end', async () => {
-      // Save conversation with proactive pattern analysis
+      // Save conversation with memory-optimized approach
       try {
-        // Ensure content is not empty to avoid MongoDB validation errors
         const finalContent = accumulatedContent.trim() || 'Response incomplete due to technical issues.';
         
-        // Use proactive memory service for pattern-aware saving
-        const saveResult = await proactiveMemoryService.saveWithPatternAnalysis(
-          userId,
-          userMessage,
-          finalContent
-        );
-        
-        // Standard saves for compatibility
+        // Simplified saves to reduce memory pressure
         await Promise.all([
           conversationService.addMessage(userId, conversationId, 'user', userMessage),
           conversationService.addMessage(userId, conversationId, 'assistant', finalContent)
         ]);
         
-        if (saveResult.patterns && saveResult.triggers.length > 0) {
-          console.log(`🎯 Pattern triggers detected: ${saveResult.triggers.map(t => t.type).join(', ')}`);
-        }
-        
-        console.log('💾 Cognitive conversation saved with pattern analysis');
+        console.log(`💾 Conversation saved - Content length: ${finalContent.length} chars`);
       } catch (saveError) {
         console.error('⚠️ Streaming save error:', saveError.message);
       }
+      
+      // Clear accumulated content immediately
+      accumulatedContent = null;
       
       res.write('data: [DONE]\n\n');
       res.end();
