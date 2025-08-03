@@ -20,10 +20,12 @@ import connectDB from "./config/database.js";
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/user.js"; 
 import healthRoutes from "./routes/health.js";
+import aiRoutes from "./routes/ai.js";
 import conversationRoutes from "./routes/conversation.js";
 
 // Import basic middleware
 import { corsSecurity, securityHeaders } from "./middleware/security.js";
+import { protect } from "./middleware/auth.js";
 import { requestLogger, errorLogger } from "./utils/logger.js";
 import { globalErrorHandler } from "./utils/errorHandler.js";
 
@@ -66,15 +68,26 @@ const initializeServer = async () => {
     app.use('/', healthRoutes);
     app.use('/auth', authRoutes);
     app.use('/user', userRoutes);
+    app.use('/ai', aiRoutes);
     app.use('/conversation', conversationRoutes);
     
     // Create social-chat endpoint with streaming support
-    app.post('/social-chat', async (req, res) => {
+    app.post('/social-chat', protect, async (req, res) => {
       try {
         const { message, stream = true } = req.body;
         const userId = req.user?.id; // From auth middleware
         
+        console.log('🔍 DEBUG - Social Chat Request:', {
+          message,
+          stream,
+          userId,
+          hasUser: !!req.user,
+          bodyKeys: Object.keys(req.body),
+          headers: req.headers.authorization ? 'present' : 'missing'
+        });
+        
         if (!message) {
+          console.log('❌ DEBUG - Missing message parameter');
           return res.status(400).json({ error: 'Message is required' });
         }
         
