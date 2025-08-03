@@ -3,7 +3,7 @@ import { body, validationResult } from "express-validator";
 import User from "../models/User.js";
 import { signToken, protect, protectRefresh } from "../middleware/auth.js";
 import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG as _SECURITY_CONFIG } from "../config/constants.js";
-import emailService from "../services/emailService.js";
+// import emailService from "../services/emailService.js"; // Removed - no email service
 
 const router = express.Router();
 
@@ -48,41 +48,6 @@ router.post(
       const user = await User.create(userData);
       console.log("New user created:", user.email);
 
-      // Send welcome email (non-blocking) - NOW ENABLED WITH RESEND
-      const emailPromise = emailService.sendWelcomeEmail(user.email, user.name || user.email.split('@')[0])
-        .then(result => {
-          if (result.success) {
-            // Welcome email sent
-            // Email sent with ID
-            if (result.previewUrl) {
-              console.log('📧 Email preview:', result.previewUrl);
-            }
-          } else {
-            console.warn('⚠️ Welcome email failed:', result.error);
-          }
-        })
-        .catch(err => console.error('❌ Welcome email error:', err));
-
-      // Include email status in response for better testing/debugging
-      let emailSent = false;
-      let emailService_used = null;
-      let emailMessageId = null;
-
-      try {
-        const emailResult = await emailService.sendWelcomeEmail(user.email, user.name || user.email.split('@')[0]);
-        emailSent = emailResult.success;
-        emailService_used = emailResult.service;
-        emailMessageId = emailResult.messageId;
-        
-        if (emailResult.success) {
-          // Welcome email sent
-        } else {
-          console.warn('⚠️ Welcome email failed:', emailResult.error);
-        }
-      } catch (emailError) {
-        console.error('❌ Welcome email error:', emailError);
-      }
-
       res.status(HTTP_STATUS.CREATED).json({
         status: MESSAGES.SUCCESS,
         token: signToken(user._id),
@@ -92,11 +57,6 @@ router.post(
             email: user.email,
             ...(user.name && { name: user.name })
           } 
-        },
-        welcomeEmail: {
-          sent: emailSent,
-          service: emailService_used,
-          messageId: emailMessageId
         }
       });
     } catch (err) {

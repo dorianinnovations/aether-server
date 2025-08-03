@@ -1,12 +1,12 @@
 services:
   - type: web
-    name: numina-server
+    name: aether-server
     env: node
     region: oregon
     plan: starter
     instanceCount: 1
-    buildCommand: npm ci --production && node --check src/server.js
-    startCommand: node --max-old-space-size=256 --optimize-for-size src/server.js
+    buildCommand: npm ci --production && node --check src/server-clean.js
+    startCommand: node --max-old-space-size=256 --optimize-for-size src/server-clean.js
     healthCheckPath: /health
     autoDeploy: true
     envVars:
