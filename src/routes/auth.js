@@ -91,7 +91,7 @@ router.post(
 
     try {
       const user = await User.findOne({ email }).select("+password");
-      if (!user || !(await user.correctPassword(password, user.password))) {
+      if (!user || !(await user.comparePassword(password))) {
         return res.status(HTTP_STATUS.UNAUTHORIZED).json({ 
           status: MESSAGES.ERROR,
           message: MESSAGES.INVALID_CREDENTIALS 
