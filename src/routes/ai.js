@@ -15,7 +15,7 @@ import { checkTierLimits } from '../middleware/tierLimiter.js';
 import { createLLMService } from '../services/llmService.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
 import conversationService from '../services/conversationService.js';
-import ShortTermMemory from '../models/ShortTermMemory.js';
+// import ShortTermMemory from '../models/ShortTermMemory.js'; // Removed in cleanup
 import unifiedCognitiveEngine from '../services/unifiedCognitiveEngine.js';
 import numinaContextBuilder from '../services/numinaContextBuilder.js';
 import insaneWebSearch from '../tools/insaneWebSearch.js';

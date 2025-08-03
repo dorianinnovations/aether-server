@@ -1,17 +1,20 @@
 import express from "express";
 import mongoose from "mongoose";
-import { createLLMService } from "../services/llmService.js";
+import aiService from "../services/aiService.js";
 import { log } from "../utils/logger.js";
 import AppAudit from "../utils/appAudit.js";
 
 const router = express.Router();
 
-// Health check for the LLM service
+// Health check for the AI service
 router.get("/llm", async (req, res) => {
   try {
-    const llmService = createLLMService();
-    const result = await llmService.healthCheck();
-    res.json(result);
+    const result = await aiService.chat("test");
+    res.json({ 
+      status: result.success ? "healthy" : "error", 
+      service: "aiService",
+      model: result.model || "unknown"
+    });
   } catch (err) {
     res.status(500).json({ status: "error", message: err.message });
   }

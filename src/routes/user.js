@@ -1,9 +1,9 @@
 import express from "express";
 import { protect } from "../middleware/auth.js";
 import User from "../models/User.js";
-import ShortTermMemory from "../models/ShortTermMemory.js";
-import UserBehaviorProfile from "../models/UserBehaviorProfile.js";
-import Event from "../models/Event.js";
+// import ShortTermMemory from "../models/ShortTermMemory.js"; // Removed in cleanup
+// import UserBehaviorProfile from "../models/UserBehaviorProfile.js"; // Removed in cleanup
+// import Event from "../models/Event.js"; // Removed in cleanup
 import { HTTP_STATUS, MESSAGES } from "../config/constants.js";
 import logger from "../utils/logger.js";
 import { getUserTier, getTierLimits } from "../config/tiers.js";

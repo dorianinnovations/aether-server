@@ -2,7 +2,8 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import fetch from "node-fetch";
+import aiService from "./services/aiService.js";
+import messageService from "./services/messageService.js";
 
 /**
  * Aether Social Chat Server - Clean & Simple
@@ -28,8 +29,7 @@ import { globalErrorHandler } from "./utils/errorHandler.js";
 
 // Database models
 import "./models/User.js";
-import "./models/Conversation.js";
-import "./models/ShortTermMemory.js";
+import "./models/Message.js";
 
 const app = express();
 
@@ -68,53 +68,82 @@ const initializeServer = async () => {
     app.use('/user', userRoutes);
     app.use('/conversation', conversationRoutes);
     
-    // Create social-chat endpoint with OpenRouter
+    // Create social-chat endpoint with streaming support
     app.post('/social-chat', async (req, res) => {
       try {
-        const { message } = req.body;
+        const { message, stream = true } = req.body;
+        const userId = req.user?.id; // From auth middleware
         
         if (!message) {
           return res.status(400).json({ error: 'Message is required' });
         }
         
-        // Direct OpenRouter call - simple and clean
-        const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            'Content-Type': 'application/json',
-            'X-Title': 'Aether Social Chat'
-          },
-          body: JSON.stringify({
-            model: 'anthropic/claude-3-haiku',
-            messages: [
-              { role: 'system', content: 'You are a friendly AI assistant in a social chat app. Be helpful and conversational.' },
-              { role: 'user', content: message }
-            ],
-            max_tokens: 800,
-            temperature: 0.7
-          })
-        });
+        // Save user message if authenticated
+        if (userId) {
+          await messageService.saveMessage(userId, message, 'user');
+        }
         
-        const data = await openRouterResponse.json();
-        const response = { content: data.choices[0].message.content };
-        
-        res.json({
-          success: true,
-          response: response.content,
-          timestamp: new Date().toISOString(),
-          model: 'claude-3-haiku'
-        });
+        if (stream) {
+          // Set up Server-Sent Events
+          res.writeHead(200, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Transfer-Encoding': 'chunked',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Cache-Control'
+          });
+          
+          // Get streaming AI response
+          const aiResponse = await aiService.chatStream(message);
+          
+          if (aiResponse.success) {
+            // Stream the response word by word
+            const words = aiResponse.response.split(' ');
+            for (let i = 0; i < words.length; i++) {
+              res.write(words[i]);
+              if (i < words.length - 1) res.write(' ');
+              await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay between words
+            }
+            
+            // Save AI response if authenticated
+            if (userId) {
+              await messageService.saveMessage(userId, aiResponse.response, 'ai', aiResponse.model);
+            }
+          }
+          
+          res.end();
+        } else {
+          // Non-streaming fallback
+          const aiResponse = await aiService.chat(message);
+          
+          if (aiResponse.success) {
+            if (userId) {
+              await messageService.saveMessage(userId, aiResponse.response, 'ai', aiResponse.model);
+            }
+            
+            res.json({
+              success: true,
+              response: aiResponse.response,
+              thinking: aiResponse.thinking,
+              timestamp: new Date().toISOString(),
+              model: aiResponse.model,
+              usage: aiResponse.usage
+            });
+          } else {
+            res.status(500).json({ 
+              success: false, 
+              error: 'AI service unavailable',
+              details: aiResponse.error 
+            });
+          }
+        }
         
       } catch (error) {
-        console.error('Social chat error:', error);
-        
-        // Fallback to echo if OpenRouter fails
-        res.json({
-          success: true,
-          response: `Echo (OpenRouter unavailable): ${req.body.message}`,
-          timestamp: new Date().toISOString(),
-          fallback: true
+        console.error('Social Chat Error:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: 'Internal server error' 
         });
       }
     });
