@@ -171,6 +171,21 @@ Use this current information to provide an accurate, up-to-date response.`;
           const aiResponse = await aiService.chat(enhancedMessage);
           
           if (aiResponse.success) {
+            // First send tool results if we have web search results
+            if (webSearchResults) {
+              const toolResultData = {
+                toolResults: [{
+                  tool: 'webSearchTool',
+                  success: true,
+                  data: webSearchResults,
+                  query: cleanMessage
+                }],
+                hasTools: true,
+                toolsUsed: 1
+              };
+              res.write(`data: ${JSON.stringify({metadata: toolResultData})}\n\n`);
+            }
+            
             // Stream response word by word in SSE format
             const words = aiResponse.response.split(' ');
             for (let i = 0; i < words.length; i++) {
