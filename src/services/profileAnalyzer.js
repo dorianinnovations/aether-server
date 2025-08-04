@@ -56,52 +56,76 @@ class ProfileAnalyzer {
    * Analyze a single message and update user profile
    */
   async analyzeMessage(userId, messageContent) {
-    try {
-      const user = await User.findById(userId);
-      if (!user) return;
+    const maxRetries = 3;
+    let attempt = 0;
 
-      // Initialize profile if it doesn't exist
-      if (!user.profile) {
-        user.profile = {
-          interests: [],
-          communicationStyle: {
-            casual: 0,
-            energetic: 0,
-            analytical: 0,
-            social: 0,
-            humor: 0
-          },
-          totalMessages: 0,
-          compatibilityTags: [],
-          analysisVersion: '1.0'
-        };
+    while (attempt < maxRetries) {
+      try {
+        const user = await User.findById(userId);
+        if (!user) return;
+
+        // Initialize profile if it doesn't exist
+        if (!user.profile) {
+          user.profile = {
+            interests: [],
+            communicationStyle: {
+              casual: 0,
+              energetic: 0,
+              analytical: 0,
+              social: 0,
+              humor: 0
+            },
+            totalMessages: 0,
+            compatibilityTags: [],
+            analysisVersion: '1.0'
+          };
+        }
+
+        // Extract interests
+        const detectedInterests = this.extractInterests(messageContent);
+        this.updateInterests(user.profile, detectedInterests);
+
+        // Analyze communication style
+        const styleScores = this.analyzeCommunicationStyle(messageContent);
+        this.updateCommunicationStyle(user.profile, styleScores);
+
+        // Update metadata
+        user.profile.totalMessages += 1;
+        user.profile.lastAnalyzed = new Date();
+
+        // Generate compatibility tags
+        user.profile.compatibilityTags = this.generateCompatibilityTags(user.profile);
+
+        await user.save();
+        
+        log.debug(`Profile updated for user ${userId}:`, {
+          interests: user.profile.interests.length,
+          totalMessages: user.profile.totalMessages,
+          tags: user.profile.compatibilityTags
+        });
+
+        return; // Success, exit retry loop
+
+      } catch (error) {
+        attempt++;
+        
+        // If it's a version error and we have retries left, try again
+        if (error.name === 'VersionError' && attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 100; // Exponential backoff: 200ms, 400ms, 800ms
+          log.warn(`Version conflict on attempt ${attempt}, retrying in ${delay}ms for user ${userId}`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        // Log error and exit
+        log.error('Profile analysis failed:', {
+          userId,
+          attempt,
+          error: error.message,
+          stack: error.stack
+        });
+        return;
       }
-
-      // Extract interests
-      const detectedInterests = this.extractInterests(messageContent);
-      this.updateInterests(user.profile, detectedInterests);
-
-      // Analyze communication style
-      const styleScores = this.analyzeCommunicationStyle(messageContent);
-      this.updateCommunicationStyle(user.profile, styleScores);
-
-      // Update metadata
-      user.profile.totalMessages += 1;
-      user.profile.lastAnalyzed = new Date();
-
-      // Generate compatibility tags
-      user.profile.compatibilityTags = this.generateCompatibilityTags(user.profile);
-
-      await user.save();
-      
-      log.debug(`Profile updated for user ${userId}:`, {
-        interests: user.profile.interests.length,
-        totalMessages: user.profile.totalMessages,
-        tags: user.profile.compatibilityTags
-      });
-
-    } catch (error) {
-      log.error('Profile analysis failed:', error);
     }
   }
 

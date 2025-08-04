@@ -65,9 +65,23 @@ class AnalysisQueue {
         profileAnalyzer.analyzeMessage(item.userId, item.content)
       );
       
-      await Promise.allSettled(promises);
+      const results = await Promise.allSettled(promises);
       
-      log.debug(`Completed analysis batch: ${batch.length} messages processed`);
+      // Count successes and failures
+      const successes = results.filter(r => r.status === 'fulfilled').length;
+      const failures = results.filter(r => r.status === 'rejected').length;
+      
+      log.debug(`Completed analysis batch: ${successes} successful, ${failures} failed out of ${batch.length} messages`);
+      
+      // Only log failures if there are any (reduces noise)
+      if (failures > 0) {
+        const failureReasons = results
+          .filter(r => r.status === 'rejected')
+          .map(r => r.reason?.message || 'Unknown error')
+          .slice(0, 3); // Just show first 3 error types
+        
+        log.warn(`Analysis batch had ${failures} failures. Sample errors:`, failureReasons);
+      }
       
     } catch (error) {
       log.error('Batch processing failed:', error);
