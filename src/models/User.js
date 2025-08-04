@@ -1,15 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 
-// Generate unique friend ID
-function generateFriendId() {
-  const adjectives = ['cool', 'epic', 'lunar', 'cyber', 'neon', 'void', 'nova', 'echo'];
-  const nouns = ['wolf', 'phoenix', 'ghost', 'blade', 'storm', 'sage', 'knight', 'raven'];
-  const randomAdj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
-  const randomNum = Math.floor(Math.random() * 9999) + 1000;
-  return `${randomAdj}_${randomNoun}_${randomNum}`;
-}
 
 const UserSchema = new mongoose.Schema({
   email: {
@@ -53,11 +44,6 @@ const UserSchema = new mongoose.Schema({
       },
       message: 'Username must be 3+ characters, alphanumeric/underscore only, and not reserved'
     }
-  },
-  friendId: {
-    type: String,
-    unique: true,
-    index: true
   },
   isActive: {
     type: Boolean,
@@ -118,26 +104,8 @@ const UserSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Hash password and generate friend ID before saving
+// Hash password before saving
 UserSchema.pre('save', async function(next) {
-  // Generate friend ID for new users
-  if (this.isNew && !this.friendId) {
-    let friendId;
-    let isUnique = false;
-    
-    // Keep generating until we get a unique ID
-    while (!isUnique) {
-      friendId = generateFriendId();
-      const existing = await mongoose.model('User').findOne({ friendId });
-      if (!existing) {
-        isUnique = true;
-      }
-    }
-    
-    this.friendId = friendId;
-  }
-  
-  // Hash password if modified
   if (!this.isModified('password')) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();

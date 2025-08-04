@@ -11,12 +11,12 @@ import { log } from '../utils/logger.js';
 const router = express.Router();
 
 /**
- * GET /friends/my-id - Get current user's friend ID
+ * GET /friends/my-username - Get current user's username (friend ID)
  */
-router.get('/my-id', protect, async (req, res) => {
+router.get('/my-username', protect, async (req, res) => {
   try {
     const userId = req.user.id;
-    const user = await User.findById(userId, 'friendId username');
+    const user = await User.findById(userId, 'username');
     
     if (!user) {
       return res.status(404).json({
@@ -27,46 +27,76 @@ router.get('/my-id', protect, async (req, res) => {
     
     res.json({
       success: true,
-      friendId: user.friendId,
-      username: user.username
+      username: user.username,
+      friendId: user.username // For backward compatibility
     });
     
   } catch (error) {
-    log.error('Get friend ID error:', error);
+    log.error('Get username error:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to get friend ID'
+      error: 'Failed to get username'
     });
   }
 });
 
 /**
- * GET /friends/lookup/:friendId - Look up a user by friend ID
+ * GET /friends/my-id - Get current user's username (backward compatibility)
  */
-router.get('/lookup/:friendId', protect, async (req, res) => {
+router.get('/my-id', protect, async (req, res) => {
   try {
-    const { friendId } = req.params;
-    
-    if (!friendId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Friend ID is required'
-      });
-    }
-    
-    const user = await User.findOne({ friendId }, 'friendId username name profile.interests');
+    const userId = req.user.id;
+    const user = await User.findById(userId, 'username');
     
     if (!user) {
       return res.status(404).json({
         success: false,
-        error: 'User with that friend ID not found'
+        error: 'User not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      friendId: user.username,
+      username: user.username
+    });
+    
+  } catch (error) {
+    log.error('Get username error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get username'
+    });
+  }
+});
+
+/**
+ * GET /friends/lookup/:username - Look up a user by username
+ */
+router.get('/lookup/:username', protect, async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    if (!username) {
+      return res.status(400).json({
+        success: false,
+        error: 'Username is required'
+      });
+    }
+    
+    const user = await User.findOne({ username: username.toLowerCase() }, 'username name profile.interests');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User with that username not found'
       });
     }
     
     // Return safe public info
     const publicProfile = {
-      friendId: user.friendId,
       username: user.username,
+      friendId: user.username, // For backward compatibility
       name: user.name,
       topInterests: user.profile?.interests
         ?.filter(i => i.confidence > 0.6)
@@ -89,27 +119,28 @@ router.get('/lookup/:friendId', protect, async (req, res) => {
 });
 
 /**
- * POST /friends/add - Add friend by friend ID
+ * POST /friends/add - Add friend by username
  */
 router.post('/add', protect, async (req, res) => {
   try {
-    const { friendId } = req.body;
+    const { username, friendId } = req.body; // Accept both for backward compatibility
+    const friendUsername = username || friendId;
     const currentUserId = req.user.id;
     
-    if (!friendId) {
+    if (!friendUsername) {
       return res.status(400).json({
         success: false,
-        error: 'Friend ID is required'
+        error: 'Username is required'
       });
     }
     
     // Find the target user
-    const targetUser = await User.findOne({ friendId });
+    const targetUser = await User.findOne({ username: friendUsername.toLowerCase() });
     
     if (!targetUser) {
       return res.status(404).json({
         success: false,
-        error: 'User with that friend ID not found'
+        error: 'User with that username not found'
       });
     }
     
@@ -154,8 +185,8 @@ router.post('/add', protect, async (req, res) => {
       success: true,
       message: `Successfully added ${targetUser.username} as a friend!`,
       friend: {
-        friendId: targetUser.friendId,
         username: targetUser.username,
+        friendId: targetUser.username, // For backward compatibility
         addedAt: new Date()
       }
     });
@@ -177,7 +208,7 @@ router.get('/list', protect, async (req, res) => {
     const userId = req.user.id;
     
     const user = await User.findById(userId)
-      .populate('friends.user', 'friendId username name profile.interests')
+      .populate('friends.user', 'username name profile.interests')
       .select('friends');
     
     if (!user) {
@@ -188,8 +219,8 @@ router.get('/list', protect, async (req, res) => {
     }
     
     const friendsList = user.friends.map(friendship => ({
-      friendId: friendship.user.friendId,
       username: friendship.user.username,
+      friendId: friendship.user.username, // For backward compatibility
       name: friendship.user.name,
       addedAt: friendship.addedAt,
       topInterests: friendship.user.profile?.interests
@@ -214,27 +245,28 @@ router.get('/list', protect, async (req, res) => {
 });
 
 /**
- * DELETE /friends/remove - Remove a friend by friend ID
+ * DELETE /friends/remove - Remove a friend by username
  */
 router.delete('/remove', protect, async (req, res) => {
   try {
-    const { friendId } = req.body;
+    const { username, friendId } = req.body; // Accept both for backward compatibility
+    const friendUsername = username || friendId;
     const currentUserId = req.user.id;
     
-    if (!friendId) {
+    if (!friendUsername) {
       return res.status(400).json({
         success: false,
-        error: 'Friend ID is required'
+        error: 'Username is required'
       });
     }
     
     // Find the target user
-    const targetUser = await User.findOne({ friendId });
+    const targetUser = await User.findOne({ username: friendUsername.toLowerCase() });
     
     if (!targetUser) {
       return res.status(404).json({
         success: false,
-        error: 'User with that friend ID not found'
+        error: 'User with that username not found'
       });
     }
     
