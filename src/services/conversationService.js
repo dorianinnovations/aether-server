@@ -193,7 +193,11 @@ class ConversationService {
 
   async deleteConversation(userId, conversationId) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(conversationId) && conversationId.length !== 24) {
+      // Accept both date-based IDs (YYYY-MM-DD) and ObjectId formats
+      const isDateFormat = /^\d{4}-\d{2}-\d{2}$/.test(conversationId);
+      const isObjectId = mongoose.Types.ObjectId.isValid(conversationId);
+      
+      if (!isDateFormat && !isObjectId) {
         throw new Error('Invalid conversation ID format');
       }
 
