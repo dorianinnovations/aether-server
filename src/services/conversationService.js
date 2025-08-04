@@ -1,3 +1,4 @@
+import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
 import { broadcastToUser } from '../routes/events.js';
 import { log } from '../utils/logger.js';
@@ -22,38 +23,87 @@ class ConversationService {
       const { page = 1, limit = 20, search } = options;
       const skip = (page - 1) * limit;
 
-      let query = { user: userId };
+      // Build query for Conversation model
+      let query = { 
+        user: userId, 
+        isActive: true 
+      };
+      
       if (search) {
         query.$or = [
-          { content: { $regex: search, $options: 'i' } },
+          { title: { $regex: search, $options: 'i' } },
+          { summary: { $regex: search, $options: 'i' } },
+          { 'messages.content': { $regex: search, $options: 'i' } }
         ];
       }
 
-      const conversations = await Message.aggregate([
-        { $match: { user: new mongoose.Types.ObjectId(userId) } },
-        {
-          $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-            title: { $first: "$content" },
-            lastActivity: { $max: "$createdAt" },
-            messageCount: { $sum: 1 },
-            summary: { $first: "$content" }
-          }
-        },
-        { $sort: { lastActivity: -1 } },
-        { $skip: skip },
-        { $limit: limit }
-      ]);
+      // Get conversations using the proper Conversation model
+      let conversations = await Conversation.find(query)
+        .sort({ lastMessageAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('_id title lastMessageAt messageCount summary messages')
+        .lean();
 
-      const total = await Message.countDocuments(query);
+      let total = await Conversation.countDocuments(query);
+
+      // Fallback: If no conversations found, try to migrate from old Message model
+      if (conversations.length === 0 && page === 1) {
+        log.info(`No conversations found for user ${userId}, checking for legacy messages...`);
+        
+        const legacyMessages = await Message.find({ user: userId })
+          .sort({ createdAt: -1 })
+          .limit(100)
+          .lean();
+
+        if (legacyMessages.length > 0) {
+          log.info(`Found ${legacyMessages.length} legacy messages, creating conversation...`);
+          
+          // Create a single conversation from legacy messages
+          const newConversation = new Conversation({
+            title: legacyMessages[0]?.content?.substring(0, 50) + '...' || 'Imported Conversation',
+            user: userId,
+            messages: legacyMessages.reverse().map(msg => ({
+              _id: new mongoose.Types.ObjectId(),
+              role: msg.type === 'user' ? 'user' : 'assistant',
+              content: msg.content,
+              timestamp: msg.createdAt,
+              metadata: {
+                model: msg.aiModel,
+                migrated: true
+              }
+            })),
+            messageCount: legacyMessages.length,
+            lastMessageAt: legacyMessages[legacyMessages.length - 1]?.createdAt || new Date(),
+            isActive: true,
+            summary: legacyMessages[0]?.content?.substring(0, 100) + '...'
+          });
+
+          await newConversation.save();
+          log.info(`Created conversation ${newConversation._id} with ${legacyMessages.length} migrated messages`);
+
+          // Return the newly created conversation
+          conversations = [{
+            _id: newConversation._id,
+            title: newConversation.title,
+            lastMessageAt: newConversation.lastMessageAt,
+            messageCount: newConversation.messageCount,
+            summary: newConversation.summary,
+            messages: newConversation.messages
+          }];
+          total = 1;
+        }
+      }
 
       return {
         conversations: conversations.map(conv => ({
-          _id: conv._id,
-          title: conv.title?.substring(0, 50) + '...' || 'New Conversation',
-          lastActivity: conv.lastActivity,
-          messageCount: conv.messageCount,
-          summary: conv.summary?.substring(0, 100) + '...'
+          _id: conv._id.toString(),
+          title: conv.title || 'New Conversation',
+          lastActivity: conv.lastMessageAt,
+          messageCount: conv.messageCount || 0,
+          summary: conv.summary || (conv.messages && conv.messages.length > 0 ? 
+            conv.messages[0].content?.substring(0, 100) + '...' : 
+            'No messages yet')
         })),
         pagination: {
           page,
@@ -70,25 +120,41 @@ class ConversationService {
 
   async getConversation(userId, conversationId, messageLimit = 500) {
     try {
-      const messages = await Message.find({ 
-        user: userId,
-        conversationId: conversationId 
-      })
-        .sort({ createdAt: -1 })
-        .limit(messageLimit)
-        .populate('user', 'email username')
-        .lean();
-
-      if (messages.length === 0) {
+      // Validate conversationId format
+      if (!mongoose.Types.ObjectId.isValid(conversationId)) {
         return null;
       }
 
-      return {
+      // Find the conversation using the Conversation model
+      const conversation = await Conversation.findOne({
         _id: conversationId,
-        title: messages[0]?.content?.substring(0, 50) + '...' || 'Conversation',
-        messageCount: messages.length,
-        lastActivity: messages[0]?.createdAt,
-        messages: messages.reverse()
+        user: userId,
+        isActive: true
+      }).lean();
+
+      if (!conversation) {
+        return null;
+      }
+
+      // Limit messages if needed
+      let messages = conversation.messages || [];
+      if (messageLimit && messages.length > messageLimit) {
+        messages = messages.slice(-messageLimit); // Get the most recent messages
+      }
+
+      return {
+        _id: conversation._id.toString(),
+        title: conversation.title || 'Conversation',
+        messageCount: conversation.messageCount || messages.length,
+        lastActivity: conversation.lastMessageAt,
+        messages: messages.map(msg => ({
+          _id: msg._id?.toString() || new mongoose.Types.ObjectId().toString(),
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp,
+          attachments: msg.attachments,
+          metadata: msg.metadata
+        }))
       };
     } catch (error) {
       log.error('Error getting conversation:', error);
@@ -98,19 +164,30 @@ class ConversationService {
 
   async createConversation(userId, title = 'New Conversation') {
     try {
-      const conversation = {
-        _id: new mongoose.Types.ObjectId().toString(),
+      const conversation = new Conversation({
         title,
+        user: userId,
+        messages: [],
+        messageCount: 0,
+        lastMessageAt: new Date(),
+        isActive: true
+      });
+
+      await conversation.save();
+
+      const conversationData = {
+        _id: conversation._id.toString(),
+        title: conversation.title,
         userId,
         messageCount: 0,
-        lastActivity: new Date(),
-        createdAt: new Date()
+        lastActivity: conversation.lastMessageAt,
+        createdAt: conversation.createdAt
       };
 
-      broadcastToUser(userId, 'conversation:created', conversation);
+      broadcastToUser(userId, 'conversation:created', conversationData);
       
       log.api(`Created new conversation for user ${userId}: ${conversation._id}`);
-      return conversation;
+      return conversationData;
     } catch (error) {
       log.error('Error creating conversation:', error);
       throw error;
@@ -119,26 +196,31 @@ class ConversationService {
 
   async updateConversationTitle(userId, conversationId, title) {
     try {
-      const messages = await Message.find({ 
-        user: userId,
-        conversationId: conversationId 
-      }).limit(1);
+      if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+        throw new Error('Invalid conversation ID format');
+      }
 
-      if (messages.length === 0) {
+      const conversation = await Conversation.findOneAndUpdate(
+        { _id: conversationId, user: userId, isActive: true },
+        { title },
+        { new: true }
+      );
+
+      if (!conversation) {
         throw new Error('Conversation not found');
       }
 
-      const conversation = {
-        _id: conversationId,
-        title,
+      const conversationData = {
+        _id: conversation._id.toString(),
+        title: conversation.title,
         userId,
-        lastActivity: new Date()
+        lastActivity: conversation.lastMessageAt
       };
 
-      broadcastToUser(userId, 'conversation:updated', conversation);
+      broadcastToUser(userId, 'conversation:updated', conversationData);
       
       log.api(`Updated conversation title for user ${userId}: ${conversationId}`);
-      return conversation;
+      return conversationData;
     } catch (error) {
       log.error('Error updating conversation title:', error);
       throw error;
@@ -147,25 +229,41 @@ class ConversationService {
 
   async addMessage(userId, conversationId, role, content, attachments = [], metadata = {}) {
     try {
-      const message = new Message({
-        user: userId,
-        conversationId,
+      if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+        throw new Error('Invalid conversation ID format');
+      }
+
+      const newMessage = {
+        _id: new mongoose.Types.ObjectId(),
         role,
         content,
         attachments,
         metadata,
-        createdAt: new Date()
-      });
+        timestamp: new Date()
+      };
 
-      await message.save();
+      // Add message to conversation and update metadata
+      const conversation = await Conversation.findOneAndUpdate(
+        { _id: conversationId, user: userId, isActive: true },
+        { 
+          $push: { messages: newMessage },
+          $set: { 
+            lastMessageAt: newMessage.timestamp,
+            summary: role === 'user' ? content.substring(0, 100) + (content.length > 100 ? '...' : '') : undefined
+          },
+          $inc: { messageCount: 1 }
+        },
+        { new: true }
+      );
 
-      const conversation = {
-        _id: conversationId,
-        messageCount: await Message.countDocuments({ 
-          user: userId, 
-          conversationId 
-        }),
-        lastActivity: new Date(),
+      if (!conversation) {
+        throw new Error('Conversation not found');
+      }
+
+      const conversationData = {
+        _id: conversation._id.toString(),
+        messageCount: conversation.messageCount,
+        lastActivity: conversation.lastMessageAt,
         lastMessage: {
           role,
           content: content.substring(0, 100) + (content.length > 100 ? '...' : '')
@@ -173,18 +271,18 @@ class ConversationService {
       };
 
       broadcastToUser(userId, 'conversation:message_added', {
-        conversationId,
+        conversationId: conversationId,
         message: {
-          _id: message._id,
+          _id: newMessage._id.toString(),
           role,
           content,
-          createdAt: message.createdAt
+          timestamp: newMessage.timestamp
         },
-        conversation
+        conversation: conversationData
       });
 
       log.api(`Added message to conversation ${conversationId} for user ${userId}`);
-      return conversation;
+      return conversationData;
     } catch (error) {
       log.error('Error adding message:', error);
       throw error;
@@ -193,30 +291,27 @@ class ConversationService {
 
   async deleteConversation(userId, conversationId) {
     try {
-      // Accept both date-based IDs (YYYY-MM-DD) and ObjectId formats
-      const isDateFormat = /^\d{4}-\d{2}-\d{2}$/.test(conversationId);
-      const isObjectId = mongoose.Types.ObjectId.isValid(conversationId);
-      
-      if (!isDateFormat && !isObjectId) {
+      if (!mongoose.Types.ObjectId.isValid(conversationId)) {
         throw new Error('Invalid conversation ID format');
       }
 
-      const result = await Message.deleteMany({ 
-        user: userId,
-        conversationId: conversationId 
-      });
+      const conversation = await Conversation.findOneAndUpdate(
+        { _id: conversationId, user: userId, isActive: true },
+        { isActive: false }, // Soft delete
+        { new: true }
+      );
 
-      if (result.deletedCount === 0) {
+      if (!conversation) {
         throw new Error('Conversation not found or already deleted');
       }
 
       broadcastToUser(userId, 'conversation:deleted', { 
         conversationId,
-        deletedCount: result.deletedCount 
+        deletedCount: conversation.messageCount 
       });
 
-      log.api(`Deleted conversation ${conversationId} for user ${userId} (${result.deletedCount} messages)`);
-      return result;
+      log.api(`Deleted conversation ${conversationId} for user ${userId} (${conversation.messageCount} messages)`);
+      return { deletedCount: conversation.messageCount };
     } catch (error) {
       log.error('Error deleting conversation:', error);
       throw error;
@@ -225,14 +320,17 @@ class ConversationService {
 
   async deleteAllConversations(userId) {
     try {
-      const result = await Message.deleteMany({ user: userId });
+      const result = await Conversation.updateMany(
+        { user: userId, isActive: true },
+        { isActive: false } // Soft delete all conversations
+      );
 
       broadcastToUser(userId, 'conversation:all_deleted', { 
-        deletedCount: result.deletedCount 
+        deletedCount: result.modifiedCount 
       });
 
-      log.api(`Deleted all conversations for user ${userId} (${result.deletedCount} messages)`);
-      return result;
+      log.api(`Deleted all conversations for user ${userId} (${result.modifiedCount} conversations)`);
+      return { deletedCount: result.modifiedCount };
     } catch (error) {
       log.error('Error deleting all conversations:', error);
       throw error;
