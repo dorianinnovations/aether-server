@@ -1,79 +1,111 @@
-# Aether AI Server
+# 🚀 Aether - Social Discovery Platform
 
-Simple, functional Express.js backend for AI chat with web search integration.
+**Intelligent AI chat with smart user profiling and friend matching system**
 
-## Current Architecture
+Built by Isaiah Pappas - A social platform that connects people through natural conversation and shared interests.
 
-This is a minimal AI chat server with the following core components:
+---
 
-### Project Structure
+## 🌟 What is Aether?
 
+Aether is a **social discovery platform** that uses AI to understand users through their conversations and intelligently connect them with compatible people. Users chat naturally with an engaging AI, which builds their profile behind the scenes and suggests meaningful connections.
+
+### Key Differentiators
+- **Natural Profiling**: Build user profiles through conversation, not surveys
+- **Smart Matching**: Connect users based on shared interests and communication styles  
+- **Engaging AI**: Witty, curious AI personality that feels like talking to a friend
+- **Simple Connections**: Username-based friend system (@username style)
+
+---
+
+## 🎯 Core Features
+
+### 🤖 **Intelligent AI Chat**
+- **Enhanced Personality**: Witty, curious AI that adapts to user energy
+- **Streaming Responses**: Real-time Server-Sent Events for smooth conversations
+- **Web Search Integration**: AI automatically searches for current information when needed
+- **File Support**: Images, PDFs, and text files up to 10MB
+
+### 👥 **Smart Friend System** 
+- **Username-Based**: Simple @username sharing (e.g., `@cool_gamer_123`)
+- **Instant Connections**: Mutual friend requests with one click
+- **Interest Display**: See shared interests with friends
+- **Privacy-First**: Only show what users want to share
+
+### 🧠 **Intelligent User Profiling**
+- **Conversation Analysis**: Extracts interests from natural chat ("I love gaming")
+- **Style Detection**: Analyzes communication patterns (casual, energetic, analytical)
+- **Confidence Scoring**: Interest strength that evolves over time
+- **Scalable Processing**: Queue-based batch analysis
+
+### 🎯 **Smart Matching System**
+- **Interest Compatibility**: Finds users with shared passions
+- **Style Matching**: Compatible communication patterns
+- **Match Explanations**: "Both interested in: gaming, programming"
+- **Compatibility Scoring**: Multi-dimensional compatibility analysis
+
+---
+
+## 🏗️ Architecture
+
+### **Tech Stack**
+- **Backend**: Node.js + Express.js + MongoDB
+- **AI**: OpenRouter (GPT-4o) with custom personality prompts
+- **Authentication**: JWT with bcrypt password hashing
+- **Real-time**: Server-Sent Events for streaming
+- **Search**: SerpAPI + Google Custom Search integration
+- **Processing**: Queue-based message analysis system
+
+### **Project Structure**
 ```
 aether-server/
 ├── src/
-│   ├── config/
-│   │   ├── constants.js        # HTTP status & messages
-│   │   ├── database.js         # MongoDB connection
-│   │   ├── environment.js      # Environment management
-│   │   └── tiers.js           # User tier configuration
 │   ├── models/
-│   │   ├── User.js            # User accounts (email, password, username)
-│   │   └── Message.js         # Chat messages storage
+│   │   ├── User.js              # Users with friends & profiles
+│   │   ├── Message.js           # Chat message storage
+│   │   └── Conversation.js      # Conversation context
 │   ├── routes/
-│   │   ├── auth.js            # Authentication & Spotify integration
-│   │   ├── user.js            # User management
-│   │   ├── ai.js              # Main AI chat endpoint
-│   │   ├── health.js          # Health check endpoints
-│   │   ├── conversation.js    # Conversation management
-│   │   ├── events.js          # Server events
-│   │   └── posts.js           # Posts management
+│   │   ├── auth.js              # Authentication & username validation
+│   │   ├── friends.js           # Friend management system
+│   │   ├── matching.js          # User matching & profiling
+│   │   ├── ai.js               # Standard AI chat
+│   │   └── health.js           # System monitoring
 │   ├── services/
-│   │   ├── llmService.js      # OpenRouter integration
-│   │   ├── messageService.js  # Message persistence
-│   │   ├── conversationService.js # Basic conversation management
-│   │   └── aiService.js       # AI service utilities
+│   │   ├── profileAnalyzer.js   # Interest & style extraction
+│   │   ├── analysisQueue.js     # Scalable message processing
+│   │   ├── matchingService.js   # Compatibility scoring
+│   │   ├── aiService.js         # Enhanced AI personality
+│   │   └── messageService.js    # Message persistence + queuing
 │   ├── tools/
-│   │   └── webSearchTool.js   # Web search with SerpAPI/Google
-│   ├── middleware/
-│   │   ├── auth.js            # JWT authentication
-│   │   ├── security.js        # CORS & security headers
-│   │   ├── performanceMiddleware.js # Performance monitoring
-│   │   ├── cacheMiddleware.js # Response caching
-│   │   ├── rateLimiter.js     # Rate limiting
-│   │   └── tierLimiter.js     # Subscription limits
-│   ├── utils/
-│   │   ├── logger.js          # Winston logging
-│   │   ├── errorHandler.js    # Error handling
-│   │   ├── cache.js          # Caching utilities
-│   │   └── appAudit.js       # Application auditing
-│   ├── server.js             # Main server (full features)
-│   └── server-clean.js       # Entry point (minimal)
-├── scripts/                  # Database and utility scripts
-├── package.json
-├── CLAUDE.md                # Developer documentation
-└── README.md               # This file
+│   │   └── webSearchTool.js     # Intelligent web search
+│   └── server-clean.js          # Main server entry point
+├── CLAUDE.md                    # Technical documentation
+└── README.md                    # This file
 ```
 
-## Quick Start
+---
 
-### Prerequisites
+## 🚀 Quick Start
+
+### **Prerequisites**
 - Node.js 18+
-- MongoDB
+- MongoDB (local or Atlas)
+- OpenRouter API key
 
-### Installation
+### **Installation**
 ```bash
-git clone <repository-url>
+git clone https://github.com/dorianinnovations/aether-server.git
 cd aether-server
 npm install
-cp .env.example .env  # Create and configure environment
+cp .env.example .env  # Configure your environment
 npm run dev
 ```
 
-### Environment Configuration
+### **Environment Setup**
 ```bash
 # Required
-MONGO_URI=mongodb://localhost:27017/aether-ai
-JWT_SECRET=your-jwt-secret-here
+MONGO_URI=mongodb+srv://user:pass@cluster.mongodb.net/aether
+JWT_SECRET=your-super-secret-jwt-key
 OPENROUTER_API_KEY=your-openrouter-api-key
 
 # Optional (for web search)
@@ -81,185 +113,317 @@ SERPAPI_API_KEY=your-serpapi-key
 GOOGLE_SEARCH_API_KEY=your-google-api-key
 GOOGLE_SEARCH_ENGINE_ID=your-search-engine-id
 
-# Optional (for Spotify integration)
-SPOTIFY_CLIENT_ID=your-spotify-client-id
-SPOTIFY_CLIENT_SECRET=your-spotify-client-secret
-
 # Server
 PORT=5000
 NODE_ENV=development
 ```
 
-## API Endpoints
-
-### Authentication
-- `POST /signup` - User registration
-- `POST /login` - User authentication
-- `POST /refresh` - JWT token refresh
-- `POST /spotify/connect` - Connect Spotify account
-- `POST /spotify/disconnect` - Disconnect Spotify account
-
-### AI Chat
-- `POST /ai/chat` - Main chat endpoint
-  - Supports streaming and non-streaming responses
-  - File upload support (images, PDFs, text files up to 10MB)
-  - Automatic web search integration
-  - Context from recent conversation history
-
-### User Management
-- `GET /profile` - User profile
-- `POST /profile` - Update profile
-- `DELETE /delete` - Delete account
-
-### Health & Monitoring
-- `GET /` - Basic server status
-- `GET /health` - Comprehensive health check
-- `GET /test` - Operation status
-
-## Core Features
-
-### Simple Authentication
-- JWT-based authentication with 24-hour tokens
-- Password hashing with bcrypt
-- Basic user profiles with email and optional username
-
-### AI Chat Engine
-- OpenRouter integration (GPT-4o default)
-- Streaming and non-streaming responses
-- File upload processing (images, PDFs, text)
-- Conversation context from recent messages (last 6 messages)
-
-### Web Search Integration
-- Automatic query analysis to determine when search is needed
-- SerpAPI and Google Custom Search support
-- Content extraction from search results
-- Smart filtering to avoid unnecessary searches
-
-### User Tiers
-- **Core** (Free): 10k daily requests, 50/min, 8k tokens
-- **Pro**: 50k daily requests, 100/min, 16k tokens
-- **Aether**: Unlimited requests, 1000/min, 32k tokens
-
-## Development Commands
-
+### **Development Commands**
 ```bash
-npm run dev          # Start development server with nodemon
-npm start           # Start production server (server-clean.js)
-npm test            # Run tests
-npm run lint        # Code linting
-npm run lint:errors # Show only errors
+npm run dev          # Start with auto-reload
+npm start            # Production server
+npm run lint         # Code linting
+npm test             # Run tests (when available)
 ```
-
-## Context Management
-
-The server uses a simple context system:
-
-1. **Message Storage**: All chat messages stored in MongoDB
-2. **Context Retrieval**: Last 6 messages loaded for each chat request
-3. **No Advanced Memory**: No user behavior modeling or long-term memory
-4. **Simple Persistence**: Basic message history by user ID
-
-### Context Flow
-```
-User Request → Load Recent Messages → Add to Context → Send to AI → Save Response
-```
-
-## Testing
-
-### Quick Health Check
-```bash
-curl -s http://localhost:5000/health | jq .
-```
-
-### Authentication Test
-```bash
-# Create user and get token
-TOKEN=$(curl -s -X POST http://localhost:5000/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123"}' | \
-  jq -r '.token')
-
-# Test AI chat
-curl -s -X POST http://localhost:5000/ai/chat \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"message":"Hello AI"}'
-```
-
-## Database Schema
-
-### Users
-```javascript
-{
-  email: String (required, unique),
-  password: String (hashed),
-  username: String (optional),
-  isActive: Boolean,
-  timestamps: true
-}
-```
-
-### Messages
-```javascript
-{
-  user: ObjectId (ref: User),
-  content: String (required),
-  type: String (enum: ['user', 'ai']),
-  aiModel: String,
-  timestamps: true
-}
-```
-
-## Key Limitations
-
-This is intentionally a minimal implementation:
-
-- **Basic Context**: Only recent message history, no semantic memory
-- **Simple Models**: Just User and Message models
-- **No Advanced Features**: No behavior modeling, emotional analysis, or advanced personalization
-- **Limited Memory**: No conversation summarization or long-term retention
-
-## Technology Stack
-
-- **Runtime**: Node.js 18+ with ES modules
-- **Framework**: Express.js 4.21+
-- **Database**: MongoDB with Mongoose
-- **Authentication**: JWT with bcrypt
-- **AI**: OpenRouter API (multi-model support)
-- **Search**: SerpAPI and Google Custom Search
-- **File Processing**: Multer for uploads
-- **Logging**: Winston
-- **Development**: Nodemon, ESLint
-
-## Deployment
-
-The server is configured for deployment on:
-- Railway (`railway.json`)
-- Render (`render.yaml`)
-- Heroku (`Procfile`)
-
-**Entry Point**: `src/server-clean.js`
-
-## Security Features
-
-- JWT authentication with secure tokens
-- Rate limiting for API protection
-- CORS configuration
-- Input validation and sanitization
-- Security headers via Helmet.js
-- Password hashing with bcrypt (12 rounds)
-
-## Performance Features
-
-- Response caching with Redis (optional)
-- Memory monitoring and cleanup
-- Request optimization
-- Connection pooling for MongoDB
-- Efficient file upload handling
 
 ---
 
-**Entry Point**: `src/server-clean.js`  
-**Main Port**: 5000 (configurable via PORT env var)
+## 📡 API Reference
 
-*This is a functional, minimal AI chat server focused on core features without complex advanced features.*
+### **🔐 Authentication**
+```bash
+# Sign up (username required)
+POST /auth/signup
+{
+  "email": "user@example.com",
+  "password": "password123", 
+  "username": "cool_user_123",
+  "name": "John Doe"  # optional
+}
+
+# Check username availability
+GET /auth/check-username/desired_username
+
+# Login
+POST /auth/login
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+```
+
+### **💬 AI Chat**
+```bash
+# Streaming chat (recommended)
+POST /social-chat
+Authorization: Bearer <token>
+{
+  "message": "I love gaming and programming!",
+  "stream": true
+}
+# Returns: Server-Sent Events stream
+
+# Standard chat
+POST /ai/chat
+Authorization: Bearer <token>
+{
+  "message": "Hello there!",
+  "stream": false  
+}
+```
+
+### **👥 Friends System**
+```bash
+# Get my username (shareable friend ID)
+GET /friends/my-id
+Authorization: Bearer <token>
+
+# Look up a user
+GET /friends/lookup/friend_username
+Authorization: Bearer <token>
+
+# Add friend by username
+POST /friends/add
+Authorization: Bearer <token>
+{
+  "username": "friend_username"
+}
+
+# Get friends list with interests
+GET /friends/list
+Authorization: Bearer <token>
+
+# Remove friend
+DELETE /friends/remove
+Authorization: Bearer <token>
+{
+  "username": "friend_username"
+}
+```
+
+### **🎯 Matching & Profiling**
+```bash
+# Find compatible users
+GET /matching/find
+Authorization: Bearer <token>
+
+# View my analyzed profile
+GET /matching/profile
+Authorization: Bearer <token>
+
+# Test profile analysis (debug)
+POST /matching/test-analysis
+Authorization: Bearer <token>
+{
+  "message": "I love gaming and coding"
+}
+```
+
+### **🩺 Health Monitoring**
+```bash
+# Health check
+GET /health
+
+# Basic status
+GET /
+```
+
+---
+
+## 🧪 Testing the System
+
+### **Complete Workflow Test**
+```bash
+# 1. Create user
+TOKEN=$(curl -s -X POST http://localhost:5000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123","username":"test_user"}' | \
+  jq -r '.token')
+
+# 2. Chat with interests (builds profile)
+curl -s -X POST http://localhost:5000/social-chat \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"I love gaming and programming!","stream":true}'
+
+# 3. Check generated profile
+curl -s http://localhost:5000/matching/profile \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# 4. Find matches
+curl -s http://localhost:5000/matching/find \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# 5. Get shareable username
+curl -s http://localhost:5000/friends/my-id \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+---
+
+## 🗄️ Database Schema
+
+### **Users Collection**
+```javascript
+{
+  _id: ObjectId,
+  email: String (required, unique),
+  password: String (hashed with bcrypt),
+  username: String (required, unique, 3-30 chars),
+  name: String (optional),
+  isActive: Boolean (default: true),
+  
+  // Friends system
+  friends: [{
+    user: ObjectId (ref: User),
+    addedAt: Date,
+    status: String (enum: ['accepted'])
+  }],
+  
+  // AI-generated profile
+  profile: {
+    interests: [{
+      topic: String,
+      confidence: Number (0-1 score),
+      lastMentioned: Date
+    }],
+    communicationStyle: {
+      casual: Number (0-1),
+      energetic: Number (0-1),
+      analytical: Number (0-1), 
+      social: Number (0-1),
+      humor: Number (0-1)
+    },
+    totalMessages: Number,
+    lastAnalyzed: Date,
+    compatibilityTags: [String],
+    analysisVersion: String
+  },
+  
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+### **Messages Collection**
+```javascript
+{
+  _id: ObjectId,
+  user: ObjectId (ref: User),
+  content: String (required),
+  type: String (enum: ['user', 'ai']),
+  aiModel: String (default: 'gpt-4o'),
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+---
+
+## 🎨 How It Works
+
+### **1. Natural Conversation**
+Users chat with Aether's AI, which has an engaging personality designed to feel like talking to a witty, curious friend rather than a corporate chatbot.
+
+### **2. Invisible Profiling** 
+As users chat, the system analyzes their messages for:
+- **Interests**: "I love gaming", "obsessed with music", "really into coding"
+- **Communication Style**: Casual vs formal, energy level, humor usage
+- **Social Patterns**: Question-asking, engagement level, conversation depth
+
+### **3. Smart Matching**
+The matching algorithm finds compatible users based on:
+- **Interest Overlap**: Shared hobbies and passions
+- **Style Compatibility**: Similar communication patterns
+- **Engagement Level**: Compatible social energy
+
+### **4. Meaningful Connections**
+Instead of superficial matching, users get explanations like:
+- "Both interested in: gaming, programming, music"
+- "Similar communication style: casual and social"
+- "Compatible energy levels for great conversations"
+
+---
+
+## 🚀 Deployment
+
+### **Supported Platforms**
+- **Render** (recommended): `render.yaml` configuration included
+- **Railway**: `railway.json` configuration included  
+- **Heroku**: `Procfile` configuration included
+- **Self-hosted**: Docker support available
+
+### **Environment Variables**
+Set these in your deployment platform:
+- `MONGO_URI`: MongoDB connection string
+- `JWT_SECRET`: Secret key for JWT tokens
+- `OPENROUTER_API_KEY`: OpenRouter API key for AI
+- `PORT`: Server port (automatically set on most platforms)
+
+---
+
+## 🔒 Security & Privacy
+
+### **Security Features**
+- JWT authentication with secure token handling
+- Password hashing with bcrypt (12 rounds)
+- Rate limiting to prevent abuse
+- Input validation and sanitization
+- CORS configuration for web security
+- Security headers via Helmet.js
+
+### **Privacy Approach**
+- **No Personal Data Mining**: Only analyzes public conversation patterns
+- **User Control**: Users can see exactly what's in their profile
+- **Interest-Based Only**: No invasive personal information collection
+- **Transparent Matching**: Clear explanations for why users are matched
+
+---
+
+## 🛠️ Development
+
+### **Key Design Principles**
+1. **Privacy-First**: Build profiles through natural conversation, not invasive data collection
+2. **Scalable**: Queue-based processing that grows with user base
+3. **Engaging**: AI personality that makes conversations enjoyable
+4. **Simple**: Username-based connections everyone understands
+
+### **Contributing**
+This is a personal project by Isaiah Pappas. Feel free to fork and create your own version!
+
+### **Architecture Decisions**
+- **Unified Identifiers**: Username serves as both username and friend ID
+- **Batch Processing**: Async message analysis for scalability  
+- **Confidence Scoring**: Interest strength that decays over time for relevance
+- **Streaming First**: Real-time responses for better user experience
+
+---
+
+## 📈 Roadmap
+
+### **Current Status: MVP Complete**
+✅ AI Chat with personality  
+✅ User profiling system  
+✅ Friend connections  
+✅ Smart matching algorithm  
+✅ Username-based identity  
+
+### **Future Enhancements**
+- 🔄 Real-time notifications
+- 💬 Direct messaging between friends
+- 🎨 User customizable profiles
+- 📊 Advanced analytics dashboard
+- 🌍 Interest-based communities
+- 📱 Mobile app development
+
+---
+
+## 📞 Contact & Support
+
+**Developer**: Isaiah Pappas  
+**Project**: Aether Social Discovery Platform  
+**Focus**: Connecting people through intelligent conversation
+
+---
+
+*Built with ❤️ to create meaningful connections in a digital world*
