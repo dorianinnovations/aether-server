@@ -23,6 +23,8 @@ import userRoutes from "./routes/user.js";
 import healthRoutes from "./routes/health.js";
 import aiRoutes from "./routes/ai.js";
 import conversationRoutes from "./routes/conversation.js";
+import matchingRoutes from "./routes/matching.js";
+import friendsRoutes from "./routes/friends.js";
 
 // Import basic middleware
 import { corsSecurity, securityHeaders } from "./middleware/security.js";
@@ -34,6 +36,9 @@ import { globalErrorHandler } from "./utils/errorHandler.js";
 import "./models/User.js";
 import "./models/Message.js";
 import "./models/Conversation.js";
+
+// Initialize analysis queue
+import "./services/analysisQueue.js";
 
 const app = express();
 
@@ -72,6 +77,8 @@ const initializeServer = async () => {
     app.use('/user', userRoutes);
     app.use('/ai', aiRoutes);
     app.use('/conversation', conversationRoutes);
+    app.use('/matching', matchingRoutes);
+    app.use('/friends', friendsRoutes);
     
     // Create social-chat endpoint with streaming support
     app.post('/social-chat', protect, async (req, res) => {

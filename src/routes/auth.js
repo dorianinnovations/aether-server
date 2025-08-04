@@ -7,14 +7,73 @@ import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG as _SECURITY_CONFIG } from "../c
 
 const router = express.Router();
 
+// Check username availability
+router.get("/check-username/:username", async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    // Basic validation
+    if (!username || username.length < 3 || username.length > 30) {
+      return res.json({
+        available: false,
+        message: "Username must be between 3 and 30 characters"
+      });
+    }
+    
+    // Format validation
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      return res.json({
+        available: false,
+        message: "Username can only contain letters, numbers, and underscores"
+      });
+    }
+    
+    // Reserved check
+    const reserved = ['admin', 'root', 'api', 'www', 'mail', 'ftp', 'support', 'help', 'aether', 'system'];
+    if (reserved.includes(username.toLowerCase())) {
+      return res.json({
+        available: false,
+        message: "Username is reserved"
+      });
+    }
+    
+    // Check if taken
+    const existingUser = await User.findOne({ username: username.toLowerCase() });
+    
+    res.json({
+      available: !existingUser,
+      message: existingUser ? "Username is already taken" : "Username is available"
+    });
+    
+  } catch (error) {
+    console.error("Username check error:", error);
+    res.status(500).json({
+      available: false,
+      message: "Error checking username availability"
+    });
+  }
+});
+
 // Signup Route
 router.post(
   "/signup",
   [
     body("email").isEmail().withMessage("Valid email required."),
     body("password")
-      .isLength({ min: 8 })
-      .withMessage("Password must be at least 8 characters long."),
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters long."),
+    body("username")
+      .isLength({ min: 3, max: 30 })
+      .withMessage("Username must be between 3 and 30 characters.")
+      .matches(/^[a-zA-Z0-9_]+$/)
+      .withMessage("Username can only contain letters, numbers, and underscores.")
+      .custom(value => {
+        const reserved = ['admin', 'root', 'api', 'www', 'mail', 'ftp', 'support', 'help', 'aether', 'system'];
+        if (reserved.includes(value.toLowerCase())) {
+          throw new Error('Username is reserved.');
+        }
+        return true;
+      }),
     body("name")
       .optional()
       .isLength({ min: 1, max: 100 })
@@ -30,8 +89,9 @@ router.post(
       });
     }
 
-    const { email, password, name } = req.body;
+    const { email, password, username, name } = req.body;
     try {
+      // Check for existing email
       const existingUser = await User.findOne({ email });
       if (existingUser) {
         return res.status(HTTP_STATUS.CONFLICT).json({ 
@@ -40,7 +100,16 @@ router.post(
         });
       }
 
-      const userData = { email, password };
+      // Check for existing username
+      const existingUsername = await User.findOne({ username: username.toLowerCase() });
+      if (existingUsername) {
+        return res.status(HTTP_STATUS.CONFLICT).json({ 
+          status: MESSAGES.ERROR,
+          message: "Username is already taken" 
+        });
+      }
+
+      const userData = { email, password, username: username.toLowerCase() };
       if (name && name.trim()) {
         userData.name = name.trim();
       }
