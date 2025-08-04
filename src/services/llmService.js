@@ -16,7 +16,7 @@ class LLMService {
     try {
       const {
         model = 'openai/gpt-4o',
-        temperature = 0.8,
+        temperature = 0.9,
         n_predict = 4000,
         tools = [],
         tool_choice = undefined
@@ -71,7 +71,7 @@ class LLMService {
     try {
       const {
         model = 'openai/gpt-4o',
-        temperature = 0.8,
+        temperature = 0.9,
         n_predict = 4000,
         tools = [],
         tool_choice = undefined

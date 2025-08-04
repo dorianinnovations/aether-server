@@ -1,4 +1,5 @@
 import Message from '../models/Message.js';
+import analysisQueue from './analysisQueue.js';
 
 class MessageService {
   async saveMessage(userId, content, type = 'user', aiModel = null) {
@@ -10,7 +11,14 @@ class MessageService {
         aiModel
       });
       
-      return await message.save();
+      const savedMessage = await message.save();
+      
+      // Queue user messages for analysis
+      if (type === 'user') {
+        analysisQueue.addToQueue(userId, savedMessage._id, content);
+      }
+      
+      return savedMessage;
     } catch (error) {
       console.error('Message Service Error:', error);
       throw error;

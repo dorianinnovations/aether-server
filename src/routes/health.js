@@ -41,7 +41,7 @@ router.get("/health", async (req, res) => {
       server_uptime: Math.floor(process.uptime())
     };
 
-    const overallStatus = (dbHealth === "connected" && llmHealth.status === "accessible") 
+    const overallStatus = (dbHealth === "connected" && llmHealth.status === "reachable") 
       ? "success" 
       : "degraded";
 
