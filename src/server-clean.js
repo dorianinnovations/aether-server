@@ -25,6 +25,7 @@ import aiRoutes from "./routes/ai.js";
 import conversationRoutes from "./routes/conversation.js";
 import matchingRoutes from "./routes/matching.js";
 import friendsRoutes from "./routes/friends.js";
+import eventsRoutes from "./routes/events.js";
 
 // Import basic middleware
 import { corsSecurity, securityHeaders } from "./middleware/security.js";
@@ -79,6 +80,7 @@ const initializeServer = async () => {
     app.use('/conversation', conversationRoutes);
     app.use('/matching', matchingRoutes);
     app.use('/friends', friendsRoutes);
+    app.use('/events', eventsRoutes);
     
     // Preview image endpoint for web search results
     app.post('/api/preview-image', protect, async (req, res) => {
