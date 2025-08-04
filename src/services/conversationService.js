@@ -49,49 +49,57 @@ class ConversationService {
 
       // Fallback: If no conversations found, try to migrate from old Message model
       if (conversations.length === 0 && page === 1) {
-        log.info(`No conversations found for user ${userId}, checking for legacy messages...`);
-        
-        const legacyMessages = await Message.find({ user: userId })
-          .sort({ createdAt: -1 })
-          .limit(100)
-          .lean();
-
-        if (legacyMessages.length > 0) {
-          log.info(`Found ${legacyMessages.length} legacy messages, creating conversation...`);
+        try {
+          log.info(`No conversations found for user ${userId}, checking for legacy messages...`);
           
-          // Create a single conversation from legacy messages
-          const newConversation = new Conversation({
-            title: legacyMessages[0]?.content?.substring(0, 50) + '...' || 'Imported Conversation',
-            user: userId,
-            messages: legacyMessages.reverse().map(msg => ({
-              _id: new mongoose.Types.ObjectId(),
-              role: msg.type === 'user' ? 'user' : 'assistant',
-              content: msg.content,
-              timestamp: msg.createdAt,
-              metadata: {
-                model: msg.aiModel,
-                migrated: true
-              }
-            })),
-            messageCount: legacyMessages.length,
-            lastMessageAt: legacyMessages[legacyMessages.length - 1]?.createdAt || new Date(),
-            isActive: true,
-            summary: legacyMessages[0]?.content?.substring(0, 100) + '...'
-          });
+          const legacyMessages = await Message.find({ user: userId })
+            .sort({ createdAt: 1 }) // Sort ascending for chronological order
+            .limit(100)
+            .lean();
 
-          await newConversation.save();
-          log.info(`Created conversation ${newConversation._id} with ${legacyMessages.length} migrated messages`);
+          if (legacyMessages.length > 0) {
+            log.info(`Found ${legacyMessages.length} legacy messages, creating conversation...`);
+            
+            const firstMessage = legacyMessages[0];
+            const lastMessage = legacyMessages[legacyMessages.length - 1];
+            
+            // Create a single conversation from legacy messages
+            const newConversation = new Conversation({
+              title: firstMessage?.content?.substring(0, 50) + '...' || 'Imported Conversation',
+              user: userId,
+              messages: legacyMessages.map(msg => ({
+                _id: new mongoose.Types.ObjectId(),
+                role: msg.type === 'user' ? 'user' : 'assistant',
+                content: msg.content || '',
+                timestamp: msg.createdAt || new Date(),
+                metadata: {
+                  model: msg.aiModel || 'unknown',
+                  migrated: true
+                }
+              })),
+              messageCount: legacyMessages.length,
+              lastMessageAt: lastMessage?.createdAt || new Date(),
+              isActive: true,
+              summary: firstMessage?.content?.substring(0, 100) + '...' || 'Imported conversation'
+            });
 
-          // Return the newly created conversation
-          conversations = [{
-            _id: newConversation._id,
-            title: newConversation.title,
-            lastMessageAt: newConversation.lastMessageAt,
-            messageCount: newConversation.messageCount,
-            summary: newConversation.summary,
-            messages: newConversation.messages
-          }];
-          total = 1;
+            await newConversation.save();
+            log.info(`Created conversation ${newConversation._id} with ${legacyMessages.length} migrated messages`);
+
+            // Return the newly created conversation
+            conversations = [{
+              _id: newConversation._id,
+              title: newConversation.title,
+              lastMessageAt: newConversation.lastMessageAt,
+              messageCount: newConversation.messageCount,
+              summary: newConversation.summary,
+              messages: newConversation.messages
+            }];
+            total = 1;
+          }
+        } catch (migrationError) {
+          log.error('Error during legacy message migration:', migrationError);
+          // Continue without migration if it fails
         }
       }
 
