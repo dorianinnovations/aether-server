@@ -112,16 +112,20 @@ const initializeServer = async () => {
           let webSearchResults = null;
           let enhancedMessage = userMessage;
           
-          // Smart search triggers
+          // Smart search triggers - ONLY for external information
           const searchTriggers = [
             /(?:search|find|look up|google|web search)\s+(?:for\s+)?(.+)/i,
             /(?:what'?s|latest|recent|current|news about|happening with)\s+(.+)/i,
-            /(?:when|where|who|what|how|why)\s+(?:is|are|was|were|did|does|do)\s+(.+)/i
+            /(?:when did|where is|what happened|current price|stock price|weather in)/i,
+            /(?:latest news|recent developments|current events)/i
           ];
           
           const noSearchPatterns = [
             /^(?:hello|hi|hey|thanks|thank you|ok|okay|yes|no|maybe|what\?)$/i,
-            /^(?:how are you|good morning|good afternoon|good evening)$/i
+            /^(?:how are you|good morning|good afternoon|good evening)$/i,
+            /(?:who are you|what are you|tell me about yourself|introduce yourself)/i,
+            /(?:who's this|whos this|what is this|whats this)/i,
+            /^(?:what\?|huh\?|why\?|how\?)$/i
           ];
           
           // Check if should trigger search
@@ -134,10 +138,10 @@ const initializeServer = async () => {
             // Check for search triggers
             shouldSearch = searchTriggers.some(pattern => pattern.test(cleanMessage));
             
-            // Also check for search keywords
+            // Only check for EXPLICIT search keywords, not generic ones
             if (!shouldSearch) {
-              const searchKeywords = ['latest', 'recent', 'current', 'news', 'today', 'now'];
-              shouldSearch = searchKeywords.some(keyword => cleanMessage.toLowerCase().includes(keyword));
+              const explicitSearchKeywords = ['web search', 'google', 'search for', 'look up'];
+              shouldSearch = explicitSearchKeywords.some(keyword => cleanMessage.toLowerCase().includes(keyword));
             }
           }
           
