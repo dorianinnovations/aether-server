@@ -33,6 +33,7 @@ import { globalErrorHandler } from "./utils/errorHandler.js";
 // Database models
 import "./models/User.js";
 import "./models/Message.js";
+import "./models/Conversation.js";
 
 const app = express();
 
