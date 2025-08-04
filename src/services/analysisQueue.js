@@ -60,12 +60,32 @@ class AnalysisQueue {
       
       log.debug(`Processing analysis batch: ${batch.length} messages`);
       
-      // Process each message
-      const promises = batch.map(item => 
-        profileAnalyzer.analyzeMessage(item.userId, item.content)
-      );
+      // Group messages by userId to avoid concurrent updates to same user profile
+      const messagesByUser = new Map();
+      batch.forEach(item => {
+        if (!messagesByUser.has(item.userId)) {
+          messagesByUser.set(item.userId, []);
+        }
+        messagesByUser.get(item.userId).push(item);
+      });
       
-      const results = await Promise.allSettled(promises);
+      // Process each user's messages sequentially, but process different users in parallel
+      const userPromises = Array.from(messagesByUser.entries()).map(async ([userId, userMessages]) => {
+        const userResults = [];
+        // Process this user's messages sequentially to avoid version conflicts
+        for (const item of userMessages) {
+          try {
+            await profileAnalyzer.analyzeMessage(item.userId, item.content);
+            userResults.push({ status: 'fulfilled' });
+          } catch (error) {
+            userResults.push({ status: 'rejected', reason: error });
+          }
+        }
+        return userResults;
+      });
+      
+      const allUserResults = await Promise.all(userPromises);
+      const results = allUserResults.flat();
       
       // Count successes and failures
       const successes = results.filter(r => r.status === 'fulfilled').length;
