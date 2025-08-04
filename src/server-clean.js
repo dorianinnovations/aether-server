@@ -4,6 +4,7 @@ import helmet from "helmet";
 import compression from "compression";
 import aiService from "./services/aiService.js";
 import messageService from "./services/messageService.js";
+import webSearchTool from "./tools/webSearchTool.js";
 
 /**
  * Aether Social Chat Server - Clean & Simple
@@ -107,8 +108,63 @@ const initializeServer = async () => {
         });
         
         try {
-          // Get AI response
-          const aiResponse = await aiService.chat(userMessage);
+          // Check if web search should be triggered
+          let webSearchResults = null;
+          let enhancedMessage = userMessage;
+          
+          // Smart search triggers
+          const searchTriggers = [
+            /(?:search|find|look up|google|web search)\s+(?:for\s+)?(.+)/i,
+            /(?:what'?s|latest|recent|current|news about|happening with)\s+(.+)/i,
+            /(?:when|where|who|what|how|why)\s+(?:is|are|was|were|did|does|do)\s+(.+)/i
+          ];
+          
+          const noSearchPatterns = [
+            /^(?:hello|hi|hey|thanks|thank you|ok|okay|yes|no|maybe|what\?)$/i,
+            /^(?:how are you|good morning|good afternoon|good evening)$/i
+          ];
+          
+          // Check if should trigger search
+          let shouldSearch = false;
+          const cleanMessage = userMessage.trim();
+          
+          // Skip search for simple conversational messages
+          const isConversational = noSearchPatterns.some(pattern => pattern.test(cleanMessage));
+          if (!isConversational) {
+            // Check for search triggers
+            shouldSearch = searchTriggers.some(pattern => pattern.test(cleanMessage));
+            
+            // Also check for search keywords
+            if (!shouldSearch) {
+              const searchKeywords = ['latest', 'recent', 'current', 'news', 'today', 'now'];
+              shouldSearch = searchKeywords.some(keyword => cleanMessage.toLowerCase().includes(keyword));
+            }
+          }
+          
+          // Perform web search if needed
+          if (shouldSearch) {
+            console.log('🔍 Social-Chat: Triggering web search for:', cleanMessage);
+            try {
+              const searchResult = await webSearchTool({ query: cleanMessage }, { userId });
+              if (searchResult.success && searchResult.structure.results.length > 0) {
+                webSearchResults = searchResult;
+                
+                // Add search results to message context
+                const searchContext = `Web search results for "${cleanMessage}":
+${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
+
+Use this current information to provide an accurate, up-to-date response.`;
+                
+                enhancedMessage = `${userMessage}\n\n${searchContext}`;
+                console.log('✅ Social-Chat: Web search completed with', searchResult.structure.results.length, 'results');
+              }
+            } catch (error) {
+              console.error('❌ Social-Chat: Web search failed:', error);
+            }
+          }
+
+          // Get AI response with enhanced message
+          const aiResponse = await aiService.chat(enhancedMessage);
           
           if (aiResponse.success) {
             // Stream response word by word in SSE format
