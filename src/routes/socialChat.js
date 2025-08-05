@@ -10,7 +10,7 @@ const router = express.Router();
 
 router.post('/social-chat', protect, async (req, res) => {
   try {
-    const { message, prompt, stream = true, conversationId } = req.body;
+    const { message, prompt, stream = true, conversationId, attachments } = req.body;
     const userMessage = message || prompt;
     const userId = req.user?.id;
     
@@ -19,14 +19,15 @@ router.post('/social-chat', protect, async (req, res) => {
       stream,
       userId,
       conversationId,
+      attachments: attachments ? `${attachments.length} attachments` : 'none',
       hasUser: !!req.user,
       bodyKeys: Object.keys(req.body),
       headers: req.headers.authorization ? 'present' : 'missing'
     });
     
-    if (!userMessage) {
-      console.log('❌ DEBUG - Missing message/prompt parameter');
-      return res.status(400).json({ error: 'Message or prompt is required' });
+    if (!userMessage && (!attachments || attachments.length === 0)) {
+      console.log('❌ DEBUG - Missing message/prompt parameter and no attachments');
+      return res.status(400).json({ error: 'Message or attachments are required' });
     }
     
     // Get or create conversation
@@ -70,7 +71,7 @@ router.post('/social-chat', protect, async (req, res) => {
       }
       
       // Add user message to conversation
-      await conversationService.addMessage(userId, conversation._id, 'user', userMessage, null, null, userId);
+      await conversationService.addMessage(userId, conversation._id, 'user', userMessage, attachments, null, userId);
     }
     
     // Set up Server-Sent Events streaming
@@ -142,8 +143,8 @@ Use this current information to provide an accurate, up-to-date response.`;
         }
       }
 
-      // Get AI response with enhanced message and user context
-      const aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-4o', userContext);
+      // Get AI response with enhanced message, attachments, and user context
+      const aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-4o', userContext, attachments);
       
       if (aiResponse.success) {
         // First send tool results if we have web search results

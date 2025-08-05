@@ -267,11 +267,67 @@ Keep it real, personable, and genuinely helpful for maintaining connections with
     return await this.chat(message, model);
   }
 
-  async chat(message, model = 'openai/gpt-4o', userContext = null) {
+  async chat(message, model = 'openai/gpt-4o', userContext = null, attachments = null) {
     try {
       // Classify the query to choose appropriate prompt
       const queryType = this.classifyQuery(message, userContext);
       console.log(`🎯 Query classified as: ${queryType} (msg count: ${userContext?.messageCount || 0})`);
+      
+      // Build messages array with potential image support
+      const messages = [
+        { 
+          role: 'system', 
+          content: this.buildSystemPrompt(userContext, queryType)
+        }
+      ];
+
+      // Handle attachments (images) for vision
+      if (attachments && attachments.length > 0) {
+        const imageAttachments = attachments.filter(att => att.type === 'image');
+        
+        if (imageAttachments.length > 0) {
+          console.log(`🖼️ Processing ${imageAttachments.length} image attachments for vision`);
+          
+          // Build user message with images
+          const content = [];
+          
+          // Add text if present
+          if (message && message.trim()) {
+            content.push({ type: 'text', text: message });
+          }
+          
+          // Add images
+          for (const image of imageAttachments) {
+            if (image.uri && image.uri.startsWith('data:image/')) {
+              // Handle base64 data URI
+              content.push({
+                type: 'image_url',
+                image_url: {
+                  url: image.uri
+                }
+              });
+            } else if (image.uri && (image.uri.startsWith('http://') || image.uri.startsWith('https://'))) {
+              // Handle external URLs
+              content.push({
+                type: 'image_url',
+                image_url: {
+                  url: image.uri
+                }
+              });
+            } else {
+              console.warn(`⚠️ Unsupported image URI format: ${image.uri}`);
+            }
+          }
+          
+          messages.push({ role: 'user', content });
+        } else {
+          // No images, just text
+          messages.push({ role: 'user', content: message });
+        }
+      } else {
+        // No attachments, just text
+        messages.push({ role: 'user', content: message });
+      }
       
       const response = await fetch(this.baseUrl, {
         method: 'POST',
@@ -282,13 +338,7 @@ Keep it real, personable, and genuinely helpful for maintaining connections with
         },
         body: JSON.stringify({
           model,
-          messages: [
-            { 
-              role: 'system', 
-              content: this.buildSystemPrompt(userContext, queryType)
-            },
-            { role: 'user', content: message }
-          ],
+          messages,
           max_tokens: 4000,
           temperature: 0.9
         })
