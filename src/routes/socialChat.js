@@ -1,6 +1,6 @@
 import express from 'express';
 import { protect } from '../middleware/auth.js';
-// import { log } from '../utils/logger.js';
+import { log } from '../utils/logger.js';
 import aiService from '../services/aiService.js';
 import conversationService from '../services/conversationService.js';
 import webSearchTool from '../tools/webSearchTool.js';
@@ -13,24 +13,25 @@ const router = express.Router();
 
 // Regular chat endpoint without files
 router.post('/social-chat', protect, async (req, res) => {
+  const startTime = Date.now();
+  const correlationId = log.request.start('POST', '/social-chat', { userId: req.user?.id });
+  
   try {
     const { message, prompt, stream = true, conversationId, attachments } = req.body;
     const userMessage = message || prompt;
     const userId = req.user?.id;
     
-    console.log('🔍 DEBUG - Social Chat Request:', {
-      message: userMessage,
+    log.debug('Social chat request details', {
+      correlationId,
+      messageLength: userMessage?.length || 0,
       stream,
-      userId,
       conversationId,
-      attachments: attachments ? `${attachments.length} attachments` : 'none',
-      hasUser: !!req.user,
-      bodyKeys: Object.keys(req.body),
-      headers: req.headers.authorization ? 'present' : 'missing'
+      attachmentCount: attachments?.length || 0,
+      userId
     });
     
     if (!userMessage && (!attachments || attachments.length === 0)) {
-      console.log('❌ DEBUG - Missing message/prompt parameter and no attachments');
+      log.warn('Social chat rejected - no content', { correlationId });
       return res.status(400).json({ error: 'Message or attachments are required' });
     }
     
@@ -74,7 +75,7 @@ Just give me your honest thoughts on what I've sent.`;
       if (user) {
         // Use conversation message count for prompt classification
         const messageCount = conversation.messageCount || 0;
-        console.log(`📊 User ${user.username} conversation ${conversation._id} message count: ${messageCount}`);
+        log.request.step(`Conversation loaded: ${messageCount} messages`, correlationId, { username: user.username, conversationId: conversation._id });
         
         userContext = {
           username: user.username,
@@ -137,7 +138,7 @@ Just give me your honest thoughts on what I've sent.`;
       
       // Perform web search if needed
       if (shouldSearch) {
-        console.log('🔍 Social-Chat: Triggering web search for:', cleanMessage);
+        log.request.step('Web search triggered', correlationId, { query: cleanMessage.substring(0, 100) });
         try {
           const searchResult = await webSearchTool({ query: cleanMessage }, { userId });
           if (searchResult.success && searchResult.structure.results.length > 0) {
@@ -150,10 +151,10 @@ ${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet
 Use this current information to provide an accurate, up-to-date response.`;
             
             enhancedMessage = `${processedMessage}\n\n${searchContext}`;
-            console.log('✅ Social-Chat: Web search completed with', searchResult.structure.results.length, 'results');
+            log.request.step('Web search completed', correlationId, { resultCount: searchResult.structure.results.length });
           }
         } catch (error) {
-          console.error('❌ Social-Chat: Web search failed:', error);
+          log.error('Web search failed', error, { correlationId });
         }
       }
 
@@ -214,35 +215,43 @@ Use this current information to provide an accurate, up-to-date response.`;
     }
     
   } catch (error) {
-    console.error('Social Chat Error:', error);
+    log.error('Social chat failed', error, { correlationId });
+    log.request.complete(correlationId, 500, Date.now() - startTime);
     res.status(500).json({ 
       success: false, 
       error: 'Internal server error' 
     });
+  } finally {
+    // Ensure successful requests are logged
+    if (res.statusCode !== 500) {
+      log.request.complete(correlationId, res.statusCode || 200, Date.now() - startTime);
+    }
   }
 });
 
 // Enhanced chat endpoint with file upload support
 router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFiles, handleMulterError, async (req, res) => {
+  const startTime = Date.now();
+  const correlationId = log.request.start('POST', '/social-chat-with-files', { userId: req.user?.id });
+  
   try {
     const { message, prompt, stream = true, conversationId = 'default' } = req.body;
     const userMessage = message || prompt;
     const userId = req.user?.id;
     const uploadedFiles = req.validatedFiles || [];
     
-    console.log('🔍 DEBUG - Social Chat with Files Request:', {
-      message: userMessage,
+    log.debug('Social chat with files request', {
+      correlationId,
+      messageLength: userMessage?.length || 0,
       stream,
-      userId,
-      conversationId: conversationId || 'default',
-      filesUploaded: uploadedFiles.length,
+      conversationId,
+      fileCount: uploadedFiles.length,
       fileNames: uploadedFiles.map(f => f.originalname),
-      hasUser: !!req.user,
-      bodyFields: Object.keys(req.body)
+      userId
     });
     
     if (!userMessage && uploadedFiles.length === 0) {
-      console.log('❌ DEBUG - Missing message and no files uploaded');
+      log.warn('Social chat with files rejected - no content', { correlationId });
       return res.status(400).json({ 
         success: false,
         error: 'Message or file attachments are required' 
@@ -252,12 +261,12 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
     // Validate uploaded files
     let processedFiles = [];
     if (uploadedFiles.length > 0) {
-      console.log('📁 Processing', uploadedFiles.length, 'uploaded files...');
+      log.request.step(`File processing started: ${uploadedFiles.length} files`, correlationId);
       
       // Security validation
       const validationResult = await fileValidationService.validateFiles(uploadedFiles);
       if (!validationResult.valid) {
-        console.log('❌ File validation failed:', validationResult.errors);
+        log.error('File validation failed', null, { correlationId, errors: validationResult.errors });
         return res.status(400).json({
           success: false,
           error: 'File validation failed',
@@ -269,14 +278,14 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
       // Process validated files
       try {
         processedFiles = await fileProcessingService.processFiles(validationResult.files);
-        console.log('✅ Files processed successfully:', processedFiles.length, 'files');
+        log.request.step(`Files processed successfully: ${processedFiles.length} files`, correlationId);
         
         // Log processing summary
         const summary = fileProcessingService.generateProcessingSummary(processedFiles);
-        console.log('📊 File processing summary:', summary);
+        log.file('File processing completed', { correlationId, ...summary });
         
       } catch (processingError) {
-        console.error('❌ File processing failed:', processingError);
+        log.error('File processing failed', processingError, { correlationId });
         return res.status(500).json({
           success: false,
           error: 'File processing failed',
@@ -311,7 +320,7 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
       const user = await User.findById(userId).select('username socialProxy profile');
       if (user) {
         const messageCount = conversation.messageCount || 0;
-        console.log(`📊 User ${user.username} conversation ${conversation._id} message count: ${messageCount}`);
+        log.request.step(`Conversation loaded: ${messageCount} messages`, correlationId, { username: user.username, conversationId: conversation._id });
         
         userContext = {
           username: user.username,
@@ -383,7 +392,7 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
         }
         
         if (shouldSearch) {
-          console.log('🔍 Social-Chat-Files: Triggering web search for:', cleanMessage);
+          log.request.step('Web search triggered', correlationId, { query: cleanMessage.substring(0, 100) });
           try {
             const searchResult = await webSearchTool({ query: cleanMessage }, { userId });
             if (searchResult.success && searchResult.structure.results.length > 0) {
@@ -395,10 +404,10 @@ ${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet
 Use this current information to provide an accurate, up-to-date response.`;
               
               enhancedMessage = `${userMessage}\n\n${searchContext}`;
-              console.log('✅ Social-Chat-Files: Web search completed with', searchResult.structure.results.length, 'results');
+              log.request.step('Web search completed', correlationId, { resultCount: searchResult.structure.results.length });
             }
           } catch (error) {
-            console.error('❌ Social-Chat-Files: Web search failed:', error);
+            log.error('Web search failed', error, { correlationId });
           }
         }
       }
@@ -490,14 +499,15 @@ Just give me your honest thoughts on what I've sent.`;
       
       res.end();
     } catch (streamError) {
-      console.error('❌ Streaming error:', streamError);
+      log.error('Streaming error', streamError, { correlationId });
       res.write(`data: ${JSON.stringify({content: 'Error occurred during streaming.'})}\n\n`);
       res.write(`data: [DONE]\n\n`);
       res.end();
     }
     
   } catch (error) {
-    console.error('Social Chat with Files Error:', error);
+    log.error('Social chat with files failed', error, { correlationId });
+    log.request.complete(correlationId, 500, Date.now() - startTime);
     
     // Send error response if headers not sent
     if (!res.headersSent) {
@@ -506,6 +516,11 @@ Just give me your honest thoughts on what I've sent.`;
         error: 'Internal server error',
         message: error.message
       });
+    }
+  } finally {
+    // Ensure successful requests are logged
+    if (res.statusCode !== 500) {
+      log.request.complete(correlationId, res.statusCode || 200, Date.now() - startTime);
     }
   }
 });
