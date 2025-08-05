@@ -108,10 +108,13 @@ class ConversationService {
         return null;
       }
 
-      // Find the conversation using the Conversation model
+      // Find the conversation using the Conversation model - user can be creator or participant
       const conversation = await Conversation.findOne({
         _id: conversationId,
-        user: userId,
+        $or: [
+          { creator: userId },
+          { 'participants.user': userId }
+        ],
         isActive: true
       }).lean();
 
@@ -201,7 +204,14 @@ class ConversationService {
       }
 
       const conversation = await Conversation.findOneAndUpdate(
-        { _id: conversationId, user: userId, isActive: true },
+        { 
+          _id: conversationId, 
+          $or: [
+            { creator: userId },
+            { 'participants.user': userId }
+          ], 
+          isActive: true 
+        },
         { title },
         { new: true }
       );
@@ -295,7 +305,14 @@ class ConversationService {
       }
 
       const conversation = await Conversation.findOneAndUpdate(
-        { _id: conversationId, user: userId, isActive: true },
+        { 
+          _id: conversationId, 
+          $or: [
+            { creator: userId },
+            { 'participants.user': userId }
+          ], 
+          isActive: true 
+        },
         { isActive: false }, // Soft delete
         { new: true }
       );
