@@ -11,11 +11,9 @@ import { corsSecurity, securityHeaders } from './middleware/index.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import healthRoutes from './routes/health.js';
-import aiRoutes from './routes/ai.js';
 import conversationRoutes from './routes/conversation.js';
 // import matchingRoutes from './routes/matching.js'; // REMOVED - no more dating
 import friendsRoutes from './routes/friends.js';
-import eventsRoutes from './routes/events.js';
 import previewRoutes from './routes/preview.js';
 import socialChatRoutes from './routes/socialChat.js';
 import socialProxyRoutes from './routes/socialProxy.js';
@@ -23,12 +21,11 @@ import spotifyRoutes from './routes/spotify.js';
 
 // Initialize models
 import './models/User.js';
-import './models/Message.js';
 import './models/Conversation.js';
 import './models/Activity.js';
 
 // Initialize services
-import './services/analysisQueue.js';
+// Analysis queue removed - profile updates handled directly in conversations
 
 const app = express();
 
@@ -63,11 +60,9 @@ const initializeServer = async () => {
     app.use('/', healthRoutes);
     app.use('/auth', authRoutes);
     app.use('/user', userRoutes);
-    app.use('/ai', aiRoutes);
     app.use('/conversation', conversationRoutes);
     // app.use('/matching', matchingRoutes); // REMOVED - no more dating
     app.use('/friends', friendsRoutes);
-    app.use('/events', eventsRoutes);
     app.use('/api', previewRoutes);
     app.use('/social-proxy', socialProxyRoutes);
     app.use('/spotify', spotifyRoutes);
@@ -81,7 +76,7 @@ const initializeServer = async () => {
     const PORT = process.env.PORT || 5000;
     const server = app.listen(PORT, () => {
       console.log(`🚀 Aether Social Chat Server running on port ${PORT}`);
-      console.log(`📱 API endpoints: /auth, /user, /conversation, /social-chat`);
+      console.log(`📱 API endpoints: /auth, /user, /social-chat, /social-proxy, /spotify`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
     });
 
