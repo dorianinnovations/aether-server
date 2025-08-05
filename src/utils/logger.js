@@ -54,6 +54,9 @@ const logger = winston.createLogger({
   ],
 });
 
+// Generate correlation ID for request tracking
+const generateCorrelationId = () => Math.random().toString(36).substring(2, 10);
+
 // Structured logging helpers with emojis for categorization
 export const log = {
   // System operations
@@ -65,6 +68,9 @@ export const log = {
   // AI and tools
   ai: (message, meta = {}) => logger.info(`🤖 ${message}`, { service: 'AI', ...meta }),
   tool: (message, meta = {}) => logger.info(`🔧 ${message}`, { service: 'TOOL', ...meta }),
+  
+  // File operations
+  file: (message, meta = {}) => logger.info(`📁 ${message}`, { service: 'FILE', ...meta }),
   
   // Performance and monitoring
   perf: (message, meta = {}) => logger.info(`⚡ ${message}`, { service: 'PERF', ...meta }),
@@ -89,6 +95,22 @@ export const log = {
       ...meta 
     } : meta;
     logger.error(`❌ ${message}`, { service: 'ERROR', ...errorMeta });
+  },
+  
+  // Request flow tracking
+  request: {
+    start: (method, url, meta = {}) => {
+      const correlationId = generateCorrelationId();
+      log.api(`${method} ${url}`, { correlationId, ...meta });
+      return correlationId;
+    },
+    step: (step, correlationId, meta = {}) => {
+      log.api(`→ ${step}`, { correlationId, ...meta });
+    },
+    complete: (correlationId, statusCode, duration, meta = {}) => {
+      const emoji = statusCode >= 400 ? '❌' : '✅';
+      log.api(`${emoji} Request completed`, { correlationId, statusCode, duration, ...meta });
+    }
   }
 };
 
@@ -122,16 +144,23 @@ export const requestLogger = (req, res, next) => {
     const shouldLog = isDevelopment || duration > 1000 || res.statusCode >= 400;
     
     if (shouldLog && !req.url.includes('/health')) {
-      const level = res.statusCode >= 400 ? 'warn' : 'info';
-      const message = res.statusCode >= 400 ? 'Request failed' : 'Request completed';
-      
-      log.api(message, {
-        method: req.method,
-        url: req.url,
-        statusCode: res.statusCode,
-        duration,
-        userId: req.user?.id
-      });
+      if (res.statusCode >= 400) {
+        log.warn('Request failed', {
+          method: req.method,
+          url: req.url,
+          statusCode: res.statusCode,
+          duration,
+          userId: req.user?.id
+        });
+      } else {
+        log.api('Request completed', {
+          method: req.method,
+          url: req.url,
+          statusCode: res.statusCode,
+          duration,
+          userId: req.user?.id
+        });
+      }
     }
   });
 

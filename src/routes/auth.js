@@ -3,6 +3,7 @@ import { body, validationResult } from "express-validator";
 import User from "../models/User.js";
 import { signToken, protect, protectRefresh } from "../middleware/auth.js";
 import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG as _SECURITY_CONFIG } from "../config/constants.js";
+import { log } from "../utils/logger.js";
 // import { catchAsync, ValidationError, AuthenticationError } from "../utils/index.js";
 // import emailService from "../services/emailService.js"; // Removed - no email service
 
@@ -47,7 +48,7 @@ router.get("/check-username/:username", async (req, res) => {
     });
     
   } catch (error) {
-    console.error("Username check error:", error);
+    log.error('Username availability check failed', error);
     res.status(500).json({
       available: false,
       message: "Error checking username availability"
@@ -116,7 +117,7 @@ router.post(
       }
 
       const user = await User.create(userData);
-      console.log("New user created:", user.email);
+      log.auth('User registration successful', { email: user.email, username: user.username });
 
       res.status(HTTP_STATUS.CREATED).json({
         status: MESSAGES.SUCCESS,
@@ -130,7 +131,7 @@ router.post(
         }
       });
     } catch (err) {
-      console.error("Signup error:", err);
+      log.error('User signup failed', err);
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
         status: MESSAGES.ERROR, 
         message: MESSAGES.SIGNUP_FAILED 
@@ -157,7 +158,7 @@ router.post(
     }
 
     const { email, password } = req.body;
-    console.log("Login attempt for:", email);
+    log.auth('Login attempt', { email });
 
     try {
       const user = await User.findOne({ email }).select("+password");
@@ -180,7 +181,7 @@ router.post(
         },
       });
     } catch (err) {
-      console.error("Login error:", err);
+      log.error('User login failed', err, { email });
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
         status: MESSAGES.ERROR, 
         message: MESSAGES.LOGIN_FAILED 
@@ -227,7 +228,7 @@ router.post('/spotify/connect', protect, async (req, res) => {
       });
     }
     
-    console.log(`🎵 Spotify connected for user ${userId} (${spotifyDisplayName})`);
+    log.auth('Spotify account connected', { userId, spotifyDisplayName });
     
     res.json({
       success: true,
@@ -241,7 +242,7 @@ router.post('/spotify/connect', protect, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Spotify connection error:', error);
+    log.error('Spotify connection failed', error, { userId: req.user?.id });
     res.status(500).json({
       success: false,
       error: 'Failed to connect Spotify account'
@@ -277,7 +278,7 @@ router.post('/spotify/disconnect', protect, async (req, res) => {
       });
     }
     
-    console.log(`🎵 Spotify disconnected for user ${userId}`);
+    log.auth('Spotify account disconnected', { userId });
     
     res.json({
       success: true,
@@ -285,7 +286,7 @@ router.post('/spotify/disconnect', protect, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Spotify disconnection error:', error);
+    log.error('Spotify disconnection failed', error, { userId: req.user?.id });
     res.status(500).json({
       success: false,
       error: 'Failed to disconnect Spotify account'
@@ -309,7 +310,7 @@ router.post("/refresh", protectRefresh, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Token refresh error:', error);
+    log.error('Token refresh failed', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       status: MESSAGES.ERROR,
       message: 'Failed to refresh token'
