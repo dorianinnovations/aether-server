@@ -28,9 +28,12 @@ const SEARCH_TRIGGERS = [
 // Topics that should NOT trigger web search
 const NO_SEARCH_PATTERNS = [
   /^(?:hello|hi|hey|thanks|thank you|ok|okay|yes|no|maybe)$/i,
+  /^(?:hey|hi|hello).*(?:what'?s up|whats up|wassup|sup)$/i,
   /^(?:how are you|good morning|good afternoon|good evening)$/i,
   /^(?:i think|i feel|i believe|in my opinion).*$/i,
-  /^(?:can you help|could you|would you|please).*(?:with|me).*$/i
+  /^(?:can you help|could you|would you|please).*(?:with|me).*$/i,
+  /^(?:what'?s up|whats up|wassup|sup)$/i,
+  /^(?:how'?s it going|how goes it|what'?s going on)$/i
 ];
 
 // Lightweight cache for search results (1 minute TTL, max 10 entries)

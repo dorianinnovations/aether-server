@@ -1,5 +1,5 @@
 import logger from "./logger.js";
-import axios from "axios";
+// import axios from "axios";
 
 // Error handling system initialization
 
@@ -78,7 +78,7 @@ export class RetryableError extends AppError {
 // Custom error classes ready
 
 // Global error handler middleware
-export const globalErrorHandler = (err, req, res, next) => {
+export const globalErrorHandler = (err, req, res, _next) => {
   let error = { ...err };
   error.message = err.message;
 
@@ -273,7 +273,7 @@ export const validateRequest = (schema) => {
 
 logger.debug("Request validation helper configured");
 // Enhanced error handling middleware with circuit breaker
-export const enhancedErrorHandler = (err, req, res, next) => {
+export const enhancedErrorHandler = (err, req, res, _next) => {
   let error = { ...err };
   error.message = err.message;
 

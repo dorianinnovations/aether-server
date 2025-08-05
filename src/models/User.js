@@ -68,36 +68,91 @@ const UserSchema = new mongoose.Schema({
     }
   }],
   
-  // Profile analysis data
-  profile: {
-    interests: [{
-      topic: String,
-      confidence: Number, // 0-1 score
-      lastMentioned: Date
-    }],
-    
-    communicationStyle: {
-      casual: Number,     // 0-1 score for casual vs formal
-      energetic: Number,  // 0-1 score for energy level  
-      analytical: Number, // 0-1 score for deep vs surface
-      social: Number,     // 0-1 score for social engagement
-      humor: Number       // 0-1 score for humor usage
-    },
-    
-    totalMessages: {
-      type: Number,
-      default: 0
-    },
-    
-    lastAnalyzed: Date,
-    
-    // For matching
-    compatibilityTags: [String], // Simple tags for matching
-    
-    // Analysis metadata
-    analysisVersion: {
+  // Social Proxy Profile - Living representation of the user
+  socialProxy: {
+    // Current status and what they're up to
+    currentStatus: {
       type: String,
-      default: '1.0'
+      maxlength: 280,
+      default: ''
+    },
+    currentPlans: {
+      type: String,
+      maxlength: 500,
+      default: ''
+    },
+    mood: {
+      type: String,
+      enum: ['excited', 'chill', 'focused', 'social', 'introspective', 'busy', 'available', ''],
+      default: ''
+    },
+    lastUpdated: {
+      type: Date,
+      default: Date.now
+    },
+    
+    // Spotify integration
+    spotify: {
+      connected: {
+        type: Boolean,
+        default: false
+      },
+      accessToken: String,
+      refreshToken: String,
+      currentTrack: {
+        name: String,
+        artist: String,
+        album: String,
+        imageUrl: String,
+        spotifyUrl: String,
+        lastPlayed: Date
+      },
+      recentTracks: [{
+        name: String,
+        artist: String,
+        album: String,
+        imageUrl: String,
+        spotifyUrl: String,
+        playedAt: Date
+      }],
+      topTracks: [{
+        name: String,
+        artist: String,
+        album: String,
+        imageUrl: String,
+        spotifyUrl: String,
+        timeRange: String // short_term, medium_term, long_term
+      }]
+    },
+    
+    // AI personality traits learned from interactions
+    personality: {
+      interests: [{
+        topic: String,
+        confidence: Number, // 0-1 score
+        lastMentioned: Date
+      }],
+      
+      communicationStyle: {
+        casual: Number,     // 0-1 score for casual vs formal
+        energetic: Number,  // 0-1 score for energy level  
+        analytical: Number, // 0-1 score for deep vs surface
+        social: Number,     // 0-1 score for social engagement
+        humor: Number       // 0-1 score for humor usage
+      },
+      
+      totalMessages: {
+        type: Number,
+        default: 0
+      },
+      
+      lastAnalyzed: Date,
+      
+      // Analysis metadata
+      analysisVersion: {
+        type: String,
+        default: '2.0'
+      }
     }
   }
 }, {
