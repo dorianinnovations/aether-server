@@ -91,7 +91,7 @@ export const SECURITY_CONFIG = {
     "https://numinaai.netlify.app",
     "http://localhost:5173",
     "http://localhost:5000",
-    "https://server-a7od.onrender.com"
+    "https://aether-server-j5kh.onrender.com"
   ],
   RATE_LIMITS: {
     GENERAL: {
