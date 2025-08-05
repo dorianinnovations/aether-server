@@ -8,6 +8,7 @@ import User from '../models/User.js';
 import { uploadFiles, handleMulterError, validateUploadedFiles } from '../middleware/fileUpload.js';
 import fileProcessingService from '../services/fileProcessingService.js';
 import fileValidationService from '../services/fileValidationService.js';
+import analysisQueue from '../services/analysisQueue.js';
 
 const router = express.Router();
 
@@ -201,6 +202,15 @@ Use this current information to provide an accurate, up-to-date response.`;
               responseTime: Date.now() - Date.now() // Could track actual response time
             }
           );
+
+          // Queue user message for asynchronous profile analysis
+          const analysisJobId = analysisQueue.enqueue(userId, processedMessage, {
+            conversationId: conversation._id,
+            timestamp: new Date(),
+            source: 'social_chat'
+          });
+          
+          log.debug(`📊 Profile analysis queued: ${analysisJobId}`, { userId, correlationId });
         }
       } else {
         res.write(`data: ${JSON.stringify({content: 'Sorry, I encountered an error. Please try again.'})}\n\n`);
@@ -491,6 +501,21 @@ Just give me your honest thoughts on what I've sent.`;
             null, 
             responseMetadata
           );
+
+          // Queue user message for asynchronous profile analysis
+          const analysisJobId = analysisQueue.enqueue(userId, finalMessage, {
+            conversationId: conversation._id,
+            timestamp: new Date(),
+            source: 'social_chat_files',
+            hasAttachments: processedFiles.length > 0,
+            fileTypes: processedFiles.map(f => f.type)
+          });
+          
+          log.debug(`📊 Profile analysis queued with files: ${analysisJobId}`, { 
+            userId, 
+            fileCount: processedFiles.length,
+            correlationId 
+          });
         }
       } else {
         res.write(`data: ${JSON.stringify({content: 'Sorry, I encountered an error processing your request. Please try again.'})}\n\n`);

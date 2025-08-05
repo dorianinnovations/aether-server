@@ -130,7 +130,12 @@ const UserSchema = new mongoose.Schema({
       interests: [{
         topic: String,
         confidence: Number, // 0-1 score
-        lastMentioned: Date
+        lastMentioned: Date,
+        category: {
+          type: String,
+          enum: ['hobby', 'work', 'entertainment', 'learning', 'social', 'health', 'travel', 'technology', 'creative'],
+          default: 'hobby'
+        }
       }],
       
       communicationStyle: {
@@ -141,6 +146,41 @@ const UserSchema = new mongoose.Schema({
         humor: Number       // 0-1 score for humor usage
       },
       
+      // Recent activities and plans
+      recentActivities: [{
+        activity: String,
+        type: {
+          type: String,
+          enum: ['work', 'hobby', 'social', 'learning', 'health', 'entertainment', 'travel'],
+          default: 'hobby'
+        },
+        confidence: Number,
+        timeframe: {
+          type: String,
+          enum: ['current', 'soon', 'future', 'past'],
+          default: 'current'
+        },
+        detectedAt: {
+          type: Date,
+          default: Date.now
+        }
+      }],
+      
+      // Mood tracking
+      moodHistory: [{
+        mood: {
+          type: String,
+          enum: ['excited', 'happy', 'neutral', 'focused', 'stressed', 'tired', 'curious', 'motivated'],
+          default: 'neutral'
+        },
+        energy: Number,     // 0-1 score
+        confidence: Number, // 0-1 score
+        detectedAt: {
+          type: Date,
+          default: Date.now
+        }
+      }],
+      
       totalMessages: {
         type: Number,
         default: 0
@@ -148,11 +188,21 @@ const UserSchema = new mongoose.Schema({
       
       lastAnalyzed: Date,
       
-      // Analysis metadata
+      // Enhanced analysis metadata
       analysisVersion: {
         type: String,
-        default: '2.0'
-      }
+        default: '3.0'
+      },
+      
+      // Profile quality metrics
+      profileCompleteness: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 1
+      },
+      
+      lastSignificantUpdate: Date
     }
   }
 }, {

@@ -227,4 +227,124 @@ router.post('/share-track', protect, async (req, res) => {
   }
 });
 
+// Get live Spotify status for a specific user (friends only)
+router.get('/live-status/:username', protect, async (req, res) => {
+  try {
+    const { username } = req.params;
+    const requestingUserId = req.user.id;
+    
+    // Find the target user
+    const targetUser = await User.findOne({ username }).select('_id username socialProxy.spotify friends');
+    
+    if (!targetUser) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'User not found' 
+      });
+    }
+
+    // Check if the requesting user is friends with the target user
+    const isFriend = targetUser.friends.some(friend => 
+      friend.user.toString() === requestingUserId
+    );
+
+    const requestingUser = await User.findById(requestingUserId).select('friends');
+    const isRequestingUserFriend = requestingUser?.friends.some(friend => 
+      friend.user.toString() === targetUser._id.toString()
+    );
+
+    if (!isFriend || !isRequestingUserFriend) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'You can only view Spotify status of friends' 
+      });
+    }
+
+    // Check if target user has Spotify connected
+    if (!targetUser.socialProxy?.spotify?.connected) {
+      return res.json({
+        success: true,
+        connected: false,
+        message: `${username} hasn't connected Spotify`,
+        username: targetUser.username
+      });
+    }
+
+    // Try to get fresh live status
+    let liveData = null;
+    let statusAge = null;
+
+    try {
+      // Update their Spotify data to get live status
+      const updateSuccess = await spotifyService.updateUserSpotifyData(targetUser);
+      
+      if (updateSuccess) {
+        const currentTrack = targetUser.socialProxy.spotify.currentTrack;
+        
+        if (currentTrack && currentTrack.name) {
+          // Calculate how old this status is
+          statusAge = currentTrack.lastPlayed ? 
+            Math.floor((Date.now() - new Date(currentTrack.lastPlayed).getTime()) / 1000) : 
+            null;
+
+          liveData = {
+            currentTrack: {
+              name: currentTrack.name,
+              artist: currentTrack.artist,
+              album: currentTrack.album,
+              imageUrl: currentTrack.imageUrl,
+              spotifyUrl: currentTrack.spotifyUrl,
+              isPlaying: currentTrack.isPlaying,
+              progressMs: currentTrack.progressMs,
+              durationMs: currentTrack.durationMs
+            },
+            lastUpdated: currentTrack.lastPlayed,
+            statusAgeSeconds: statusAge
+          };
+        }
+      }
+    } catch (error) {
+      log.warn(`Failed to get live Spotify status for ${username}:`, error.message);
+      // Fall back to cached data
+    }
+
+    // If no live data, get cached recent tracks
+    let recentActivity = null;
+    if (!liveData) {
+      const recentTracks = targetUser.socialProxy.spotify.recentTracks;
+      if (recentTracks && recentTracks.length > 0) {
+        const mostRecent = recentTracks[0];
+        recentActivity = {
+          recentTrack: {
+            name: mostRecent.name,
+            artist: mostRecent.artist,
+            album: mostRecent.album,
+            imageUrl: mostRecent.imageUrl,
+            spotifyUrl: mostRecent.spotifyUrl,
+            playedAt: mostRecent.playedAt
+          },
+          type: 'recent'
+        };
+      }
+    }
+
+    res.json({
+      success: true,
+      connected: true,
+      username: targetUser.username,
+      live: liveData,
+      recent: recentActivity,
+      topTracks: targetUser.socialProxy.spotify.topTracks?.slice(0, 3) || [],
+      lastRefreshed: new Date().toISOString()
+    });
+
+  } catch (error) {
+    log.error('Get live Spotify status error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to get live Spotify status' 
+    });
+  }
+});
+
 export default router;

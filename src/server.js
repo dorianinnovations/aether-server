@@ -18,6 +18,7 @@ import previewRoutes from './routes/preview.js';
 import socialChatRoutes from './routes/socialChat.js';
 import socialProxyRoutes from './routes/socialProxy.js';
 import spotifyRoutes from './routes/spotify.js';
+import notificationRoutes from './routes/notifications.js';
 
 // Initialize models
 import './models/User.js';
@@ -25,7 +26,9 @@ import './models/Conversation.js';
 import './models/Activity.js';
 
 // Initialize services
-// Analysis queue removed - profile updates handled directly in conversations
+import analysisQueue from './services/analysisQueue.js';
+import notificationService from './services/notificationService.js';
+import spotifyLiveService from './services/spotifyLiveService.js';
 
 const app = express();
 
@@ -37,6 +40,27 @@ const initializeServer = async () => {
     // Connect to database
     await connectDB();
     log.database('✅ Database connection established');
+
+    // Setup analysis queue event handlers for real-time notifications
+    analysisQueue.on('analysisComplete', (result) => {
+      if (result.success && result.updates) {
+        const sent = notificationService.notifyProfileUpdate(result.userId, result.updates);
+        if (sent) {
+          log.debug(`🔔 Profile update notification sent to user ${result.userId}`);
+        }
+      }
+    });
+
+    analysisQueue.on('analysisError', (error) => {
+      log.warn(`Analysis error for user ${error.userId}: ${error.error}`);
+      // Could send error notification if desired
+    });
+
+    log.system('Analysis queue event handlers initialized');
+
+    // Start Spotify Live Service for background updates
+    spotifyLiveService.start();
+    log.system('Spotify Live Service started');
 
     // Security middleware
     app.use(helmet({
@@ -66,6 +90,7 @@ const initializeServer = async () => {
     app.use('/api', previewRoutes);
     app.use('/social-proxy', socialProxyRoutes);
     app.use('/spotify', spotifyRoutes);
+    app.use('/notifications', notificationRoutes);
     app.use('/', socialChatRoutes);
     
     // Error handling
@@ -83,6 +108,11 @@ const initializeServer = async () => {
     // Graceful shutdown
     process.on('SIGTERM', () => {
       console.log('SIGTERM received, shutting down gracefully');
+      
+      // Stop background services
+      spotifyLiveService.stop();
+      log.system('Background services stopped');
+      
       server.close(() => {
         console.log('Server closed');
         process.exit(0);
