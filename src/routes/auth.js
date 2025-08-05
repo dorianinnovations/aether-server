@@ -3,6 +3,7 @@ import { body, validationResult } from "express-validator";
 import User from "../models/User.js";
 import { signToken, protect, protectRefresh } from "../middleware/auth.js";
 import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG as _SECURITY_CONFIG } from "../config/constants.js";
+// import { catchAsync, ValidationError, AuthenticationError } from "../utils/index.js";
 // import emailService from "../services/emailService.js"; // Removed - no email service
 
 const router = express.Router();

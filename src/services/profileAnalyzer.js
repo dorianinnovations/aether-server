@@ -64,9 +64,12 @@ class ProfileAnalyzer {
         const user = await User.findById(userId);
         if (!user) return;
 
-        // Initialize profile if it doesn't exist
-        if (!user.profile) {
-          user.profile = {
+        // Initialize social proxy personality if it doesn't exist
+        if (!user.socialProxy) {
+          user.socialProxy = { personality: {} };
+        }
+        if (!user.socialProxy.personality) {
+          user.socialProxy.personality = {
             interests: [],
             communicationStyle: {
               casual: 0,
@@ -76,32 +79,28 @@ class ProfileAnalyzer {
               humor: 0
             },
             totalMessages: 0,
-            compatibilityTags: [],
-            analysisVersion: '1.0'
+            analysisVersion: '2.0'
           };
         }
 
         // Extract interests
         const detectedInterests = this.extractInterests(messageContent);
-        this.updateInterests(user.profile, detectedInterests);
+        this.updateInterests(user.socialProxy.personality, detectedInterests);
 
         // Analyze communication style
         const styleScores = this.analyzeCommunicationStyle(messageContent);
-        this.updateCommunicationStyle(user.profile, styleScores);
+        this.updateCommunicationStyle(user.socialProxy.personality, styleScores);
 
         // Update metadata
-        user.profile.totalMessages += 1;
-        user.profile.lastAnalyzed = new Date();
-
-        // Generate compatibility tags
-        user.profile.compatibilityTags = this.generateCompatibilityTags(user.profile);
+        user.socialProxy.personality.totalMessages += 1;
+        user.socialProxy.personality.lastAnalyzed = new Date();
 
         await user.save();
         
         log.debug(`Profile updated for user ${userId}:`, {
-          interests: user.profile.interests.length,
-          totalMessages: user.profile.totalMessages,
-          tags: user.profile.compatibilityTags
+          interests: user.socialProxy.personality.interests.length,
+          totalMessages: user.socialProxy.personality.totalMessages,
+          tags: this.generateCompatibilityTags(user.socialProxy.personality)
         });
 
         return; // Success, exit retry loop

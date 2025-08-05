@@ -1,0 +1,175 @@
+import express from 'express';
+import { protect } from '../middleware/auth.js';
+// import { log } from '../utils/logger.js';
+import aiService from '../services/aiService.js';
+import messageService from '../services/messageService.js';
+import webSearchTool from '../tools/webSearchTool.js';
+import User from '../models/User.js';
+
+const router = express.Router();
+
+router.post('/social-chat', protect, async (req, res) => {
+  try {
+    const { message, prompt, stream = true } = req.body;
+    const userMessage = message || prompt;
+    const userId = req.user?.id;
+    
+    console.log('🔍 DEBUG - Social Chat Request:', {
+      message: userMessage,
+      stream,
+      userId,
+      hasUser: !!req.user,
+      bodyKeys: Object.keys(req.body),
+      headers: req.headers.authorization ? 'present' : 'missing'
+    });
+    
+    if (!userMessage) {
+      console.log('❌ DEBUG - Missing message/prompt parameter');
+      return res.status(400).json({ error: 'Message or prompt is required' });
+    }
+    
+    // Get user context for AI personalization
+    let userContext = null;
+    if (userId) {
+      // Get user data BEFORE saving message to get current count
+      const user = await User.findById(userId).select('username socialProxy profile');
+      if (user) {
+        const messageCount = user.socialProxy?.personality?.totalMessages || 0;
+        console.log(`📊 User ${user.username} current message count: ${messageCount} (socialProxy exists: ${!!user.socialProxy})`);
+        
+        userContext = {
+          username: user.username,
+          socialProxy: user.socialProxy,
+          messageCount: messageCount
+        };
+      }
+      
+      // Save message after getting context (this will increment the count for next time)
+      await messageService.saveMessage(userId, userMessage, 'user');
+    }
+    
+    // Set up Server-Sent Events streaming
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': '*'
+    });
+    
+    try {
+      // Check if web search should be triggered
+      let webSearchResults = null;
+      let enhancedMessage = userMessage;
+      
+      // Smart search triggers - ONLY for external information
+      const searchTriggers = [
+        /(?:search|find|look up|google|web search)\s+(?:for\s+)?(.+)/i,
+        /(?:what'?s|latest|recent|current|news about|happening with)\s+(.+)/i,
+        /(?:when did|where is|what happened|current price|stock price|weather in)/i,
+        /(?:latest news|recent developments|current events)/i
+      ];
+      
+      const noSearchPatterns = [
+        /^(?:hello|hi|hey|thanks|thank you|ok|okay|yes|no|maybe|what\?)$/i,
+        /^(?:how are you|good morning|good afternoon|good evening)$/i,
+        /(?:who are you|what are you|tell me about yourself|introduce yourself)/i,
+        /(?:who's this|whos this|what is this|whats this)/i,
+        /^(?:what\?|huh\?|why\?|how\?)$/i
+      ];
+      
+      // Check if should trigger search
+      let shouldSearch = false;
+      const cleanMessage = userMessage.trim();
+      
+      // Skip search for simple conversational messages
+      const isConversational = noSearchPatterns.some(pattern => pattern.test(cleanMessage));
+      if (!isConversational) {
+        // Check for search triggers
+        shouldSearch = searchTriggers.some(pattern => pattern.test(cleanMessage));
+        
+        // Only check for EXPLICIT search keywords, not generic ones
+        if (!shouldSearch) {
+          const explicitSearchKeywords = ['web search', 'google', 'search for', 'look up'];
+          shouldSearch = explicitSearchKeywords.some(keyword => cleanMessage.toLowerCase().includes(keyword));
+        }
+      }
+      
+      // Perform web search if needed
+      if (shouldSearch) {
+        console.log('🔍 Social-Chat: Triggering web search for:', cleanMessage);
+        try {
+          const searchResult = await webSearchTool({ query: cleanMessage }, { userId });
+          if (searchResult.success && searchResult.structure.results.length > 0) {
+            webSearchResults = searchResult;
+            
+            // Add search results to message context
+            const searchContext = `Web search results for "${cleanMessage}":
+${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
+
+Use this current information to provide an accurate, up-to-date response.`;
+            
+            enhancedMessage = `${userMessage}\n\n${searchContext}`;
+            console.log('✅ Social-Chat: Web search completed with', searchResult.structure.results.length, 'results');
+          }
+        } catch (error) {
+          console.error('❌ Social-Chat: Web search failed:', error);
+        }
+      }
+
+      // Get AI response with enhanced message and user context
+      const aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-4o', userContext);
+      
+      if (aiResponse.success) {
+        // First send tool results if we have web search results
+        if (webSearchResults) {
+          const toolResultData = {
+            toolResults: [{
+              tool: 'webSearchTool',
+              success: true,
+              data: webSearchResults,
+              query: cleanMessage
+            }],
+            hasTools: true,
+            toolsUsed: 1
+          };
+          res.write(`data: ${JSON.stringify({metadata: toolResultData})}\n\n`);
+        }
+        
+        // Stream response word by word in SSE format
+        const words = aiResponse.response.split(' ');
+        for (let i = 0; i < words.length; i++) {
+          const word = words[i];
+          res.write(`data: ${JSON.stringify({content: word})}\n\n`);
+          await new Promise(resolve => setTimeout(resolve, 25));
+        }
+        
+        // Send completion signal
+        res.write(`data: [DONE]\n\n`);
+        
+        // Save AI response if authenticated
+        if (userId) {
+          await messageService.saveMessage(userId, aiResponse.response, 'ai', aiResponse.model);
+        }
+      } else {
+        res.write(`data: ${JSON.stringify({content: 'Sorry, I encountered an error. Please try again.'})}\n\n`);
+        res.write(`data: [DONE]\n\n`);
+      }
+      
+      res.end();
+    } catch (streamError) {
+      res.write(`data: ${JSON.stringify({content: 'Error occurred during streaming.'})}\n\n`);
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    }
+    
+  } catch (error) {
+    console.error('Social Chat Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
+    });
+  }
+});
+
+export default router;
