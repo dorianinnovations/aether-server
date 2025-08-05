@@ -367,6 +367,161 @@ Keep it real, personable, and genuinely helpful for maintaining connections with
       };
     }
   }
+
+  /**
+   * Enhanced chat method that handles file attachments for GPT-4o vision
+   * @param {string} message - Text message
+   * @param {string} model - AI model to use
+   * @param {Object} userContext - User context
+   * @param {Array} processedFiles - Array of processed files from fileProcessingService
+   * @returns {Object} AI response
+   */
+  async chatWithFiles(message, model = 'openai/gpt-4o', userContext = null, processedFiles = []) {
+    try {
+      // Classify the query to choose appropriate prompt
+      const queryType = this.classifyQuery(message, userContext);
+      console.log(`🎯 Query classified as: ${queryType} (msg count: ${userContext?.messageCount || 0})`);
+      console.log(`📁 Processing ${processedFiles.length} files for AI`);
+      
+      // Build system prompt with file context
+      let systemPrompt = this.buildSystemPrompt(userContext, queryType);
+      
+      if (processedFiles.length > 0) {
+        systemPrompt += `\n\n📁 FILE ANALYSIS CONTEXT:
+The user has uploaded ${processedFiles.length} file(s). You should analyze and discuss these files based on their content and type. Be thorough and helpful in your analysis.
+
+Files provided:
+${processedFiles.map(file => `- ${file.originalName} (${file.type})`).join('\n')}
+
+ANALYSIS APPROACH:
+- Provide genuine, thoughtful analysis of what you see/read
+- Be curious and engaging about the content
+- If the content reveals interesting hobbies, projects, skills, or passions, mention how this could be worth sharing with friends/family through their Aether profile
+- Only suggest profile additions if the content is genuinely compelling or represents something they're actively engaged with
+- Don't be pushy about profile integration - make it a natural, optional suggestion
+- Focus first on giving helpful insights about the actual content
+
+Remember: You're helping them understand what they've shared while being aware that compelling content might be worth adding to their living social presence.`;
+      }
+      
+      // Build messages array
+      const messages = [
+        { 
+          role: 'system', 
+          content: systemPrompt
+        }
+      ];
+
+      // Build user message content array
+      const content = [];
+      
+      // Add text message if present
+      if (message && message.trim()) {
+        content.push({ type: 'text', text: message });
+      }
+      
+      // Process each file type appropriately
+      for (const file of processedFiles) {
+        try {
+          if (file.type === 'image' && file.data) {
+            // Handle images for GPT-4o vision
+            console.log(`🖼️ Adding image: ${file.originalName} (${file.metadata?.width}x${file.metadata?.height})`);
+            content.push({
+              type: 'image_url',
+              image_url: {
+                url: file.data, // Already base64 data URL
+                detail: 'high' // Request high detail analysis
+              }
+            });
+          } else if (file.type === 'document' && file.format === 'pdf' && file.data) {
+            // Handle PDF files (GPT-4o can process PDFs directly)
+            console.log(`📄 Adding PDF: ${file.originalName}`);
+            content.push({
+              type: 'image_url', // PDFs are handled as documents in vision API
+              image_url: {
+                url: file.data // Base64 PDF data
+              }
+            });
+          } else if (['document', 'code', 'text'].includes(file.type) && file.data) {
+            // Handle text-based files
+            console.log(`📝 Adding text file: ${file.originalName} (${file.type})`);
+            
+            let fileContent = `\n\n--- FILE: ${file.originalName} ---\n`;
+            
+            if (file.type === 'code' && file.language) {
+              fileContent += `Language: ${file.language}\n`;
+            }
+            
+            fileContent += `Content:\n${file.data}\n--- END FILE ---\n`;
+            
+            // Add to text content
+            const existingTextIndex = content.findIndex(c => c.type === 'text');
+            if (existingTextIndex !== -1) {
+              content[existingTextIndex].text += fileContent;
+            } else {
+              content.push({ type: 'text', text: fileContent });
+            }
+          } else {
+            console.warn(`⚠️ Unsupported file type for AI: ${file.type} (${file.originalName})`);
+          }
+        } catch (fileError) {
+          console.error(`❌ Error processing file ${file.originalName}:`, fileError);
+          // Continue with other files
+        }
+      }
+      
+      // Ensure we have content to send
+      if (content.length === 0) {
+        content.push({ type: 'text', text: 'Please analyze the uploaded files.' });
+      }
+      
+      messages.push({ role: 'user', content });
+      
+      console.log(`🚀 Sending ${content.length} content items to AI (${content.filter(c => c.type === 'image_url').length} images, ${content.filter(c => c.type === 'text').length} text)`);
+      
+      const response = await fetch(this.baseUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'X-Title': 'Aether File Analysis'
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          max_tokens: 4000,
+          temperature: 0.7 // Slightly lower temperature for file analysis
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error('OpenRouter API Error:', data);
+        throw new Error(`OpenRouter API error: ${data.error?.message || response.statusText}`);
+      }
+
+      const choice = data.choices[0];
+      
+      console.log(`✅ AI response received (${choice.message.content.length} characters)`);
+      
+      return {
+        success: true,
+        response: choice.message.content,
+        thinking: choice.message.thinking || null,
+        model: data.model,
+        usage: data.usage,
+        filesProcessed: processedFiles.length
+      };
+    } catch (error) {
+      console.error('AI Service chatWithFiles Error:', error);
+      return {
+        success: false,
+        error: error.message,
+        filesProcessed: processedFiles.length
+      };
+    }
+  }
 }
 
 export default new AIService();
