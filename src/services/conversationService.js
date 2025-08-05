@@ -1,17 +1,31 @@
 import Conversation from '../models/Conversation.js';
-import Message from '../models/Message.js';
-import { broadcastToUser } from '../routes/events.js';
 import { log } from '../utils/logger.js';
 import mongoose from 'mongoose';
 
 class ConversationService {
   async getConversationHistory(userId, limit = 10) {
     try {
-      return await Message.find({ user: userId })
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .populate('user', 'email')
-        .lean();
+      // Get recent messages from all conversations where user is participant
+      const conversations = await Conversation.find({
+        $or: [
+          { creator: userId },
+          { 'participants.user': userId }
+        ],
+        isActive: true
+      })
+      .sort({ lastMessageAt: -1 })
+      .limit(5) // Get recent conversations
+      .select('messages')
+      .lean();
+
+      const allMessages = [];
+      conversations.forEach(conv => {
+        allMessages.push(...conv.messages.slice(-limit));
+      });
+
+      return allMessages
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, limit);
     } catch (error) {
       console.error('Conversation Service Error:', error);
       throw error;
@@ -20,88 +34,49 @@ class ConversationService {
 
   async getUserConversations(userId, options = {}) {
     try {
-      const { page = 1, limit = 20, search } = options;
+      const { page = 1, limit = 20, search, type } = options;
       const skip = (page - 1) * limit;
 
-      // Build query for Conversation model
+      // Build query for updated Conversation model - user can be creator or participant
       let query = { 
-        user: userId, 
+        $or: [
+          { creator: userId },
+          { 'participants.user': userId }
+        ],
         isActive: true 
       };
       
+      // Filter by conversation type if specified
+      if (type) {
+        query.type = type;
+      }
+      
       if (search) {
-        query.$or = [
-          { title: { $regex: search, $options: 'i' } },
-          { summary: { $regex: search, $options: 'i' } },
-          { 'messages.content': { $regex: search, $options: 'i' } }
+        query.$and = [
+          query,
+          {
+            $or: [
+              { title: { $regex: search, $options: 'i' } },
+              { summary: { $regex: search, $options: 'i' } },
+              { 'messages.content': { $regex: search, $options: 'i' } }
+            ]
+          }
         ];
       }
 
-      // Get conversations using the proper Conversation model
+      // Get conversations using the updated Conversation model
       let conversations = await Conversation.find(query)
         .sort({ lastMessageAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('_id title lastMessageAt messageCount summary messages')
+        .select('_id title type lastMessageAt messageCount summary messages participants creator')
+        .populate('participants.user', 'username')
+        .populate('creator', 'username')
         .lean();
 
       let total = await Conversation.countDocuments(query);
 
-      // Fallback: If no conversations found, try to migrate from old Message model
-      if (conversations.length === 0 && page === 1) {
-        try {
-          log.info(`No conversations found for user ${userId}, checking for legacy messages...`);
-          
-          const legacyMessages = await Message.find({ user: userId })
-            .sort({ createdAt: 1 }) // Sort ascending for chronological order
-            .limit(100)
-            .lean();
-
-          if (legacyMessages.length > 0) {
-            log.info(`Found ${legacyMessages.length} legacy messages, creating conversation...`);
-            
-            const firstMessage = legacyMessages[0];
-            const lastMessage = legacyMessages[legacyMessages.length - 1];
-            
-            // Create a single conversation from legacy messages
-            const newConversation = new Conversation({
-              title: firstMessage?.content?.substring(0, 50) + '...' || 'Imported Conversation',
-              user: userId,
-              messages: legacyMessages.map(msg => ({
-                _id: new mongoose.Types.ObjectId(),
-                role: msg.type === 'user' ? 'user' : 'assistant',
-                content: msg.content || '',
-                timestamp: msg.createdAt || new Date(),
-                metadata: {
-                  model: msg.aiModel || 'unknown',
-                  migrated: true
-                }
-              })),
-              messageCount: legacyMessages.length,
-              lastMessageAt: lastMessage?.createdAt || new Date(),
-              isActive: true,
-              summary: firstMessage?.content?.substring(0, 100) + '...' || 'Imported conversation'
-            });
-
-            await newConversation.save();
-            log.info(`Created conversation ${newConversation._id} with ${legacyMessages.length} migrated messages`);
-
-            // Return the newly created conversation
-            conversations = [{
-              _id: newConversation._id,
-              title: newConversation.title,
-              lastMessageAt: newConversation.lastMessageAt,
-              messageCount: newConversation.messageCount,
-              summary: newConversation.summary,
-              messages: newConversation.messages
-            }];
-            total = 1;
-          }
-        } catch (migrationError) {
-          log.error('Error during legacy message migration:', migrationError);
-          // Continue without migration if it fails
-        }
-      }
+      // Legacy migration removed - all conversations use unified model
 
       return {
         conversations: conversations.map(conv => ({
@@ -170,11 +145,27 @@ class ConversationService {
     }
   }
 
-  async createConversation(userId, title = 'New Conversation') {
+  async createConversation(userId, title = 'New Conversation', type = 'aether', participantIds = []) {
     try {
+      // Prepare participants array
+      const participants = [];
+      
+      // For aether conversations, only add the creator as participant
+      if (type === 'aether') {
+        participants.push({ user: userId, role: 'member' });
+      } else {
+        // For direct/group conversations, add all participants
+        participants.push({ user: userId, role: 'admin' }); // Creator is admin
+        participantIds.forEach(id => {
+          participants.push({ user: id, role: 'member' });
+        });
+      }
+
       const conversation = new Conversation({
         title,
-        user: userId,
+        type,
+        creator: userId,
+        participants,
         messages: [],
         messageCount: 0,
         lastMessageAt: new Date(),
@@ -186,15 +177,16 @@ class ConversationService {
       const conversationData = {
         _id: conversation._id.toString(),
         title: conversation.title,
-        userId,
+        type: conversation.type,
+        creator: userId,
+        participants: conversation.participants,
         messageCount: 0,
         lastActivity: conversation.lastMessageAt,
         createdAt: conversation.createdAt
       };
 
-      broadcastToUser(userId, 'conversation:created', conversationData);
-      
-      log.api(`Created new conversation for user ${userId}: ${conversation._id}`);
+      // Remove event broadcasting since we removed events
+      log.api(`Created new ${type} conversation for user ${userId}: ${conversation._id}`);
       return conversationData;
     } catch (error) {
       log.error('Error creating conversation:', error);
@@ -225,7 +217,7 @@ class ConversationService {
         lastActivity: conversation.lastMessageAt
       };
 
-      broadcastToUser(userId, 'conversation:updated', conversationData);
+      // Event broadcasting removed
       
       log.api(`Updated conversation title for user ${userId}: ${conversationId}`);
       return conversationData;
@@ -235,7 +227,7 @@ class ConversationService {
     }
   }
 
-  async addMessage(userId, conversationId, role, content, attachments = [], metadata = {}) {
+  async addMessage(userId, conversationId, role, content, attachments = [], metadata = {}, authorId = null) {
     try {
       if (!mongoose.Types.ObjectId.isValid(conversationId)) {
         throw new Error('Invalid conversation ID format');
@@ -245,14 +237,22 @@ class ConversationService {
         _id: new mongoose.Types.ObjectId(),
         role,
         content,
+        author: authorId || userId, // Track who authored the message
         attachments,
         metadata,
         timestamp: new Date()
       };
 
-      // Add message to conversation and update metadata
+      // Find conversation where user is creator or participant
       const conversation = await Conversation.findOneAndUpdate(
-        { _id: conversationId, user: userId, isActive: true },
+        { 
+          _id: conversationId, 
+          $or: [
+            { creator: userId },
+            { 'participants.user': userId }
+          ],
+          isActive: true 
+        },
         { 
           $push: { messages: newMessage },
           $set: { 
@@ -278,16 +278,7 @@ class ConversationService {
         }
       };
 
-      broadcastToUser(userId, 'conversation:message_added', {
-        conversationId: conversationId,
-        message: {
-          _id: newMessage._id.toString(),
-          role,
-          content,
-          timestamp: newMessage.timestamp
-        },
-        conversation: conversationData
-      });
+      // Event broadcasting removed
 
       log.api(`Added message to conversation ${conversationId} for user ${userId}`);
       return conversationData;
@@ -313,10 +304,7 @@ class ConversationService {
         throw new Error('Conversation not found or already deleted');
       }
 
-      broadcastToUser(userId, 'conversation:deleted', { 
-        conversationId,
-        deletedCount: conversation.messageCount 
-      });
+      // Event broadcasting removed
 
       log.api(`Deleted conversation ${conversationId} for user ${userId} (${conversation.messageCount} messages)`);
       return { deletedCount: conversation.messageCount };
@@ -329,13 +317,17 @@ class ConversationService {
   async deleteAllConversations(userId) {
     try {
       const result = await Conversation.updateMany(
-        { user: userId, isActive: true },
+        { 
+          $or: [
+            { creator: userId },
+            { 'participants.user': userId }
+          ],
+          isActive: true 
+        },
         { isActive: false } // Soft delete all conversations
       );
 
-      broadcastToUser(userId, 'conversation:all_deleted', { 
-        deletedCount: result.modifiedCount 
-      });
+      // Event broadcasting removed
 
       log.api(`Deleted all conversations for user ${userId} (${result.modifiedCount} conversations)`);
       return { deletedCount: result.modifiedCount };

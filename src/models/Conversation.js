@@ -8,7 +8,35 @@ const ConversationSchema = new mongoose.Schema({
     maxlength: 200,
     default: 'New Conversation'
   },
-  user: {
+  
+  // Conversation type
+  type: {
+    type: String,
+    enum: ['aether', 'direct', 'group'],
+    required: true,
+    default: 'aether'
+  },
+  
+  // Participants in the conversation
+  participants: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    joinedAt: {
+      type: Date,
+      default: Date.now
+    },
+    role: {
+      type: String,
+      enum: ['member', 'admin'],
+      default: 'member'
+    }
+  }],
+  
+  // Creator of the conversation
+  creator: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
@@ -23,6 +51,11 @@ const ConversationSchema = new mongoose.Schema({
     content: {
       type: String,
       required: true
+    },
+    // Author of the message (for group chats and user identification)
+    author: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
     },
     attachments: [{
       type: {
@@ -66,8 +99,10 @@ const ConversationSchema = new mongoose.Schema({
 });
 
 // Index for efficient queries
-ConversationSchema.index({ user: 1, lastMessageAt: -1 });
-ConversationSchema.index({ user: 1, isActive: 1 });
+ConversationSchema.index({ creator: 1, lastMessageAt: -1 });
+ConversationSchema.index({ 'participants.user': 1, lastMessageAt: -1 });
+ConversationSchema.index({ type: 1, isActive: 1 });
+ConversationSchema.index({ creator: 1, type: 1, isActive: 1 });
 
 // Update lastMessageAt and messageCount when messages are added
 ConversationSchema.pre('save', function(next) {

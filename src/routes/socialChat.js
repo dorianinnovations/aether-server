@@ -2,7 +2,7 @@ import express from 'express';
 import { protect } from '../middleware/auth.js';
 // import { log } from '../utils/logger.js';
 import aiService from '../services/aiService.js';
-import messageService from '../services/messageService.js';
+import conversationService from '../services/conversationService.js';
 import webSearchTool from '../tools/webSearchTool.js';
 import User from '../models/User.js';
 
@@ -10,7 +10,7 @@ const router = express.Router();
 
 router.post('/social-chat', protect, async (req, res) => {
   try {
-    const { message, prompt, stream = true } = req.body;
+    const { message, prompt, stream = true, conversationId } = req.body;
     const userMessage = message || prompt;
     const userId = req.user?.id;
     
@@ -18,6 +18,7 @@ router.post('/social-chat', protect, async (req, res) => {
       message: userMessage,
       stream,
       userId,
+      conversationId,
       hasUser: !!req.user,
       bodyKeys: Object.keys(req.body),
       headers: req.headers.authorization ? 'present' : 'missing'
@@ -28,24 +29,48 @@ router.post('/social-chat', protect, async (req, res) => {
       return res.status(400).json({ error: 'Message or prompt is required' });
     }
     
+    // Get or create conversation
+    let conversation;
+    if (conversationId && conversationId !== 'default') {
+      // Get existing conversation
+      conversation = await conversationService.getConversation(userId, conversationId);
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+    } else {
+      // Create or get default Aether conversation
+      const conversations = await conversationService.getUserConversations(userId, { 
+        limit: 1,
+        type: 'aether'
+      });
+      
+      if (conversations.conversations.length > 0) {
+        conversation = conversations.conversations[0];
+      } else {
+        // Create new Aether conversation
+        conversation = await conversationService.createConversation(userId, 'Chat with Aether', 'aether');
+      }
+    }
+    
     // Get user context for AI personalization
     let userContext = null;
     if (userId) {
-      // Get user data BEFORE saving message to get current count
       const user = await User.findById(userId).select('username socialProxy profile');
       if (user) {
-        const messageCount = user.socialProxy?.personality?.totalMessages || 0;
-        console.log(`📊 User ${user.username} current message count: ${messageCount} (socialProxy exists: ${!!user.socialProxy})`);
+        // Use conversation message count for prompt classification
+        const messageCount = conversation.messageCount || 0;
+        console.log(`📊 User ${user.username} conversation ${conversation._id} message count: ${messageCount}`);
         
         userContext = {
           username: user.username,
           socialProxy: user.socialProxy,
-          messageCount: messageCount
+          messageCount: messageCount,
+          conversationId: conversation._id
         };
       }
       
-      // Save message after getting context (this will increment the count for next time)
-      await messageService.saveMessage(userId, userMessage, 'user');
+      // Add user message to conversation
+      await conversationService.addMessage(userId, conversation._id, 'user', userMessage, null, null, userId);
     }
     
     // Set up Server-Sent Events streaming
@@ -149,7 +174,17 @@ Use this current information to provide an accurate, up-to-date response.`;
         
         // Save AI response if authenticated
         if (userId) {
-          await messageService.saveMessage(userId, aiResponse.response, 'ai', aiResponse.model);
+          await conversationService.addMessage(
+            userId, 
+            conversation._id, 
+            'assistant', 
+            aiResponse.response, 
+            null, 
+            { 
+              model: aiResponse.model,
+              responseTime: Date.now() - Date.now() // Could track actual response time
+            }
+          );
         }
       } else {
         res.write(`data: ${JSON.stringify({content: 'Sorry, I encountered an error. Please try again.'})}\n\n`);

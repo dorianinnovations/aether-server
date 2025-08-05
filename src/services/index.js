@@ -5,8 +5,6 @@
 
 export { default as aiService } from './aiService.js';
 export { default as llmService } from './llmService.js';
-export { default as messageService } from './messageService.js';
-// export { default as matchingService } from './matchingService.js'; // REMOVED - no more dating
 export { default as profileAnalyzer } from './profileAnalyzer.js';
 export { default as conversationService } from './conversationService.js';
-import './analysisQueue.js'; // This service auto-initializes
+export { default as spotifyService } from './spotifyService.js';
