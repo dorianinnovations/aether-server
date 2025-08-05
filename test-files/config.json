@@ -1,0 +1,31 @@
+{
+  "fileProcessing": {
+    "maxFileSize": "10MB",
+    "allowedTypes": [
+      "image/jpeg",
+      "image/png", 
+      "image/webp",
+      "image/gif",
+      "application/pdf",
+      "text/plain",
+      "text/markdown",
+      "application/json",
+      "text/javascript"
+    ],
+    "security": {
+      "virusScan": false,
+      "contentValidation": true,
+      "signatureCheck": true
+    },
+    "ai": {
+      "model": "gpt-4o",
+      "vision": true,
+      "maxTokens": 4000
+    }
+  },
+  "features": {
+    "multipleFiles": true,
+    "streaming": true,
+    "contextAware": true
+  }
+}

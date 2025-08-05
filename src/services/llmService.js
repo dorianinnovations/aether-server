@@ -113,10 +113,75 @@ class LLMService {
       throw error;
     }
   }
+
+  /**
+   * Generate a simple text completion
+   * @param {Object} options - Generation options
+   * @param {string} options.prompt - The prompt to complete
+   * @param {string} options.model - Model to use
+   * @param {number} options.maxTokens - Max tokens to generate
+   * @param {number} options.temperature - Temperature for generation
+   * @returns {Object} Completion result
+   */
+  async generateCompletion(options = {}) {
+    try {
+      const {
+        prompt,
+        model = 'openai/gpt-4o-mini',
+        maxTokens = 500,
+        temperature = 0.7
+      } = options;
+
+      if (!prompt) {
+        throw new Error('Prompt is required for completion');
+      }
+
+      const messages = [
+        { role: 'user', content: prompt }
+      ];
+
+      const response = await fetch(this.baseUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'X-Title': 'Aether Profile Analysis'
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          max_tokens: maxTokens,
+          temperature,
+          stream: false
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`OpenRouter API error: ${data.error?.message || response.statusText}`);
+      }
+
+      const choice = data.choices[0];
+      
+      return {
+        success: true,
+        completion: choice.message.content,
+        model: data.model,
+        usage: data.usage
+      };
+    } catch (error) {
+      console.error('LLM generateCompletion Error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
 }
 
 export function createLLMService() {
   return new LLMService();
 }
 
-export default createLLMService;
+export default new LLMService();

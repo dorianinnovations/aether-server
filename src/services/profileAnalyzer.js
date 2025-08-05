@@ -1,10 +1,11 @@
 /**
  * Profile Analyzer Service
- * Analyzes chat messages to build user profiles for matching
+ * Analyzes chat messages to build user profiles with AI-powered two-step accuracy funnel
  */
 
 import User from '../models/User.js';
 import { log } from '../utils/logger.js';
+import llmService from './llmService.js';
 
 class ProfileAnalyzer {
   constructor() {
@@ -79,7 +80,7 @@ class ProfileAnalyzer {
               humor: 0
             },
             totalMessages: 0,
-            analysisVersion: '2.0'
+            analysisVersion: '3.0'
           };
         }
 
@@ -252,6 +253,492 @@ class ProfileAnalyzer {
   }
 
   /**
+   * Enhanced AI-powered message analysis with two-step accuracy funnel
+   * Step 1: Raw entity extraction 
+   * Step 2: Contextual synthesis and validation
+   */
+  async analyzeMessageEnhanced(userId, messageContent, context = {}) {
+    const maxRetries = 3;
+    let attempt = 0;
+
+    while (attempt < maxRetries) {
+      try {
+        const user = await User.findById(userId);
+        if (!user) {
+          log.warn(`User not found for analysis: ${userId}`);
+          return null;
+        }
+
+        // Initialize social proxy personality if it doesn't exist
+        if (!user.socialProxy) {
+          user.socialProxy = { personality: {} };
+        }
+        if (!user.socialProxy.personality) {
+          user.socialProxy.personality = {
+            interests: [],
+            communicationStyle: {
+              casual: 0,
+              energetic: 0,
+              analytical: 0,
+              social: 0,
+              humor: 0
+            },
+            totalMessages: 0,
+            analysisVersion: '3.0'
+          };
+        }
+
+        log.debug(`🔍 Enhanced analysis starting for user ${userId}`, {
+          messageLength: messageContent.length,
+          currentInterests: user.socialProxy.personality.interests.length
+        });
+
+        // STEP 1: Raw Entity Extraction
+        const extractedData = await this.extractEntitiesWithAI(messageContent);
+        
+        if (!extractedData || !extractedData.success) {
+          log.warn(`Entity extraction failed for user ${userId}`);
+          // Fallback to pattern-based analysis
+          return await this.analyzeMessage(userId, messageContent);
+        }
+
+        // STEP 2: Contextual Synthesis & Validation
+        const synthesizedUpdates = await this.synthesizeAndValidate(
+          user.socialProxy.personality,
+          extractedData.entities,
+          messageContent,
+          context
+        );
+
+        if (!synthesizedUpdates || !synthesizedUpdates.success) {
+          log.warn(`Synthesis failed for user ${userId}, using extracted data`);
+          // Apply extracted data directly
+          this.applyExtractedData(user.socialProxy.personality, extractedData.entities);
+        } else {
+          // Apply synthesized updates
+          this.applyValidatedUpdates(user.socialProxy.personality, synthesizedUpdates.updates);
+        }
+
+        // Update metadata
+        user.socialProxy.personality.totalMessages += 1;
+        user.socialProxy.personality.lastAnalyzed = new Date();
+
+        await user.save();
+        
+        const updatesApplied = {
+          interests: user.socialProxy.personality.interests.length,
+          totalMessages: user.socialProxy.personality.totalMessages,
+          communicationStyle: user.socialProxy.personality.communicationStyle
+        };
+
+        log.system(`Enhanced analysis completed for user ${userId}:`, updatesApplied);
+
+        return {
+          success: true,
+          userId,
+          updates: updatesApplied,
+          analysisType: 'enhanced'
+        };
+
+      } catch (error) {
+        attempt++;
+        
+        if (error.name === 'VersionError' && attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 100;
+          log.warn(`Version conflict on attempt ${attempt}, retrying in ${delay}ms for user ${userId}`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        log.error('Enhanced profile analysis failed:', {
+          userId,
+          attempt,
+          error: error.message,
+          stack: error.stack
+        });
+        
+        // Fallback to basic analysis on final failure
+        if (attempt >= maxRetries) {
+          log.system(`Falling back to basic analysis for user ${userId}`);
+          return await this.analyzeMessage(userId, messageContent);
+        }
+      }
+    }
+  }
+
+  /**
+   * STEP 1: Extract structured entities using AI
+   */
+  async extractEntitiesWithAI(messageContent) {
+    try {
+      const prompt = `Analyze the following message and extract structured data about the person's interests, activities, mood, and communication style. 
+
+IMPORTANT: Output ONLY a valid JSON object with this exact structure:
+{
+  "interests": [
+    {
+      "topic": "specific interest/hobby/activity",
+      "confidence": 0.0-1.0,
+      "type": "hobby|work|entertainment|learning|social|health|travel|technology|creative",
+      "evidence": "brief quote from message"
+    }
+  ],
+  "activities": [
+    {
+      "activity": "what they're doing/planning",
+      "timeframe": "current|soon|future|past",
+      "type": "work|hobby|social|learning|health|entertainment",
+      "confidence": 0.0-1.0
+    }
+  ],
+  "mood": {
+    "primary": "excited|happy|neutral|focused|stressed|tired|curious|motivated",
+    "energy": 0.0-1.0,
+    "social": 0.0-1.0,
+    "confidence": 0.0-1.0
+  },
+  "communication_style": {
+    "casual": 0.0-1.0,
+    "energetic": 0.0-1.0,
+    "analytical": 0.0-1.0,
+    "social": 0.0-1.0,
+    "humor": 0.0-1.0
+  },
+  "significant": true/false
+}
+
+Only extract what is genuinely present. Set "significant" to true only if this message reveals meaningful information about the person.
+
+Message: "${messageContent}"`;
+
+      const response = await llmService.generateCompletion({
+        prompt,
+        model: 'openai/gpt-4o-mini',
+        maxTokens: 500,
+        temperature: 0.1
+      });
+
+      if (!response.success) {
+        throw new Error(`LLM service failed: ${response.error}`);
+      }
+
+      const entities = JSON.parse(response.completion.trim());
+      
+      log.debug('🔍 Entities extracted:', {
+        interests: entities.interests?.length || 0,
+        activities: entities.activities?.length || 0,
+        significant: entities.significant
+      });
+
+      return {
+        success: true,
+        entities,
+        rawCompletion: response.completion
+      };
+
+    } catch (error) {
+      log.error('Entity extraction failed:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * STEP 2: Synthesize and validate updates against existing profile
+   */
+  async synthesizeAndValidate(currentProfile, extractedEntities, originalMessage, context = {}) {
+    try {
+      // Skip if extracted data isn't significant
+      if (!extractedEntities.significant) {
+        log.debug('Skipping synthesis - extracted data not significant');
+        return { success: false, reason: 'not_significant' };
+      }
+
+      const profileSummary = {
+        totalMessages: currentProfile.totalMessages,
+        currentInterests: currentProfile.interests.slice(0, 10).map(i => ({
+          topic: i.topic,
+          confidence: i.confidence
+        })),
+        communicationStyle: currentProfile.communicationStyle
+      };
+
+      const prompt = `You are analyzing a user's chat message to update their social profile intelligently.
+
+CURRENT PROFILE:
+${JSON.stringify(profileSummary, null, 2)}
+
+EXTRACTED ENTITIES:
+${JSON.stringify(extractedEntities, null, 2)}
+
+ORIGINAL MESSAGE: "${originalMessage}"
+
+Your task: Determine what updates to make to the user's profile. Consider:
+1. Is this a new core interest or just a passing mention?
+2. Should this activity be added to their current status/plans?
+3. How should communication style scores be adjusted?
+4. What's the appropriate confidence level for each update?
+
+Output ONLY a valid JSON object:
+{
+  "updates": {
+    "interests": [
+      {
+        "action": "add|update|boost",
+        "topic": "interest name",
+        "confidence": 0.0-1.0,
+        "reasoning": "why this update makes sense"
+      }
+    ],
+    "status_updates": [
+      {
+        "type": "currentStatus|currentPlans|mood",
+        "content": "what to update",
+        "confidence": 0.0-1.0
+      }
+    ],
+    "communication_adjustments": {
+      "casual": -0.1 to +0.1,
+      "energetic": -0.1 to +0.1,
+      "analytical": -0.1 to +0.1,
+      "social": -0.1 to +0.1,
+      "humor": -0.1 to +0.1
+    }
+  },
+  "significant": true/false,
+  "reasoning": "overall reasoning for these updates"
+}`;
+
+      const response = await llmService.generateCompletion({
+        prompt,
+        model: 'openai/gpt-4o',
+        maxTokens: 800,
+        temperature: 0.2
+      });
+
+      if (!response.success) {
+        throw new Error(`LLM service failed: ${response.error}`);
+      }
+
+      const synthesized = JSON.parse(response.completion.trim());
+      
+      log.debug('🧠 Synthesis completed:', {
+        significant: synthesized.significant,
+        interestUpdates: synthesized.updates.interests?.length || 0,
+        statusUpdates: synthesized.updates.status_updates?.length || 0
+      });
+
+      return {
+        success: true,
+        updates: synthesized.updates,
+        reasoning: synthesized.reasoning,
+        significant: synthesized.significant
+      };
+
+    } catch (error) {
+      log.error('Synthesis and validation failed:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Apply extracted data directly (fallback method)
+   */
+  applyExtractedData(profile, entities) {
+    const now = new Date();
+
+    // Apply interests
+    if (entities.interests) {
+      for (const interest of entities.interests) {
+        if (interest.confidence > 0.3) { // Only apply confident interests
+          const existing = profile.interests.find(i => i.topic === interest.topic);
+          
+          if (existing) {
+            existing.confidence = Math.min(existing.confidence + interest.confidence * 0.3, 1);
+            existing.lastMentioned = now;
+          } else {
+            profile.interests.push({
+              topic: interest.topic,
+              confidence: interest.confidence,
+              lastMentioned: now
+            });
+          }
+        }
+      }
+    }
+
+    // Apply communication style
+    if (entities.communication_style) {
+      const smoothingFactor = 0.2;
+      for (const [style, newScore] of Object.entries(entities.communication_style)) {
+        if (profile.communicationStyle[style] !== undefined) {
+          const currentScore = profile.communicationStyle[style] || 0;
+          profile.communicationStyle[style] = 
+            currentScore * (1 - smoothingFactor) + newScore * smoothingFactor;
+        }
+      }
+    }
+
+    this.cleanupProfile(profile);
+  }
+
+  /**
+   * Apply validated updates from synthesis step
+   */
+  applyValidatedUpdates(profile, updates) {
+    const now = new Date();
+    let significantChanges = false;
+
+    // Apply interest updates
+    if (updates.interests) {
+      for (const update of updates.interests) {
+        if (update.confidence > 0.2) {
+          const existing = profile.interests.find(i => i.topic === update.topic);
+          
+          if (update.action === 'add' && !existing) {
+            profile.interests.push({
+              topic: update.topic,
+              confidence: update.confidence,
+              lastMentioned: now,
+              category: update.category || 'hobby'
+            });
+            significantChanges = true;
+          } else if (existing) {
+            if (update.action === 'boost') {
+              existing.confidence = Math.min(existing.confidence + update.confidence * 0.4, 1);
+            } else {
+              existing.confidence = update.confidence;
+            }
+            existing.lastMentioned = now;
+            if (update.category && existing.category !== update.category) {
+              existing.category = update.category;
+            }
+          }
+        }
+      }
+    }
+
+    // Apply activity updates
+    if (updates.activities) {
+      // Ensure recentActivities array exists
+      if (!profile.recentActivities) {
+        profile.recentActivities = [];
+      }
+
+      for (const activity of updates.activities) {
+        if (activity.confidence > 0.3) {
+          profile.recentActivities.push({
+            activity: activity.activity,
+            type: activity.type || 'hobby',
+            confidence: activity.confidence,
+            timeframe: activity.timeframe || 'current',
+            detectedAt: now
+          });
+          significantChanges = true;
+        }
+      }
+
+      // Keep only recent activities (last 50, max 30 days old)
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      profile.recentActivities = profile.recentActivities
+        .filter(a => a.detectedAt > thirtyDaysAgo)
+        .sort((a, b) => b.detectedAt - a.detectedAt)
+        .slice(0, 50);
+    }
+
+    // Apply mood updates
+    if (updates.mood) {
+      // Ensure moodHistory array exists
+      if (!profile.moodHistory) {
+        profile.moodHistory = [];
+      }
+
+      if (updates.mood.confidence > 0.4) {
+        profile.moodHistory.push({
+          mood: updates.mood.primary,
+          energy: updates.mood.energy,
+          confidence: updates.mood.confidence,
+          detectedAt: now
+        });
+
+        // Keep only recent mood entries (last 20, max 7 days old)
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        profile.moodHistory = profile.moodHistory
+          .filter(m => m.detectedAt > sevenDaysAgo)
+          .sort((a, b) => b.detectedAt - a.detectedAt)
+          .slice(0, 20);
+      }
+    }
+
+    // Apply communication adjustments
+    if (updates.communication_adjustments) {
+      for (const [style, adjustment] of Object.entries(updates.communication_adjustments)) {
+        if (profile.communicationStyle[style] !== undefined && Math.abs(adjustment) > 0.01) {
+          profile.communicationStyle[style] = Math.max(0, Math.min(1, 
+            profile.communicationStyle[style] + adjustment
+          ));
+        }
+      }
+    }
+
+    // Update profile completeness and metadata
+    if (significantChanges) {
+      profile.lastSignificantUpdate = now;
+    }
+    
+    profile.profileCompleteness = this.calculateProfileCompleteness(profile);
+
+    this.cleanupProfile(profile);
+  }
+
+  /**
+   * Calculate profile completeness score
+   */
+  calculateProfileCompleteness(profile) {
+    let score = 0;
+    
+    // Interests (40% of score)
+    const interestScore = Math.min(profile.interests.length / 10, 1) * 0.4;
+    score += interestScore;
+
+    // Communication style (20% of score)
+    const styleEntries = Object.values(profile.communicationStyle || {}).filter(v => v > 0);
+    const styleScore = Math.min(styleEntries.length / 5, 1) * 0.2;
+    score += styleScore;
+
+    // Recent activities (20% of score)
+    const activityScore = Math.min((profile.recentActivities?.length || 0) / 5, 1) * 0.2;
+    score += activityScore;
+
+    // Message count (10% of score)
+    const messageScore = Math.min((profile.totalMessages || 0) / 50, 1) * 0.1;
+    score += messageScore;
+
+    // Mood history (10% of score)
+    const moodScore = Math.min((profile.moodHistory?.length || 0) / 3, 1) * 0.1;
+    score += moodScore;
+
+    return Math.round(score * 100) / 100; // Round to 2 decimal places
+  }
+
+  /**
+   * Clean up profile data
+   */
+  cleanupProfile(profile) {
+    // Remove low-confidence interests
+    profile.interests = profile.interests.filter(i => i.confidence >= 0.15);
+    
+    // Sort and limit interests
+    profile.interests.sort((a, b) => b.confidence - a.confidence);
+    profile.interests = profile.interests.slice(0, 25);
+  }
+
+  /**
    * Batch analyze multiple messages
    */
   async analyzeBatch(messages) {
@@ -260,7 +747,7 @@ class ProfileAnalyzer {
     );
     
     await Promise.allSettled(promises);
-    log.info(`Batch analyzed ${messages.length} messages`);
+    log.system(`Batch analyzed ${messages.length} messages`);
   }
 }
 
