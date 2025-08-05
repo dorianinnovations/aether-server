@@ -206,7 +206,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
   "http://localhost:8083",
   "http://localhost:3000",
   "http://localhost:19006",
-  "https://server-a7od.onrender.com"
+  "https://aether-server-j5kh.onrender.com"
 ];
 
 export const corsSecurity = cors({
