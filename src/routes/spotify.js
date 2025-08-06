@@ -7,6 +7,15 @@ import { log } from '../utils/logger.js';
 
 const router = express.Router();
 
+// Debug endpoint (remove after testing)
+router.get('/debug-config', (req, res) => {
+  res.json({
+    clientId: process.env.SPOTIFY_CLIENT_ID,
+    redirectUri: process.env.SPOTIFY_REDIRECT_URI,
+    hasSecret: !!process.env.SPOTIFY_CLIENT_SECRET
+  });
+});
+
 // Get Spotify authorization URL
 router.get('/auth', protect, async (req, res) => {
   try {
