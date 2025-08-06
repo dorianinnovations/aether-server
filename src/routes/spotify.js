@@ -19,7 +19,9 @@ router.get('/debug-config', (req, res) => {
 // Get Spotify authorization URL
 router.get('/auth', protect, async (req, res) => {
   try {
-    const authUrl = spotifyService.getAuthUrl(req.user.id);
+    // Check if this is for mobile (Expo) or web
+    const platform = req.query.platform || 'web';
+    const authUrl = spotifyService.getAuthUrl(req.user.id, platform);
     
     res.json({
       success: true,
@@ -27,8 +29,9 @@ router.get('/auth', protect, async (req, res) => {
       message: 'Visit this URL to connect your Spotify account',
       debug: {
         clientId: process.env.SPOTIFY_CLIENT_ID,
-        redirectUri: process.env.SPOTIFY_REDIRECT_URI,
-        hasClientSecret: !!process.env.SPOTIFY_CLIENT_SECRET
+        redirectUri: spotifyService.getRedirectUri(platform),
+        hasClientSecret: !!process.env.SPOTIFY_CLIENT_SECRET,
+        platform
       }
     });
   } catch (error) {
@@ -50,8 +53,8 @@ router.get('/callback', async (req, res) => {
       return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3000'}/profile?spotify_error=missing_params`);
     }
 
-    // Exchange code for tokens
-    const tokens = await spotifyService.exchangeCodeForTokens(code);
+    // Exchange code for tokens (web platform)
+    const tokens = await spotifyService.exchangeCodeForTokens(code, 'web');
     
     // Update user with Spotify connection
     const user = await User.findById(userId);
@@ -94,6 +97,73 @@ router.get('/callback', async (req, res) => {
   } catch (error) {
     log.error('Spotify callback error:', error);
     res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3000'}/profile?spotify_error=connection_failed`);
+  }
+});
+
+// Handle mobile callback (for Expo app)
+router.post('/mobile-callback', async (req, res) => {
+  try {
+    const { code, state: userId, error } = req.body;
+    
+    if (error) {
+      return res.json({ 
+        success: false, 
+        error: error,
+        message: 'Spotify authorization failed'
+      });
+    }
+
+    if (!code || !userId) {
+      return res.json({ 
+        success: false, 
+        error: 'missing_params',
+        message: 'Missing authorization code or user ID'
+      });
+    }
+
+    // Exchange code for tokens (mobile platform)
+    const tokens = await spotifyService.exchangeCodeForTokens(code, 'mobile');
+    
+    // Update user with Spotify connection
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.json({ 
+        success: false, 
+        error: 'user_not_found',
+        message: 'User not found'
+      });
+    }
+
+    user.socialProxy.spotify = {
+      connected: true,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken
+    };
+
+    await user.save();
+
+    // Initial data fetch
+    await spotifyService.updateUserSpotifyData(user);
+
+    // Create activity for connecting Spotify
+    await Activity.create({
+      user: user._id,
+      type: 'profile_update',
+      content: { text: 'Connected Spotify account' },
+      visibility: 'friends'
+    });
+
+    res.json({
+      success: true,
+      message: 'Spotify connected successfully'
+    });
+  } catch (error) {
+    log.error('Spotify mobile callback error:', error);
+    res.json({ 
+      success: false, 
+      error: 'connection_failed',
+      message: 'Failed to connect Spotify account'
+    });
   }
 });
 
