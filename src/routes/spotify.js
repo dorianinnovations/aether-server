@@ -21,6 +21,20 @@ router.get('/auth', protect, async (req, res) => {
   try {
     // Check if this is for mobile (Expo) or web
     const platform = req.query.platform || 'web';
+    
+    // Debug logging
+    log.info('Spotify auth request:', {
+      platform,
+      userId: req.user.id,
+      hasSpotifyService: !!spotifyService,
+      spotifyConfig: {
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        hasSecret: !!process.env.SPOTIFY_CLIENT_SECRET,
+        redirectUriEnv: process.env.SPOTIFY_REDIRECT_URI,
+        redirectUriFromService: spotifyService.getRedirectUri(platform)
+      }
+    });
+
     const authUrl = spotifyService.getAuthUrl(req.user.id, platform);
     
     res.json({
@@ -36,7 +50,12 @@ router.get('/auth', protect, async (req, res) => {
     });
   } catch (error) {
     log.error('Spotify auth URL generation error:', error);
-    res.status(500).json({ error: 'Failed to generate Spotify auth URL' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to generate Spotify auth URL',
+      message: error.message,
+      stack: error.stack
+    });
   }
 });
 
