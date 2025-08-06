@@ -6,20 +6,28 @@ class SpotifyService {
   constructor() {
     this.clientId = env.SPOTIFY_CLIENT_ID;
     this.clientSecret = env.SPOTIFY_CLIENT_SECRET;
-    this.redirectUri = env.SPOTIFY_REDIRECT_URI;
+    this.redirectUris = {
+      web: env.SPOTIFY_REDIRECT_URI || 'https://aether-server-j5kh.onrender.com/spotify/callback',
+      mobile: 'aether://spotify-auth'
+    };
     this.baseUrl = 'https://api.spotify.com/v1';
     this.authUrl = 'https://accounts.spotify.com';
     
     // Debug logging
     console.log('Spotify Service Config:', {
       clientId: this.clientId,
-      redirectUri: this.redirectUri,
+      redirectUris: this.redirectUris,
       hasClientSecret: !!this.clientSecret
     });
   }
 
+  // Get redirect URI based on platform
+  getRedirectUri(platform = 'web') {
+    return this.redirectUris[platform] || this.redirectUris.web;
+  }
+
   // Generate Spotify authorization URL
-  getAuthUrl(userId) {
+  getAuthUrl(userId, platform = 'web') {
     const scopes = [
       'user-read-currently-playing',
       'user-read-recently-played',
@@ -27,11 +35,12 @@ class SpotifyService {
       'user-read-playback-state'
     ].join(' ');
 
+    const redirectUri = this.getRedirectUri(platform);
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: this.clientId,
       scope: scopes,
-      redirect_uri: this.redirectUri,
+      redirect_uri: redirectUri,
       state: userId // Pass user ID to identify after callback
     });
 
@@ -39,8 +48,9 @@ class SpotifyService {
   }
 
   // Exchange authorization code for access token
-  async exchangeCodeForTokens(code) {
+  async exchangeCodeForTokens(code, platform = 'web') {
     try {
+      const redirectUri = this.getRedirectUri(platform);
       const response = await fetch(`${this.authUrl}/api/token`, {
         method: 'POST',
         headers: {
@@ -50,7 +60,7 @@ class SpotifyService {
         body: new URLSearchParams({
           grant_type: 'authorization_code',
           code,
-          redirect_uri: this.redirectUri
+          redirect_uri: redirectUri
         })
       });
 
