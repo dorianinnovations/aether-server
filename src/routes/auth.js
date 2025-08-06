@@ -147,7 +147,7 @@ router.get("/login", (req, res) => {
     method: "POST",
     endpoint: "/auth/login",
     requiredFields: ["email", "password"],
-    description: "Use POST method to authenticate with email and password"
+    description: "Use POST method to authenticate with email/username and password. If the email field contains '@', it will search by email. Otherwise, it will search by username."
   });
 });
 
@@ -155,7 +155,7 @@ router.get("/login", (req, res) => {
 router.post(
   "/login",
   [
-    body("email").isEmail().withMessage("Valid email required."),
+    body("email").notEmpty().withMessage("Email or username is required."),
     body("password").notEmpty().withMessage("Password is required.")
   ],
   async (req, res) => {
@@ -172,7 +172,16 @@ router.post(
     log.auth('Login attempt', { email });
 
     try {
-      const user = await User.findOne({ email }).select("+password");
+      // Check if input contains "@" to determine if it's email or username
+      let user;
+      if (email.includes("@")) {
+        // Search by email
+        user = await User.findOne({ email }).select("+password");
+      } else {
+        // Search by username
+        user = await User.findOne({ username: email.toLowerCase() }).select("+password");
+      }
+
       if (!user || !(await user.comparePassword(password))) {
         return res.status(HTTP_STATUS.UNAUTHORIZED).json({ 
           status: MESSAGES.ERROR,
@@ -187,6 +196,7 @@ router.post(
           user: { 
             id: user._id, 
             email: user.email,
+            username: user.username,
             ...(user.name && { name: user.name })
           } 
         },
