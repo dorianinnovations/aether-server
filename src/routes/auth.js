@@ -140,6 +140,17 @@ router.post(
   }
 );
 
+// Login info endpoint (GET)
+router.get("/login", (req, res) => {
+  res.json({
+    message: "Login endpoint",
+    method: "POST",
+    endpoint: "/auth/login",
+    requiredFields: ["email", "password"],
+    description: "Use POST method to authenticate with email and password"
+  });
+});
+
 // Login Route
 router.post(
   "/login",
