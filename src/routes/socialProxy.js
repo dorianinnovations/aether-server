@@ -267,4 +267,50 @@ router.post('/activity/:activityId/comment', protect, async (req, res) => {
   }
 });
 
+// Create a new post for the feed
+router.post('/posts', protect, async (req, res) => {
+  try {
+    const { text, visibility = 'friends' } = req.body;
+    
+    if (!text || text.trim().length === 0) {
+      return res.status(400).json({ error: 'Post text is required' });
+    }
+    
+    if (text.trim().length > 2000) {
+      return res.status(400).json({ error: 'Post text too long (max 2000 characters)' });
+    }
+    
+    if (!['public', 'friends', 'private'].includes(visibility)) {
+      return res.status(400).json({ error: 'Invalid visibility setting' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Create new post activity
+    const activity = new Activity({
+      user: user._id,
+      type: 'post',
+      content: { 
+        text: text.trim() 
+      },
+      visibility
+    });
+
+    await activity.save();
+    await activity.populate('user', 'username name');
+
+    res.json({
+      success: true,
+      message: 'Post created successfully',
+      activity: activity
+    });
+  } catch (error) {
+    log.error('Create post error:', error);
+    res.status(500).json({ error: 'Failed to create post' });
+  }
+});
+
 export default router;

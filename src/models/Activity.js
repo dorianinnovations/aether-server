@@ -17,7 +17,8 @@ const ActivitySchema = new mongoose.Schema({
       'spotify_discovery',  // New favorite song/album
       'ai_interaction',     // Had interesting AI conversation
       'profile_update',     // Updated profile info
-      'friend_added'        // Added new friend
+      'friend_added',       // Added new friend
+      'post'                // User-created post for feed
     ],
     required: true
   },

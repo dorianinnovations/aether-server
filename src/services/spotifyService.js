@@ -13,12 +13,7 @@ class SpotifyService {
     this.baseUrl = 'https://api.spotify.com/v1';
     this.authUrl = 'https://accounts.spotify.com';
     
-    // Debug logging
-    console.log('Spotify Service Config:', {
-      clientId: this.clientId,
-      redirectUris: this.redirectUris,
-      hasClientSecret: !!this.clientSecret
-    });
+    // Config loaded silently
   }
 
   // Get redirect URI based on platform
