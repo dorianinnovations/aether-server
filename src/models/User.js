@@ -65,6 +65,89 @@ const UserSchema = new mongoose.Schema({
       type: String,
       enum: ['accepted'],
       default: 'accepted'
+    },
+    
+    // Friend-to-friend messaging with GitHub-style heat map tracking
+    messagingHistory: {
+      // Track daily conversation activity (GitHub-style heat map)
+      dailyActivity: [{
+        date: {
+          type: String, // YYYY-MM-DD format
+          required: true
+        },
+        myMessages: {
+          type: Number,
+          default: 0
+        },
+        theirMessages: {
+          type: Number,
+          default: 0
+        },
+        totalMessages: {
+          type: Number,
+          default: 0
+        },
+        lastActivity: {
+          type: Date,
+          default: Date.now
+        }
+      }],
+      
+      // Current conversation streak (both parties active within 24h)
+      activeStreak: {
+        isActive: {
+          type: Boolean,
+          default: false
+        },
+        startDate: Date,
+        lastBothActiveDate: Date, // Last date both sent messages within 24h
+        streakDays: {
+          type: Number,
+          default: 0
+        }
+      },
+      
+      // Last messages for context (limited to last 50 to prevent bloat)
+      recentMessages: [{
+        from: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true
+        },
+        content: {
+          type: String,
+          required: true,
+          maxlength: 2000
+        },
+        timestamp: {
+          type: Date,
+          default: Date.now
+        },
+        messageId: {
+          type: String,
+          required: true,
+          unique: true
+        }
+      }],
+      
+      // Conversation statistics
+      stats: {
+        totalConversations: {
+          type: Number,
+          default: 0
+        },
+        totalMessages: {
+          type: Number,
+          default: 0
+        },
+        averageResponseTime: Number, // in minutes
+        longestStreak: {
+          type: Number,
+          default: 0
+        },
+        firstConversation: Date,
+        lastConversation: Date
+      }
     }
   }],
   
