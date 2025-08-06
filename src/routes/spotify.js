@@ -15,7 +15,12 @@ router.get('/auth', protect, async (req, res) => {
     res.json({
       success: true,
       authUrl,
-      message: 'Visit this URL to connect your Spotify account'
+      message: 'Visit this URL to connect your Spotify account',
+      debug: {
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        redirectUri: process.env.SPOTIFY_REDIRECT_URI,
+        hasClientSecret: !!process.env.SPOTIFY_CLIENT_SECRET
+      }
     });
   } catch (error) {
     log.error('Spotify auth URL generation error:', error);
