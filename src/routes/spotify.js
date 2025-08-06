@@ -78,7 +78,19 @@ router.get('/callback', async (req, res) => {
       visibility: 'friends'
     });
 
-    res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3000'}/profile?spotify_connected=true`);
+    res.send(`
+      <html>
+        <body>
+          <h2>Spotify Connected Successfully!</h2>
+          <p>You can now close this window and return to the Aether app.</p>
+          <script>
+            setTimeout(() => {
+              window.close();
+            }, 3000);
+          </script>
+        </body>
+      </html>
+    `);
   } catch (error) {
     log.error('Spotify callback error:', error);
     res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3000'}/profile?spotify_error=connection_failed`);
