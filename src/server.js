@@ -19,6 +19,7 @@ import socialChatRoutes from './routes/socialChat.js';
 import socialProxyRoutes from './routes/socialProxy.js';
 import spotifyRoutes from './routes/spotify.js';
 import notificationRoutes from './routes/notifications.js';
+import friendMessagingRoutes from './routes/friendMessaging.js';
 
 // Initialize models
 import './models/User.js';
@@ -91,6 +92,7 @@ const initializeServer = async () => {
     app.use('/social-proxy', socialProxyRoutes);
     app.use('/spotify', spotifyRoutes);
     app.use('/notifications', notificationRoutes);
+    app.use('/friend-messaging', friendMessagingRoutes);
     app.use('/', socialChatRoutes);
     
     // Error handling
@@ -101,7 +103,7 @@ const initializeServer = async () => {
     const PORT = process.env.PORT || 5000;
     const server = app.listen(PORT, () => {
       console.log(`🚀 Aether Social Chat Server running on port ${PORT}`);
-      console.log(`📱 API endpoints: /auth, /user, /social-chat, /social-proxy, /spotify`);
+      console.log(`📱 API endpoints: /auth, /user, /social-chat, /social-proxy, /spotify, /friend-messaging`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
     });
 
