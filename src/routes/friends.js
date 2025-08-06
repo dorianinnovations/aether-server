@@ -300,4 +300,25 @@ router.delete('/remove', protect, async (req, res) => {
   }
 });
 
+/**
+ * GET /friends/requests - Get friend requests (placeholder)
+ * Note: Currently using direct mutual friendship without requests
+ */
+router.get('/requests', protect, async (req, res) => {
+  try {
+    // For now, return empty array since we use direct mutual friendship
+    res.json({
+      success: true,
+      requests: [],
+      message: "This system uses direct mutual friendship - no requests needed"
+    });
+  } catch (error) {
+    log.error('Friend requests error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get friend requests'
+    });
+  }
+});
+
 export default router;

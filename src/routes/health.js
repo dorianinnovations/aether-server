@@ -6,6 +6,25 @@ import AppAudit from "../utils/appAudit.js";
 
 const router = express.Router();
 
+// Root route for basic server info
+router.get("/", (req, res) => {
+  res.json({
+    service: "Aether AI Social Proxy Server",
+    version: "1.0.0",
+    status: "running",
+    endpoints: {
+      health: "/health",
+      auth: "/auth/*",
+      user: "/user/*", 
+      friends: "/friends/*",
+      socialProxy: "/social-proxy/*",
+      spotify: "/spotify/*",
+      socialChat: "/social-chat"
+    },
+    docs: "See CLAUDE.md for full API documentation"
+  });
+});
+
 // Health check for the AI service
 router.get("/llm", async (req, res) => {
   try {

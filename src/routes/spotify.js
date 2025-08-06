@@ -23,7 +23,7 @@ router.get('/auth', protect, async (req, res) => {
     const platform = req.query.platform || 'web';
     
     // Debug logging
-    log.info('Spotify auth request:', {
+    log.api('Spotify auth request:', {
       platform,
       userId: req.user.id,
       hasSpotifyService: !!spotifyService,
