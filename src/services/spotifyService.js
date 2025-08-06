@@ -6,9 +6,16 @@ class SpotifyService {
   constructor() {
     this.clientId = env.SPOTIFY_CLIENT_ID;
     this.clientSecret = env.SPOTIFY_CLIENT_SECRET;
-    this.redirectUri = env.SPOTIFY_REDIRECT_URI || `${env.HTTP_REFERER || 'http://localhost:3000'}/spotify/callback`;
+    this.redirectUri = env.SPOTIFY_REDIRECT_URI;
     this.baseUrl = 'https://api.spotify.com/v1';
     this.authUrl = 'https://accounts.spotify.com';
+    
+    // Debug logging
+    console.log('Spotify Service Config:', {
+      clientId: this.clientId,
+      redirectUri: this.redirectUri,
+      hasClientSecret: !!this.clientSecret
+    });
   }
 
   // Generate Spotify authorization URL
