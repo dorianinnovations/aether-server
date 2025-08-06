@@ -28,6 +28,14 @@ class SpotifyService {
 
   // Generate Spotify authorization URL
   getAuthUrl(userId, platform = 'web') {
+    // Validate required fields
+    if (!this.clientId) {
+      throw new Error('Spotify client ID not configured');
+    }
+    if (!userId) {
+      throw new Error('User ID is required for Spotify auth');
+    }
+
     const scopes = [
       'user-read-currently-playing',
       'user-read-recently-played',
@@ -36,6 +44,16 @@ class SpotifyService {
     ].join(' ');
 
     const redirectUri = this.getRedirectUri(platform);
+    
+    // Debug log
+    console.log('Generating Spotify auth URL:', {
+      userId,
+      platform,
+      redirectUri,
+      clientId: this.clientId,
+      scopes
+    });
+
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: this.clientId,
@@ -44,7 +62,10 @@ class SpotifyService {
       state: userId // Pass user ID to identify after callback
     });
 
-    return `${this.authUrl}/authorize?${params.toString()}`;
+    const authUrl = `${this.authUrl}/authorize?${params.toString()}`;
+    console.log('Generated auth URL:', authUrl);
+    
+    return authUrl;
   }
 
   // Exchange authorization code for access token
