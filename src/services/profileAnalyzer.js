@@ -7,6 +7,40 @@ import User from '../models/User.js';
 import { log } from '../utils/logger.js';
 import llmService from './llmService.js';
 
+// Helper function to extract JSON from markdown code blocks
+function extractJsonFromMarkdown(text) {
+  const trimmed = text.trim();
+  
+  // Check if it's already valid JSON
+  try {
+    JSON.parse(trimmed);
+    return trimmed;
+  } catch (e) {
+    // Not valid JSON, try to extract from markdown
+  }
+  
+  // Look for ```json blocks
+  const jsonBlockMatch = trimmed.match(/```json\s*\n([\s\S]*?)\n```/);
+  if (jsonBlockMatch) {
+    return jsonBlockMatch[1].trim();
+  }
+  
+  // Look for ``` blocks (without language)
+  const codeBlockMatch = trimmed.match(/```\s*\n([\s\S]*?)\n```/);
+  if (codeBlockMatch) {
+    return codeBlockMatch[1].trim();
+  }
+  
+  // Look for JSON-like content between backticks
+  const inlineMatch = trimmed.match(/`([^`]*{[\s\S]*}[^`]*)`/);
+  if (inlineMatch) {
+    return inlineMatch[1].trim();
+  }
+  
+  // Return original if no patterns match
+  return trimmed;
+}
+
 class ProfileAnalyzer {
   constructor() {
     // Interest detection patterns
@@ -522,7 +556,21 @@ Output ONLY a valid JSON object:
         throw new Error(`LLM service failed: ${response.error}`);
       }
 
-      const synthesized = JSON.parse(response.completion.trim());
+      const cleanJson = extractJsonFromMarkdown(response.completion);
+      let synthesized;
+      
+      try {
+        synthesized = JSON.parse(cleanJson);
+      } catch (parseError) {
+        log.error('JSON Parse Error in ProfileAnalyzer:', {
+          originalLength: response.completion.length,
+          cleanedLength: cleanJson.length,
+          originalPreview: response.completion.substring(0, 200),
+          cleanedPreview: cleanJson.substring(0, 200),
+          parseError: parseError.message
+        });
+        throw new Error(`Failed to parse synthesized profile data: ${parseError.message}`);
+      }
       
       log.debug('🧠 Synthesis completed:', {
         significant: synthesized.significant,
