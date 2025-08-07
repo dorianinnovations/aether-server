@@ -60,7 +60,7 @@ class FriendMessagingService {
       await fromUser.save();
       await toUser.save();
       
-      log.info(`Message sent from ${fromUser.username} to ${toUser.username}`);
+      log.system(`Message sent from ${fromUser.username} to ${toUser.username}`);
       
       return {
         success: true,
