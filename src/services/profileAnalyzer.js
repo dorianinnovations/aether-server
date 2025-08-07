@@ -19,22 +19,34 @@ function extractJsonFromMarkdown(text) {
     // Not valid JSON, try to extract from markdown
   }
   
-  // Look for ```json blocks
-  const jsonBlockMatch = trimmed.match(/```json\s*\n([\s\S]*?)\n```/);
+  // More robust markdown parsing - handle various formats
+  // Look for ```json blocks (with optional whitespace and newlines)
+  let jsonBlockMatch = trimmed.match(/```json\s*([\s\S]*?)```/);
   if (jsonBlockMatch) {
     return jsonBlockMatch[1].trim();
   }
   
   // Look for ``` blocks (without language)
-  const codeBlockMatch = trimmed.match(/```\s*\n([\s\S]*?)\n```/);
-  if (codeBlockMatch) {
-    return codeBlockMatch[1].trim();
+  jsonBlockMatch = trimmed.match(/```\s*([\s\S]*?)```/);
+  if (jsonBlockMatch) {
+    const content = jsonBlockMatch[1].trim();
+    // Only return if it looks like JSON (starts with { or [)
+    if (content.startsWith('{') || content.startsWith('[')) {
+      return content;
+    }
   }
   
-  // Look for JSON-like content between backticks
+  // Look for JSON-like content between single backticks
   const inlineMatch = trimmed.match(/`([^`]*{[\s\S]*}[^`]*)`/);
   if (inlineMatch) {
     return inlineMatch[1].trim();
+  }
+  
+  // If all else fails, look for the first { to last } in the text
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return trimmed.substring(firstBrace, lastBrace + 1);
   }
   
   // Return original if no patterns match

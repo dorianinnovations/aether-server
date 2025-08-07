@@ -22,7 +22,7 @@ router.get('/stream', protect, (req, res) => {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  log.info(`🔔 Starting notification stream for user ${userId}`, { correlationId });
+  log.api(`🔔 Starting notification stream for user ${userId}`, { correlationId });
 
   // Add client to notification service
   const cleanup = notificationService.addClient(userId, res, req);
