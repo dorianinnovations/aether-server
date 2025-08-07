@@ -339,4 +339,122 @@ router.post("/refresh", protectRefresh, async (req, res) => {
   }
 });
 
+// Onboarding Management Routes
+router.post("/onboarding/mark-welcome-seen", protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          'onboarding.hasSeenWelcome': true,
+          'onboarding.welcomeShownAt': new Date()
+        }
+      },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        status: MESSAGES.ERROR,
+        message: 'User not found'
+      });
+    }
+
+    log.auth('Welcome prompt marked as seen', { userId });
+
+    res.json({
+      status: MESSAGES.SUCCESS,
+      message: 'Welcome status updated successfully',
+      data: {
+        hasSeenWelcome: user.onboarding.hasSeenWelcome,
+        welcomeShownAt: user.onboarding.welcomeShownAt
+      }
+    });
+
+  } catch (error) {
+    log.error('Failed to mark welcome as seen', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      status: MESSAGES.ERROR,
+      message: 'Failed to update welcome status'
+    });
+  }
+});
+
+router.post("/onboarding/complete", protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          'onboarding.hasSeenWelcome': true,
+          'onboarding.onboardingCompletedAt': new Date(),
+          'onboarding.skipWelcomePrompt': true
+        }
+      },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        status: MESSAGES.ERROR,
+        message: 'User not found'
+      });
+    }
+
+    log.auth('Onboarding completed', { userId });
+
+    res.json({
+      status: MESSAGES.SUCCESS,
+      message: 'Onboarding completed successfully',
+      data: {
+        onboardingCompletedAt: user.onboarding.onboardingCompletedAt,
+        skipWelcomePrompt: user.onboarding.skipWelcomePrompt
+      }
+    });
+
+  } catch (error) {
+    log.error('Failed to complete onboarding', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      status: MESSAGES.ERROR,
+      message: 'Failed to complete onboarding'
+    });
+  }
+});
+
+router.get("/onboarding/status", protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const user = await User.findById(userId).select('onboarding');
+    
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        status: MESSAGES.ERROR,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      status: MESSAGES.SUCCESS,
+      data: {
+        hasSeenWelcome: user.onboarding?.hasSeenWelcome || false,
+        onboardingCompletedAt: user.onboarding?.onboardingCompletedAt || null,
+        skipWelcomePrompt: user.onboarding?.skipWelcomePrompt || false,
+        welcomeShownAt: user.onboarding?.welcomeShownAt || null
+      }
+    });
+
+  } catch (error) {
+    log.error('Failed to get onboarding status', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      status: MESSAGES.ERROR,
+      message: 'Failed to get onboarding status'
+    });
+  }
+});
+
 export default router; 

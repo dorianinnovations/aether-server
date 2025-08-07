@@ -72,7 +72,7 @@ Just give me your honest thoughts on what I've sent.`;
     // Get user context for AI personalization
     let userContext = null;
     if (userId) {
-      const user = await User.findById(userId).select('username socialProxy profile');
+      const user = await User.findById(userId).select('username socialProxy profile onboarding');
       if (user) {
         // Use conversation message count for prompt classification
         const messageCount = conversation.messageCount || 0;
@@ -81,6 +81,7 @@ Just give me your honest thoughts on what I've sent.`;
         userContext = {
           username: user.username,
           socialProxy: user.socialProxy,
+          onboarding: user.onboarding,
           messageCount: messageCount,
           conversationId: conversation._id
         };
@@ -211,6 +212,21 @@ Use this current information to provide an accurate, up-to-date response.`;
           });
           
           log.debug(`📊 Profile analysis queued: ${analysisJobId}`, { userId, correlationId });
+
+          // Auto-mark welcome as seen if this was a first message welcome response
+          if (userContext?.messageCount === 0 && !userContext?.onboarding?.hasSeenWelcome) {
+            try {
+              await User.findByIdAndUpdate(userId, {
+                $set: {
+                  'onboarding.hasSeenWelcome': true,
+                  'onboarding.welcomeShownAt': new Date()
+                }
+              });
+              log.debug('🎯 Welcome prompt automatically marked as seen', { userId, correlationId });
+            } catch (error) {
+              log.error('Failed to auto-mark welcome as seen', error, { userId, correlationId });
+            }
+          }
         }
       } else {
         res.write(`data: ${JSON.stringify({content: 'Sorry, I encountered an error. Please try again.'})}\n\n`);
@@ -327,7 +343,7 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
     // Get user context for AI personalization
     let userContext = null;
     if (userId) {
-      const user = await User.findById(userId).select('username socialProxy profile');
+      const user = await User.findById(userId).select('username socialProxy profile onboarding');
       if (user) {
         const messageCount = conversation.messageCount || 0;
         log.request.step(`Conversation loaded: ${messageCount} messages`, correlationId, { username: user.username, conversationId: conversation._id });
@@ -335,6 +351,7 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
         userContext = {
           username: user.username,
           socialProxy: user.socialProxy,
+          onboarding: user.onboarding,
           messageCount: messageCount,
           conversationId: conversation._id
         };
@@ -516,6 +533,21 @@ Just give me your honest thoughts on what I've sent.`;
             fileCount: processedFiles.length,
             correlationId 
           });
+
+          // Auto-mark welcome as seen if this was a first message welcome response
+          if (userContext?.messageCount === 0 && !userContext?.onboarding?.hasSeenWelcome) {
+            try {
+              await User.findByIdAndUpdate(userId, {
+                $set: {
+                  'onboarding.hasSeenWelcome': true,
+                  'onboarding.welcomeShownAt': new Date()
+                }
+              });
+              log.debug('🎯 Welcome prompt automatically marked as seen', { userId, correlationId });
+            } catch (error) {
+              log.error('Failed to auto-mark welcome as seen', error, { userId, correlationId });
+            }
+          }
         }
       } else {
         res.write(`data: ${JSON.stringify({content: 'Sorry, I encountered an error processing your request. Please try again.'})}\n\n`);
