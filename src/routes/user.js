@@ -4,7 +4,6 @@ import User from "../models/User.js";
 import UserBadge from "../models/UserBadge.js";
 import { HTTP_STATUS, MESSAGES } from "../config/constants.js";
 import logger from "../utils/logger.js";
-import { getUserTier, getTierLimits } from "../config/tiers.js";
 
 const router = express.Router();
 
@@ -24,20 +23,11 @@ router.get("/profile", protect, async (req, res) => {
     const badges = await UserBadge.getUserBadges(req.user.id);
     const badgeData = badges.map(badge => badge.toAPIResponse());
     
-    // Add tier information to user profile
-    const userTier = getUserTier(user);
-    const tierLimits = getTierLimits(user);
-    
     res.json({ 
       status: MESSAGES.SUCCESS, 
       data: { 
         user,
-        badges: badgeData,
-        tierBadge: {
-          tier: userTier,
-          name: tierLimits.name,
-          features: tierLimits.features
-        }
+        badges: badgeData
       }
     });
   } catch (err) {
