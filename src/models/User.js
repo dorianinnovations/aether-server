@@ -127,6 +127,13 @@ const UserSchema = new mongoose.Schema({
           type: String,
           required: true,
           unique: true
+        },
+        readAt: {
+          type: Date
+        },
+        deliveredAt: {
+          type: Date,
+          default: Date.now
         }
       }],
       

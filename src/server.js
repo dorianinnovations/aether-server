@@ -1,6 +1,8 @@
 import express from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
+import { createServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 
 // Core imports
 import { log, requestLogger, errorLogger, globalErrorHandler } from './utils/index.js';
@@ -102,12 +104,28 @@ const initializeServer = async () => {
     app.use(errorLogger);
     app.use(globalErrorHandler);
     
-    // Start server
+    // Start server with Socket.IO
     const PORT = process.env.PORT || 5000;
-    const server = app.listen(PORT, () => {
+    const server = createServer(app);
+    const io = new SocketIOServer(server, {
+      cors: {
+        origin: process.env.NODE_ENV === 'production' ? 
+          ['https://aether-server-j5kh.onrender.com'] : 
+          ['http://localhost:3000', 'exp://192.168.1.100:8081', 'exp://localhost:8081'],
+        methods: ['GET', 'POST'],
+        credentials: true
+      }
+    });
+
+    // Initialize real-time messaging
+    const { initializeRealTimeMessaging } = await import('./services/realTimeMessaging.js');
+    initializeRealTimeMessaging(io);
+    
+    server.listen(PORT, () => {
       console.log(`🚀 Aether Social Chat Server running on port ${PORT}`);
       console.log(`📱 API endpoints: /auth, /user, /social-chat, /social-proxy, /spotify, /friend-messaging`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+      console.log(`⚡ Socket.IO real-time messaging enabled`);
     });
 
     // Graceful shutdown

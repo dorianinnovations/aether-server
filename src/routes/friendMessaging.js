@@ -248,6 +248,49 @@ router.get('/stats/:username', protect, async (req, res) => {
 });
 
 /**
+ * POST /friend-messaging/mark-read - Mark messages as read
+ */
+router.post('/mark-read', protect, async (req, res) => {
+  try {
+    const { friendUsername, messageIds } = req.body;
+    const userId = req.user.id;
+    
+    if (!friendUsername) {
+      return res.status(400).json({
+        success: false,
+        error: 'Friend username is required'
+      });
+    }
+    
+    const result = await friendMessagingService.markMessagesAsRead(
+      userId,
+      friendUsername,
+      messageIds || []
+    );
+    
+    res.json({
+      success: true,
+      markedAsRead: result.markedAsRead
+    });
+    
+  } catch (error) {
+    log.error('Mark messages as read error:', error);
+    
+    if (error.message === 'User not found') {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to mark messages as read'
+    });
+  }
+});
+
+/**
  * GET /friend-messaging/streaks - Get all active messaging streaks
  */
 router.get('/streaks', protect, async (req, res) => {
