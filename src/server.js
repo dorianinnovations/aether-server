@@ -20,9 +20,11 @@ import socialProxyRoutes from './routes/socialProxy.js';
 import spotifyRoutes from './routes/spotify.js';
 import notificationRoutes from './routes/notifications.js';
 import friendMessagingRoutes from './routes/friendMessaging.js';
+import badgeRoutes from './routes/badges.js';
 
 // Initialize models
 import './models/User.js';
+import './models/UserBadge.js';
 import './models/Conversation.js';
 import './models/Activity.js';
 
@@ -85,6 +87,7 @@ const initializeServer = async () => {
     app.use('/', healthRoutes);
     app.use('/auth', authRoutes);
     app.use('/user', userRoutes);
+    app.use('/badges', badgeRoutes);
     app.use('/conversation', conversationRoutes);
     // app.use('/matching', matchingRoutes); // REMOVED - no more dating
     app.use('/friends', friendsRoutes);
