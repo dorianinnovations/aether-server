@@ -8,7 +8,7 @@ class SpotifyService {
     this.clientSecret = env.SPOTIFY_CLIENT_SECRET;
     this.redirectUris = {
       web: env.SPOTIFY_REDIRECT_URI || 'https://aether-server-j5kh.onrender.com/spotify/callback',
-      mobile: 'aether://spotify-auth'
+      mobile: env.SPOTIFY_REDIRECT_URI || 'https://aether-server-j5kh.onrender.com/spotify/callback'
     };
     this.baseUrl = 'https://api.spotify.com/v1';
     this.authUrl = 'https://accounts.spotify.com';

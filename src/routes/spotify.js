@@ -102,13 +102,61 @@ router.get('/callback', async (req, res) => {
 
     res.send(`
       <html>
+        <head>
+          <title>Spotify Connected</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              text-align: center;
+              padding: 40px 20px;
+              background: linear-gradient(135deg, #1DB954, #1ed760);
+              color: white;
+              margin: 0;
+              min-height: 100vh;
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+            }
+            .container {
+              max-width: 400px;
+              margin: 0 auto;
+            }
+            h1 { margin-bottom: 20px; font-size: 24px; }
+            p { margin-bottom: 30px; font-size: 16px; opacity: 0.9; }
+            .success-icon { font-size: 64px; margin-bottom: 20px; }
+            .button {
+              background: rgba(255,255,255,0.2);
+              border: 2px solid rgba(255,255,255,0.3);
+              color: white;
+              padding: 12px 24px;
+              border-radius: 25px;
+              text-decoration: none;
+              font-size: 16px;
+              font-weight: 600;
+              display: inline-block;
+              margin-top: 20px;
+            }
+          </style>
+        </head>
         <body>
-          <h2>Spotify Connected Successfully!</h2>
-          <p>You can now close this window and return to the Aether app.</p>
+          <div class="container">
+            <div class="success-icon">🎵</div>
+            <h1>Spotify Connected!</h1>
+            <p>Your Spotify account has been successfully connected to Aether.</p>
+            <p>You can now close this window and return to the app.</p>
+            <a href="#" class="button" onclick="window.close(); return false;">Close Window</a>
+          </div>
           <script>
+            // Auto-close after 5 seconds
             setTimeout(() => {
               window.close();
-            }, 3000);
+            }, 5000);
+            
+            // Post message to parent window (for mobile web views)
+            if (window.parent !== window) {
+              window.parent.postMessage('spotify-connected', '*');
+            }
           </script>
         </body>
       </html>
