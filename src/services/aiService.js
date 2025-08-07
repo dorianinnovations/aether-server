@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import { env } from '../config/environment.js';
+import conversationService from './conversationService.js';
 
 class AIService {
   constructor() {
@@ -236,6 +237,33 @@ Be like a supportive friend who helps them stay connected.`;
     return basePrompt;
   }
 
+  async getRecentConversationHistory(conversationId, userId, messageLimit = 20) {
+    try {
+      const conversation = await conversationService.getConversation(userId, conversationId, messageLimit);
+      
+      if (!conversation || !conversation.messages || conversation.messages.length === 0) {
+        return [];
+      }
+
+      // Get the last N messages (excluding the current one being processed)
+      const messages = conversation.messages.slice(-messageLimit);
+      
+      // Convert to OpenAI message format, filtering out system messages and empty content
+      const formattedMessages = messages
+        .filter(msg => msg.content && msg.content.trim() && msg.role !== 'system')
+        .slice(-Math.min(messageLimit, 15)) // Limit to 15 messages to avoid token limits
+        .map(msg => ({
+          role: msg.role === 'assistant' ? 'assistant' : 'user',
+          content: msg.content
+        }));
+
+      return formattedMessages;
+    } catch (error) {
+      console.error('Error fetching conversation history:', error);
+      return [];
+    }
+  }
+
   async chatStream(message, model = 'openai/gpt-4o') {
     // For now, use regular chat and return response for word-by-word streaming
     return await this.chat(message, model);
@@ -247,13 +275,22 @@ Be like a supportive friend who helps them stay connected.`;
       const queryType = this.classifyQuery(message, userContext);
       console.log(`🎯 Query classified as: ${queryType} (msg count: ${userContext?.messageCount || 0})`);
       
-      // Build messages array with potential image support
+      // Build messages array with conversation history
       const messages = [
         { 
           role: 'system', 
           content: this.buildSystemPrompt(userContext, queryType)
         }
       ];
+
+      // Add conversation history for better context (except for first message welcome)
+      if (queryType !== 'first_message_welcome' && userContext?.conversationId) {
+        const conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId);
+        if (conversationHistory && conversationHistory.length > 0) {
+          messages.push(...conversationHistory);
+          console.log(`💭 Added ${conversationHistory.length} previous messages for context`);
+        }
+      }
 
       // Handle attachments (images) for vision
       if (attachments && attachments.length > 0) {
@@ -385,6 +422,15 @@ Remember: You're helping them understand what they've shared while being aware t
           content: systemPrompt
         }
       ];
+
+      // Add conversation history for better context (except for first message welcome)
+      if (queryType !== 'first_message_welcome' && userContext?.conversationId) {
+        const conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId);
+        if (conversationHistory && conversationHistory.length > 0) {
+          messages.push(...conversationHistory);
+          console.log(`💭 Added ${conversationHistory.length} previous messages for context (with files)`);
+        }
+      }
 
       // Build user message content array
       const content = [];
