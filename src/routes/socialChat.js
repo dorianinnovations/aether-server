@@ -150,7 +150,7 @@ Just give me your honest thoughts on what I've sent.`;
             const searchContext = `Web search results for "${cleanMessage}":
 ${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
 
-Use this current information to provide an accurate, up-to-date response.`;
+Use this current information to provide an accurate, up-to-date response. Do not include the raw search results or JSON data in your response - just use the information naturally in your answer.`;
             
             enhancedMessage = `${processedMessage}\n\n${searchContext}`;
             log.request.step('Web search completed', correlationId, { resultCount: searchResult.structure.results.length });
@@ -428,7 +428,7 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
               const searchContext = `Web search results for "${cleanMessage}":
 ${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
 
-Use this current information to provide an accurate, up-to-date response.`;
+Use this current information to provide an accurate, up-to-date response. Do not include the raw search results or JSON data in your response - just use the information naturally in your answer.`;
               
               enhancedMessage = `${userMessage}\n\n${searchContext}`;
               log.request.step('Web search completed', correlationId, { resultCount: searchResult.structure.results.length });

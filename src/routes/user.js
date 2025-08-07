@@ -40,6 +40,52 @@ router.get("/profile", protect, async (req, res) => {
   }
 });
 
+// Update user profile
+router.put("/profile", protect, async (req, res) => {
+  try {
+    const { name, bio, location, website, dateOfBirth } = req.body;
+    
+    // Build update object with only provided fields
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (bio !== undefined) updateData.bio = bio;
+    if (location !== undefined) updateData.location = location;
+    if (website !== undefined) updateData.website = website;
+    if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth;
+    
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: updateData },
+      { new: true, select: "-password -__v" }
+    );
+    
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        status: MESSAGES.ERROR,
+        message: MESSAGES.USER_NOT_FOUND
+      });
+    }
+    
+    logger.info('User profile updated', {
+      userId: req.user.id,
+      updatedFields: Object.keys(updateData)
+    });
+    
+    res.json({
+      status: MESSAGES.SUCCESS,
+      message: "Profile updated successfully",
+      data: { user }
+    });
+    
+  } catch (err) {
+    logger.error("Error updating user profile:", err);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      status: MESSAGES.ERROR,
+      message: "Failed to update profile"
+    });
+  }
+});
+
 // User settings routes
 router.get("/settings", protect, async (req, res) => {
   try {
