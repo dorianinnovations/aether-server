@@ -1,6 +1,7 @@
 import express from "express";
 import { protect } from "../middleware/auth.js";
 import User from "../models/User.js";
+import UserBadge from "../models/UserBadge.js";
 import { HTTP_STATUS, MESSAGES } from "../config/constants.js";
 import logger from "../utils/logger.js";
 import { getUserTier, getTierLimits } from "../config/tiers.js";
@@ -18,6 +19,11 @@ router.get("/profile", protect, async (req, res) => {
         message: MESSAGES.USER_NOT_FOUND 
       });
     }
+    
+    // Get user badges
+    const badges = await UserBadge.getUserBadges(req.user.id);
+    const badgeData = badges.map(badge => badge.toAPIResponse());
+    
     // Add tier information to user profile
     const userTier = getUserTier(user);
     const tierLimits = getTierLimits(user);
@@ -26,6 +32,7 @@ router.get("/profile", protect, async (req, res) => {
       status: MESSAGES.SUCCESS, 
       data: { 
         user,
+        badges: badgeData,
         tierBadge: {
           tier: userTier,
           name: tierLimits.name,
@@ -164,6 +171,9 @@ router.delete("/delete", protect, async (req, res) => {
       });
     }
 
+    // Delete user badges first
+    await UserBadge.deleteMany({ user: userId });
+
     // Delete the user account
     await User.findByIdAndDelete(userId);
 
@@ -188,5 +198,171 @@ router.delete("/delete", protect, async (req, res) => {
   }
 });
 
+// User badge endpoints
+router.get("/:userId/badges", protect, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Verify user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const badges = await UserBadge.getUserBadges(userId);
+    const badgeData = badges.map(badge => badge.toAPIResponse());
+
+    res.json({
+      success: true,
+      data: {
+        badges: badgeData
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching user badges:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to fetch user badges'
+    });
+  }
+});
+
+router.post("/:userId/badges", protect, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { badgeType, metadata = {} } = req.body;
+
+    if (!badgeType) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        message: 'Badge type is required'
+      });
+    }
+
+    if (!['founder', 'og'].includes(badgeType)) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        message: 'Invalid badge type'
+      });
+    }
+
+    // Verify user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const badge = await UserBadge.awardBadge(userId, badgeType, req.user.id, metadata);
+    
+    logger.info(`Badge awarded: ${badgeType} to user ${userId} by ${req.user.id}`);
+
+    res.status(HTTP_STATUS.CREATED).json({
+      success: true,
+      data: {
+        badge: badge.toAPIResponse()
+      },
+      message: `${badgeType} badge awarded successfully`
+    });
+  } catch (error) {
+    if (error.message.includes('already has')) {
+      return res.status(HTTP_STATUS.CONFLICT).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    logger.error('Error awarding badge:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to award badge'
+    });
+  }
+});
+
+router.delete("/:userId/badges/:badgeType", protect, async (req, res) => {
+  try {
+    const { userId, badgeType } = req.params;
+
+    // Verify user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const result = await UserBadge.deleteOne({ user: userId, badgeType });
+    
+    if (result.deletedCount === 0) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        message: 'Badge not found'
+      });
+    }
+
+    logger.info(`Badge removed: ${badgeType} from user ${userId} by ${req.user.id}`);
+
+    res.json({
+      success: true,
+      message: `${badgeType} badge removed successfully`
+    });
+  } catch (error) {
+    logger.error('Error removing badge:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to remove badge'
+    });
+  }
+});
+
+router.put("/badges/:badgeId", protect, async (req, res) => {
+  try {
+    const { badgeId } = req.params;
+    const { isVisible } = req.body;
+
+    if (typeof isVisible !== 'boolean') {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        message: 'isVisible must be a boolean'
+      });
+    }
+
+    const badge = await UserBadge.findOne({ 
+      _id: badgeId, 
+      user: req.user.id 
+    });
+
+    if (!badge) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        message: 'Badge not found or not owned by user'
+      });
+    }
+
+    badge.isVisible = isVisible;
+    await badge.save();
+
+    res.json({
+      success: true,
+      data: {
+        badge: badge.toAPIResponse()
+      },
+      message: 'Badge visibility updated successfully'
+    });
+  } catch (error) {
+    logger.error('Error updating badge visibility:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to update badge visibility'
+    });
+  }
+});
 
 export default router; 
