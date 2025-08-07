@@ -213,8 +213,8 @@ Use this current information to provide an accurate, up-to-date response.`;
           
           log.debug(`📊 Profile analysis queued: ${analysisJobId}`, { userId, correlationId });
 
-          // Auto-mark welcome as seen if this was a first message welcome response
-          if (userContext?.messageCount === 0 && !userContext?.onboarding?.hasSeenWelcome) {
+          // Auto-mark welcome as seen if this was a first time welcome response
+          if (!userContext?.onboarding?.hasSeenWelcome) {
             try {
               await User.findByIdAndUpdate(userId, {
                 $set: {
@@ -534,8 +534,8 @@ Just give me your honest thoughts on what I've sent.`;
             correlationId 
           });
 
-          // Auto-mark welcome as seen if this was a first message welcome response
-          if (userContext?.messageCount === 0 && !userContext?.onboarding?.hasSeenWelcome) {
+          // Auto-mark welcome as seen if this was a first time welcome response
+          if (!userContext?.onboarding?.hasSeenWelcome) {
             try {
               await User.findByIdAndUpdate(userId, {
                 $set: {
