@@ -1,5 +1,6 @@
 import express from "express";
 import { protect } from "../middleware/auth.js";
+import { uploadProfilePhoto, uploadBannerImage, handleProfileImageError, validateProfileImage } from "../middleware/profileImageUpload.js";
 import User from "../models/User.js";
 import UserBadge from "../models/UserBadge.js";
 import { HTTP_STATUS, MESSAGES } from "../config/constants.js";
@@ -351,6 +352,185 @@ router.put("/badges/:badgeId", protect, async (req, res) => {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Failed to update badge visibility'
+    });
+  }
+});
+
+// Profile Photo Upload
+router.post("/profile-photo", protect, uploadProfilePhoto, handleProfileImageError, validateProfileImage, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const imageData = req.validatedImage;
+
+    // Create base64 data URL for storage
+    const base64Data = imageData.buffer.toString('base64');
+    const dataUrl = `data:${imageData.mimetype};base64,${base64Data}`;
+
+    // Update user profile photo
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          profilePhoto: {
+            url: dataUrl,
+            filename: imageData.sanitizedName,
+            size: imageData.size,
+            mimeType: imageData.mimetype,
+            uploadedAt: new Date()
+          }
+        }
+      },
+      { new: true, select: 'profilePhoto' }
+    );
+
+    logger.info('Profile photo updated', {
+      userId,
+      filename: imageData.sanitizedName,
+      size: imageData.size
+    });
+
+    res.json({
+      success: true,
+      message: 'Profile photo updated successfully',
+      data: {
+        profilePhoto: user.profilePhoto
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error updating profile photo:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to update profile photo'
+    });
+  }
+});
+
+// Banner Image Upload  
+router.post("/banner-image", protect, uploadBannerImage, handleProfileImageError, validateProfileImage, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const imageData = req.validatedImage;
+
+    // Create base64 data URL for storage
+    const base64Data = imageData.buffer.toString('base64');
+    const dataUrl = `data:${imageData.mimetype};base64,${base64Data}`;
+
+    // Update user banner image
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          bannerImage: {
+            url: dataUrl,
+            filename: imageData.sanitizedName,
+            size: imageData.size,
+            mimeType: imageData.mimetype,
+            uploadedAt: new Date()
+          }
+        }
+      },
+      { new: true, select: 'bannerImage' }
+    );
+
+    logger.info('Banner image updated', {
+      userId,
+      filename: imageData.sanitizedName,
+      size: imageData.size
+    });
+
+    res.json({
+      success: true,
+      message: 'Banner image updated successfully',
+      data: {
+        bannerImage: user.bannerImage
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error updating banner image:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to update banner image'
+    });
+  }
+});
+
+// Get Profile Images
+router.get("/images", protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('profilePhoto bannerImage');
+    
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        profilePhoto: user.profilePhoto || null,
+        bannerImage: user.bannerImage || null
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error fetching profile images:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to fetch profile images'
+    });
+  }
+});
+
+// Delete Profile Photo
+router.delete("/profile-photo", protect, async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $unset: { profilePhoto: 1 } },
+      { new: true, select: 'profilePhoto' }
+    );
+
+    logger.info('Profile photo deleted', { userId: req.user.id });
+
+    res.json({
+      success: true,
+      message: 'Profile photo deleted successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error deleting profile photo:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to delete profile photo'
+    });
+  }
+});
+
+// Delete Banner Image
+router.delete("/banner-image", protect, async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $unset: { bannerImage: 1 } },
+      { new: true, select: 'bannerImage' }
+    );
+
+    logger.info('Banner image deleted', { userId: req.user.id });
+
+    res.json({
+      success: true,
+      message: 'Banner image deleted successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error deleting banner image:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: 'Failed to delete banner image'
     });
   }
 });
