@@ -6,4 +6,3 @@
 export { env } from './environment.js';
 export { default as connectDB } from './database.js';
 export * from './constants.js';
-export * from './tiers.js';

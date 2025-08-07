@@ -119,8 +119,6 @@ class MongoSchemaRecreator {
     // Create indexes for users
     await users.createIndex({ email: 1 }, { unique: true });
     await users.createIndex({ createdAt: -1 });
-    await users.createIndex({ 'subscription.aether.isActive': 1 });
-    await users.createIndex({ 'profile.tier': 1 });
     
     console.log('✅ Users collection created with indexes');
   }
@@ -230,15 +228,6 @@ class MongoSchemaRecreator {
       email: 'schema-test@numina.ai',
       password: '$2b$12$hashedPasswordHere',
       profile: {},
-      subscription: {
-        aether: {
-          isActive: false,
-          startDate: null,
-          endDate: null,
-          plan: null
-        }
-      },
-      usage: {},
       emotionalLog: [],
       createdAt: new Date(),
       updatedAt: new Date()
