@@ -7,6 +7,7 @@
 import User from '../models/User.js';
 import { v4 as uuidv4 } from 'uuid';
 import { log } from '../utils/logger.js';
+import realTimeMessagingService from './realTimeMessaging.js';
 
 class FriendMessagingService {
   
@@ -45,7 +46,8 @@ class FriendMessagingService {
         from: fromUser._id,
         content: content.trim(),
         timestamp,
-        messageId
+        messageId,
+        deliveredAt: timestamp
       };
       
       // Update messaging history for both users
@@ -59,6 +61,13 @@ class FriendMessagingService {
       // Save both users
       await fromUser.save();
       await toUser.save();
+      
+      // Send real-time notification to friend
+      await realTimeMessagingService.notifyNewMessage(
+        fromUser.username, 
+        toUser.username, 
+        message
+      );
       
       log.system(`Message sent from ${fromUser.username} to ${toUser.username}`);
       
@@ -278,7 +287,10 @@ class FriendMessagingService {
           content: msg.content,
           timestamp: msg.timestamp,
           fromMe: msg.from.toString() === userId,
-          from: msg.from.toString() === userId ? user.username : friend.username
+          from: msg.from.toString() === userId ? user.username : friend.username,
+          readAt: msg.readAt,
+          deliveredAt: msg.deliveredAt,
+          status: this.getMessageStatus(msg, userId)
         }));
       
       return {
@@ -330,6 +342,82 @@ class FriendMessagingService {
     return 4;
   }
   
+  /**
+   * Get message status for display purposes
+   */
+  getMessageStatus(message, currentUserId) {
+    // Only show status for messages sent by current user
+    if (message.from.toString() !== currentUserId) {
+      return null;
+    }
+    
+    if (message.readAt) {
+      return 'read';
+    } else if (message.deliveredAt) {
+      return 'delivered';
+    } else {
+      return 'sent';
+    }
+  }
+  
+  /**
+   * Mark messages as read in a conversation
+   */
+  async markMessagesAsRead(userId, friendUsername, messageIds = []) {
+    try {
+      const user = await User.findById(userId);
+      const friend = await User.findOne({ username: friendUsername.toLowerCase() });
+      
+      if (!user || !friend) {
+        throw new Error('User not found');
+      }
+      
+      const friendship = user.friends.find(
+        f => f.user.toString() === friend._id.toString()
+      );
+      
+      if (!friendship?.messagingHistory) {
+        return { markedAsRead: 0 };
+      }
+      
+      let markedAsRead = 0;
+      const now = new Date();
+      
+      // Mark specific messages or all unread messages from friend
+      friendship.messagingHistory.recentMessages.forEach(message => {
+        const shouldMarkAsRead = messageIds.length > 0 
+          ? messageIds.includes(message.messageId)
+          : message.from.toString() === friend._id.toString();
+          
+        if (shouldMarkAsRead && !message.readAt && message.from.toString() !== userId) {
+          message.readAt = now;
+          markedAsRead++;
+        }
+      });
+      
+      if (markedAsRead > 0) {
+        await user.save();
+        
+        // Send read receipts via Socket.IO
+        messageIds.forEach(messageId => {
+          realTimeMessagingService.io?.to(
+            realTimeMessagingService.userSockets.get(friend._id.toString())
+          )?.emit('message:read_receipt', {
+            messageId,
+            readAt: now,
+            readBy: user.username
+          });
+        });
+      }
+      
+      return { markedAsRead };
+      
+    } catch (error) {
+      log.error('Mark messages as read error:', error);
+      throw error;
+    }
+  }
+
   /**
    * Get active conversations (friends with recent activity)
    */
