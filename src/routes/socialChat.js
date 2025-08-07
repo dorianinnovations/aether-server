@@ -83,7 +83,8 @@ Just give me your honest thoughts on what I've sent.`;
           socialProxy: user.socialProxy,
           onboarding: user.onboarding,
           messageCount: messageCount,
-          conversationId: conversation._id
+          conversationId: conversation._id,
+          userId: userId
         };
       }
       
@@ -353,7 +354,8 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
           socialProxy: user.socialProxy,
           onboarding: user.onboarding,
           messageCount: messageCount,
-          conversationId: conversation._id
+          conversationId: conversation._id,
+          userId: userId
         };
       }
       
