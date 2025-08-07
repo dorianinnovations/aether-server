@@ -50,6 +50,24 @@ const UserSchema = new mongoose.Schema({
     default: true
   },
   
+  // Onboarding state tracking
+  onboarding: {
+    hasSeenWelcome: {
+      type: Boolean,
+      default: false
+    },
+    welcomeShownAt: {
+      type: Date
+    },
+    onboardingCompletedAt: {
+      type: Date
+    },
+    skipWelcomePrompt: {
+      type: Boolean,
+      default: false
+    }
+  },
+  
   // Friends system
   friends: [{
     user: {

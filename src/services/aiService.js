@@ -10,9 +10,12 @@ class AIService {
   classifyQuery(message, userContext = null) {
     const lowerMessage = message.toLowerCase();
     
-    // Priority: First message special welcome (ONLY for very first message)
+    // Priority: First message special welcome (ONLY for users who haven't seen it)
     const messageCount = userContext?.messageCount || 0;
-    if (messageCount === 0) {
+    const hasSeenWelcome = userContext?.onboarding?.hasSeenWelcome || false;
+    const skipWelcomePrompt = userContext?.onboarding?.skipWelcomePrompt || false;
+    
+    if (messageCount === 0 && !hasSeenWelcome && !skipWelcomePrompt) {
       return 'first_message_welcome';
     }
     
