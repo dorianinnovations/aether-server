@@ -176,6 +176,22 @@ const UserSchema = new mongoose.Schema({
     }
   }],
   
+  // Profile images
+  profilePhoto: {
+    url: String,
+    filename: String,
+    size: Number,
+    mimeType: String,
+    uploadedAt: Date
+  },
+  bannerImage: {
+    url: String,
+    filename: String,
+    size: Number,
+    mimeType: String,
+    uploadedAt: Date
+  },
+
   // Social Proxy Profile - Living representation of the user
   socialProxy: {
     // Current status and what they're up to
