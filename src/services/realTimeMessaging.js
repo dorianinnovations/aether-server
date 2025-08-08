@@ -48,7 +48,7 @@ class RealTimeMessagingService {
       this.handleConnection(socket);
     });
 
-    log.system('Real-time messaging service initialized');
+    log.info('Real-time messaging service initialized');
   }
 
   handleConnection(socket) {

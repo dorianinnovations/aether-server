@@ -24,7 +24,7 @@ class AnalysisQueue extends EventEmitter {
 
     // Start processing
     this.startProcessing();
-    log.system('Analysis Queue initialized');
+    log.info('Analysis Queue initialized');
   }
 
   /**
@@ -116,7 +116,7 @@ class AnalysisQueue extends EventEmitter {
     const batchSize = Math.min(this.batchSize, this.queue.length);
     const batch = this.queue.splice(0, batchSize);
 
-    log.system(`Processing analysis batch: ${batch.length} jobs`);
+    log.info(`Processing analysis batch: ${batch.length} jobs`);
 
     const results = await Promise.allSettled(
       batch.map(job => this.processJob(job))
@@ -166,7 +166,7 @@ class AnalysisQueue extends EventEmitter {
     this.stats.lastProcessedAt = new Date();
     this.processing = false;
 
-    log.system(`Batch processing complete: ${successCount} success, ${errorCount} errors, ${this.queue.length} remaining`);
+    log.info(`Batch processing complete: ${successCount} success, ${errorCount} errors, ${this.queue.length} remaining`);
 
     // Schedule next batch if queue has items
     if (this.queue.length > 0) {
@@ -218,7 +218,7 @@ class AnalysisQueue extends EventEmitter {
       this.batchTimer = null;
     }
 
-    log.system(`Analysis queue cleared: ${clearedCount} jobs removed`);
+    log.info(`Analysis queue cleared: ${clearedCount} jobs removed`);
     return clearedCount;
   }
 

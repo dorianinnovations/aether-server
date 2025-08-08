@@ -15,14 +15,14 @@ const router = express.Router();
  */
 router.get('/stream', protect, (req, res) => {
   const userId = req.user?.id;
-  const correlationId = log.request.start('GET', '/notifications/stream', { userId });
+  const correlationId = log.info("Request started");
 
   if (!userId) {
     log.warn('Unauthorized notification stream request', { correlationId });
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  log.api(`🔔 Starting notification stream for user ${userId}`, { correlationId });
+  log.info(`🔔 Starting notification stream for user ${userId}`, { correlationId });
 
   // Add client to notification service
   const cleanup = notificationService.addClient(userId, res, req);
@@ -30,7 +30,7 @@ router.get('/stream', protect, (req, res) => {
   // Handle cleanup on various events
   const handleCleanup = () => {
     cleanup();
-    log.request.complete(correlationId, 200, Date.now());
+    log.info("Request completed");
   };
 
   res.on('close', handleCleanup);

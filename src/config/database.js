@@ -37,7 +37,7 @@ const connectDB = async () => {
     
     // Log connection pool events for monitoring
     mongoose.connection.on('connected', () => {
-      log.database('MongoDB connection established');
+      log.info('MongoDB connection established');
     });
     
     mongoose.connection.on('error', (err) => {
@@ -50,7 +50,7 @@ const connectDB = async () => {
     
     // Monitor connection pool
     mongoose.connection.on('fullsetup', () => {
-      log.database('MongoDB replica set connected');
+      log.info('MongoDB replica set connected');
     });
     
     // Database connection monitoring configured
@@ -88,7 +88,7 @@ export const checkDBHealth = () => {
 export const gracefulShutdown = async () => {
   try {
     await mongoose.connection.close();
-    log.database('MongoDB connection closed gracefully');
+    log.info('MongoDB connection closed gracefully');
   } catch (err) {
     log.error('Error closing MongoDB connection', err);
   }

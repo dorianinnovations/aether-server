@@ -16,7 +16,7 @@ class NotificationService extends EventEmitter {
       totalNotificationsSent: 0
     };
 
-    log.system('Notification Service initialized');
+    log.info('Notification Service initialized');
   }
 
   /**
@@ -244,7 +244,7 @@ class NotificationService extends EventEmitter {
     this.clients.delete(userId);
     this.stats.activeConnections -= disconnectedCount;
 
-    log.system(`Disconnected ${disconnectedCount} connections for user ${userId}`);
+    log.info(`Disconnected ${disconnectedCount} connections for user ${userId}`);
     return disconnectedCount;
   }
 
@@ -261,7 +261,7 @@ class NotificationService extends EventEmitter {
       }
     }
 
-    log.system(`Broadcast sent to ${totalSent} users`, { type: notification.type });
+    log.info(`Broadcast sent to ${totalSent} users`, { type: notification.type });
     return totalSent;
   }
 }

@@ -69,7 +69,7 @@ class FriendMessagingService {
         message
       );
       
-      log.system(`Message sent from ${fromUser.username} to ${toUser.username}`);
+      log.info(`Message sent from ${fromUser.username} to ${toUser.username}`);
       
       return {
         success: true,

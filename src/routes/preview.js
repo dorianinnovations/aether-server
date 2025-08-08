@@ -23,7 +23,7 @@ router.post('/preview-image', protect, async (req, res) => {
     const URLBOX_API_KEY = process.env.URLBOX_API_KEY || 'ubx_sk_CLjtkHeY3FPVcMxkHivscXaurkYmqLR7';
     const previewUrl = `https://api.urlbox.io/v1/${URLBOX_API_KEY}/png?url=${encodedUrl}&width=300&height=200&retina=false&delay=1000&wait_for=networkidle0`;
     
-    log.api(`📸 Preview image requested for: ${url}`);
+    log.info(`📸 Preview image requested for: ${url}`);
     
     res.json({ 
       success: true,

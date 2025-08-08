@@ -274,7 +274,7 @@ class SpotifyService {
 
       await user.save();
       
-      log.success(`Updated Spotify data for user ${user.username}`);
+      log.info(`Updated Spotify data for user ${user.username}`);
       return true;
 
     } catch (error) {

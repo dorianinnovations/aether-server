@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import ragMemoryService from '../services/ragMemoryService.js';
 
 const ConversationSchema = new mongoose.Schema({
   title: {
@@ -116,6 +117,29 @@ ConversationSchema.pre('save', function(next) {
 // Virtual for getting recent messages
 ConversationSchema.virtual('recentMessages').get(function() {
   return this.messages.slice(-50); // Last 50 messages
+});
+
+// Auto-distillation hook: distill facts after AI responses
+ConversationSchema.post('save', async function(doc) {
+  try {
+    const lastMsg = doc.messages[doc.messages.length - 1];
+    if (lastMsg && lastMsg.role === 'assistant' && doc.messages.length >= 6) {
+      // Auto-distill in background (don't await)
+      setImmediate(async () => {
+        try {
+          await ragMemoryService.maybeAutoDistill(
+            doc.creator, 
+            doc._id, 
+            doc.messages.slice(-20)
+          );
+        } catch (error) {
+          console.error('Auto-distillation error:', error);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Conversation post-save hook error:', error);
+  }
 });
 
 export default mongoose.model('Conversation', ConversationSchema);

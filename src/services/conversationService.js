@@ -189,7 +189,7 @@ class ConversationService {
       };
 
       // Remove event broadcasting since we removed events
-      log.api(`Created new ${type} conversation for user ${userId}: ${conversation._id}`);
+      log.info(`Created new ${type} conversation for user ${userId}: ${conversation._id}`);
       return conversationData;
     } catch (error) {
       log.error('Error creating conversation:', error);
@@ -229,7 +229,7 @@ class ConversationService {
 
       // Event broadcasting removed
       
-      log.api(`Updated conversation title for user ${userId}: ${conversationId}`);
+      log.info(`Updated conversation title for user ${userId}: ${conversationId}`);
       return conversationData;
     } catch (error) {
       log.error('Error updating conversation title:', error);
@@ -290,7 +290,7 @@ class ConversationService {
 
       // Event broadcasting removed
 
-      log.api(`Added message to conversation ${conversationId} for user ${userId}`);
+      log.info(`Added message to conversation ${conversationId} for user ${userId}`);
       return conversationData;
     } catch (error) {
       log.error('Error adding message:', error);
@@ -323,7 +323,7 @@ class ConversationService {
 
       // Event broadcasting removed
 
-      log.api(`Deleted conversation ${conversationId} for user ${userId} (${conversation.messageCount} messages)`);
+      log.info(`Deleted conversation ${conversationId} for user ${userId} (${conversation.messageCount} messages)`);
       return { deletedCount: conversation.messageCount };
     } catch (error) {
       log.error('Error deleting conversation:', error);
@@ -346,7 +346,7 @@ class ConversationService {
 
       // Event broadcasting removed
 
-      log.api(`Deleted all conversations for user ${userId} (${result.modifiedCount} conversations)`);
+      log.info(`Deleted all conversations for user ${userId} (${result.modifiedCount} conversations)`);
       return { deletedCount: result.modifiedCount };
     } catch (error) {
       log.error('Error deleting all conversations:', error);

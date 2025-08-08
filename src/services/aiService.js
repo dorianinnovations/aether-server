@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import { env } from '../config/environment.js';
 import conversationService from './conversationService.js';
+import ragMemoryService from './ragMemoryService.js';
 
 class AIService {
   constructor() {
@@ -264,12 +265,12 @@ Be like a supportive friend who helps them stay connected.`;
     }
   }
 
-  async chatStream(message, model = 'openai/gpt-4o') {
+  async chatStream(message, model = 'openai/gpt-5') {
     // For now, use regular chat and return response for word-by-word streaming
     return await this.chat(message, model);
   }
 
-  async chat(message, model = 'openai/gpt-4o', userContext = null, attachments = null) {
+  async chat(message, model = 'openai/gpt-5', userContext = null, attachments = null) {
     try {
       // Classify the query to choose appropriate prompt
       const queryType = this.classifyQuery(message, userContext);
@@ -283,12 +284,28 @@ Be like a supportive friend who helps them stay connected.`;
         }
       ];
 
-      // Add conversation history for better context (except for first message welcome)
+      // Add conversation history + RAG memories for enhanced context
       if (queryType !== 'first_message_welcome' && userContext?.conversationId) {
         const conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId);
         if (conversationHistory && conversationHistory.length > 0) {
           messages.push(...conversationHistory);
           console.log(`💭 Added ${conversationHistory.length} previous messages for context`);
+        }
+
+        // Get relevant memories from RAG system
+        const enhancedContext = await ragMemoryService.buildEnhancedContext(
+          userContext.userId, 
+          message
+        );
+        
+        if (enhancedContext) {
+          // Add enhanced context as structured system message
+          messages.splice(1, 0, { 
+            role: 'system',
+            name: 'memory.hint',
+            content: enhancedContext // already wrapped with <memory_context>...</memory_context>
+          });
+          console.log(`🧠 Added RAG enhanced context from UserMemory collection`);
         }
       }
 
@@ -387,7 +404,7 @@ Be like a supportive friend who helps them stay connected.`;
    * @param {Array} processedFiles - Array of processed files from fileProcessingService
    * @returns {Object} AI response
    */
-  async chatWithFiles(message, model = 'openai/gpt-4o', userContext = null, processedFiles = []) {
+  async chatWithFiles(message, model = 'openai/gpt-5', userContext = null, processedFiles = []) {
     try {
       // Classify the query to choose appropriate prompt
       const queryType = this.classifyQuery(message, userContext);

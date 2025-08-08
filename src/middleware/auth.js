@@ -99,4 +99,31 @@ export const protectRefresh = (req, res, next) => {
   }
 };
 
+// Middleware for internal/background operations that bypasses token auth
+export const protectInternal = (req, res, next) => {
+  // Check if this is an internal server call
+  if (req.headers['x-internal-request'] === 'true' && req.headers['x-internal-secret'] === env.JWT_SECRET) {
+    // For internal calls, extract user ID from header
+    const userId = req.headers['x-user-id'];
+    if (userId) {
+      req.user = { 
+        id: userId,
+        userId: userId,
+        internal: true
+      };
+      return next();
+    }
+  }
+  
+  // Fall back to regular auth
+  return protect(req, res, next);
+};
+
+// Helper function to create internal request headers
+export const createInternalHeaders = (userId) => ({
+  'x-internal-request': 'true',
+  'x-internal-secret': env.JWT_SECRET,
+  'x-user-id': userId
+});
+
 // Middleware ready
