@@ -224,7 +224,8 @@ Use this current information to provide an accurate, up-to-date response. Do not
         
         // Emergency streaming disable flag for debugging blank responses
         const streamingDisabled = process.env.DISABLE_STREAMING === 'true';
-        console.log(`🌊 Streaming mode: ${streamingDisabled ? 'DISABLED' : 'ENABLED'}`);
+        const fastMode = process.env.FAST_MODE === 'true';
+        console.log(`🌊 Streaming mode: ${streamingDisabled ? 'DISABLED' : fastMode ? 'FAST' : 'ENABLED'}`);
         
         try {
           if (streamingDisabled) {
@@ -291,20 +292,32 @@ Use this current information to provide an accurate, up-to-date response. Do not
             
             console.log(`✅ Full response received: ${fullResponse.length} chars, first 100: ${fullResponse.substring(0, 100)}`);
             
+            const streamingStartTime = Date.now();
+            console.log(`🌊 Starting word streaming at +${streamingStartTime - startTime}ms`);
+            
             // Fast word streaming (better than before)
             const words = fullResponse.split(' ');
+            console.log(`📝 Streaming ${words.length} words`);
             for (let i = 0; i < words.length; i++) {
               const word = words[i];
               res.write(`data: ${JSON.stringify({content: word})}\n\n`);
-              await new Promise(resolve => setTimeout(resolve, 15)); // Faster than before
+              // Fast mode: no delay, regular mode: 5ms delay
+              if (!fastMode) {
+                await new Promise(resolve => setTimeout(resolve, 5));
+              }
             }
+            
+            const streamingTime = Date.now() - streamingStartTime;
+            console.log(`🌊 Streaming completed in ${streamingTime}ms`);
           } else {
             console.log(`⚠️ BLANK RESPONSE DETECTED! Data:`, JSON.stringify(data, null, 2));
             fullResponse = 'I apologize, but I\'m having trouble generating a response right now. Please try again.';
             res.write(`data: ${JSON.stringify({content: fullResponse})}\n\n`);
           }
           
+          console.log(`🏁 Sending [DONE] at +${Date.now() - startTime}ms`);
           res.write(`data: [DONE]\n\n`);
+          console.log(`🏁 [DONE] sent successfully`);
           }
           
         } catch (streamError) {
@@ -313,7 +326,10 @@ Use this current information to provide an accurate, up-to-date response. Do not
           res.write(`data: [DONE]\n\n`);
         }
         
-        // Save AI response if authenticated
+        // Save AI response if authenticated  
+        const preSaveTime = Date.now();
+        console.log(`💾 Starting response save at +${preSaveTime - startTime}ms`);
+        
         const aiResponseTime = Date.now() - startTime;
         console.log(`💾 Response complete: userId=${!!userId}, responseLength=${fullResponse?.length || 0}, totalTime=${aiResponseTime}ms`);
         
