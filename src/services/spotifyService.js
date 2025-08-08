@@ -142,6 +142,9 @@ class SpotifyService {
         return null; // No track currently playing
       }
 
+      if (response.status === 401) {
+        throw new Error('SPOTIFY_TOKEN_EXPIRED'); // Specific error for token refresh
+      }
       if (!response.ok) {
         throw new Error(`Spotify API error: ${response.status}`);
       }
@@ -175,6 +178,9 @@ class SpotifyService {
         }
       });
 
+      if (response.status === 401) {
+        throw new Error('SPOTIFY_TOKEN_EXPIRED'); // Specific error for token refresh
+      }
       if (!response.ok) {
         throw new Error(`Spotify API error: ${response.status}`);
       }
@@ -204,6 +210,9 @@ class SpotifyService {
         }
       });
 
+      if (response.status === 401) {
+        throw new Error('SPOTIFY_TOKEN_EXPIRED'); // Specific error for token refresh
+      }
       if (!response.ok) {
         throw new Error(`Spotify API error: ${response.status}`);
       }

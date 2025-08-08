@@ -49,7 +49,13 @@ async function openRouterEmbeddingWithRetry(text, maxRetries = 3) {
         return result;
       }
     } catch (error) {
-      console.error(`[EMBED] OpenRouter attempt ${attempt}/${maxRetries} failed:`, error.message);
+      // Only log detailed errors on final attempt to reduce spam
+      if (attempt === maxRetries) {
+        console.error(`[EMBED] OpenRouter failed after ${maxRetries} attempts:`, error.message);
+      } else {
+        console.log(`[EMBED] OpenRouter attempt ${attempt}/${maxRetries} failed, retrying...`);
+      }
+      
       if (attempt < maxRetries) {
         const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -79,7 +85,11 @@ async function openRouterEmbedding(text) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[EMBED] API error response: ${errorText}`);
+      // Check if OpenRouter is returning HTML (rate limit/maintenance page)
+      if (errorText.includes('<!DOCTYPE') || errorText.includes('<html>')) {
+        throw new Error(`OpenRouter API returning HTML (likely rate limited or maintenance): HTTP ${response.status}`);
+      }
+      console.error(`[EMBED] API error response: ${errorText.substring(0, 200)}...`);
       throw new Error(`Embedding failed: ${response.status} ${response.statusText}`);
     }
 
