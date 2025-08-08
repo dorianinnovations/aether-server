@@ -8,7 +8,7 @@ import { env } from '../config/environment.js';
 
 const OPENROUTER_API_KEY = env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
 const OPENAI_API_KEY = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY || 'MISSING';
-const EMBEDDING_MODEL = 'text-embedding-3-large';  // OpenRouter uses different format
+const EMBEDDING_MODEL = 'text-embedding-3-small';  // Use small model - cheaper and OpenRouter compatible
 const BACKUP_EMBEDDING_MODEL = 'text-embedding-3-large';
 
 /**
@@ -78,7 +78,7 @@ async function openRouterEmbedding(text) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: `openai/${EMBEDDING_MODEL}`,
+        model: 'text-embedding-3-small', // OpenRouter doesn't support large model properly
         input: text
       })
     });

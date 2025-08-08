@@ -224,7 +224,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
             body: JSON.stringify({
               model: 'openai/gpt-5',
               messages: aiResponse.messages,
-              max_tokens: 4000,
+              max_tokens: 800, // Reduced from 4000 to control costs
               temperature: 0.7,
               stream: false // Back to non-streaming temporarily
             })
