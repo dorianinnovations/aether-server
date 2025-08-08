@@ -164,8 +164,12 @@ class SpotifyService {
         durationMs: data.item.duration_ms
       };
     } catch (error) {
+      // Don't log token expiration errors - they're expected and handled upstream
+      if (error.message === 'SPOTIFY_TOKEN_EXPIRED') {
+        throw error;
+      }
       log.error('Failed to get current track:', error);
-      return null;
+      throw error;
     }
   }
 
@@ -196,6 +200,10 @@ class SpotifyService {
         playedAt: new Date(item.played_at)
       }));
     } catch (error) {
+      // Don't log token expiration errors - they're expected and handled upstream
+      if (error.message === 'SPOTIFY_TOKEN_EXPIRED') {
+        throw error;
+      }
       log.error('Failed to get recent tracks:', error);
       return [];
     }
@@ -228,6 +236,10 @@ class SpotifyService {
         timeRange
       }));
     } catch (error) {
+      // Don't log token expiration errors - they're expected and handled upstream
+      if (error.message === 'SPOTIFY_TOKEN_EXPIRED') {
+        throw error;
+      }
       log.error('Failed to get top tracks:', error);
       return [];
     }
@@ -241,33 +253,38 @@ class SpotifyService {
 
     try {
       let accessToken = user.socialProxy.spotify.accessToken;
+      let tokenRefreshed = false;
 
-      // Try to refresh token if needed (basic check)
-      try {
-        const currentTrack = await this.getCurrentTrack(accessToken);
-        
-        // If we get the track, token is still valid
-        if (currentTrack !== null || currentTrack === null) {
-          // Update current track
-          user.socialProxy.spotify.currentTrack = currentTrack;
-        }
-      } catch (error) {
-        // Token might be expired, try to refresh
-        if (user.socialProxy.spotify.refreshToken) {
-          const tokens = await this.refreshAccessToken(user.socialProxy.spotify.refreshToken);
-          user.socialProxy.spotify.accessToken = tokens.accessToken;
-          user.socialProxy.spotify.refreshToken = tokens.refreshToken;
-          accessToken = tokens.accessToken;
-        } else {
+      // Helper function to attempt API call with token refresh if needed
+      const makeSpotifyCall = async (apiCall) => {
+        try {
+          return await apiCall(accessToken);
+        } catch (error) {
+          // If token expired and we haven't tried refreshing yet, try once
+          if (error.message === 'SPOTIFY_TOKEN_EXPIRED' && !tokenRefreshed && user.socialProxy.spotify.refreshToken) {
+            try {
+              const tokens = await this.refreshAccessToken(user.socialProxy.spotify.refreshToken);
+              user.socialProxy.spotify.accessToken = tokens.accessToken;
+              user.socialProxy.spotify.refreshToken = tokens.refreshToken;
+              accessToken = tokens.accessToken;
+              tokenRefreshed = true;
+              
+              // Retry the API call with new token
+              return await apiCall(accessToken);
+            } catch (refreshError) {
+              // If refresh fails, throw the original token expiration error
+              throw error;
+            }
+          }
           throw error;
         }
-      }
+      };
 
-      // Get updated data
+      // Get updated data with automatic token refresh
       const [currentTrack, recentTracks, topTracks] = await Promise.all([
-        this.getCurrentTrack(accessToken),
-        this.getRecentTracks(accessToken, 10),
-        this.getTopTracks(accessToken, 'short_term', 10)
+        makeSpotifyCall((token) => this.getCurrentTrack(token)),
+        makeSpotifyCall((token) => this.getRecentTracks(token, 10)),
+        makeSpotifyCall((token) => this.getTopTracks(token, 'short_term', 10))
       ]);
 
       // Update user data
@@ -276,6 +293,8 @@ class SpotifyService {
           ...currentTrack,
           lastPlayed: new Date()
         };
+      } else {
+        user.socialProxy.spotify.currentTrack = null;
       }
 
       user.socialProxy.spotify.recentTracks = recentTracks;
@@ -283,7 +302,9 @@ class SpotifyService {
 
       await user.save();
       
-      log.info(`Updated Spotify data for user ${user.username}`);
+      if (tokenRefreshed) {
+        log.debug(`Refreshed token and updated Spotify data for user ${user.username}`);
+      }
       return true;
 
     } catch (error) {
