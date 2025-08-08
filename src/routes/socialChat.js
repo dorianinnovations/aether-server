@@ -12,8 +12,8 @@ import analysisQueue from '../services/analysisQueue.js';
 
 const router = express.Router();
 
-// Regular chat endpoint without files
-router.post('/social-chat', protect, async (req, res) => {
+// Unified chat endpoint - handles both text and files
+router.post('/social-chat', protect, uploadFiles, validateUploadedFiles, handleMulterError, async (req, res) => {
   const startTime = Date.now();
   const correlationId = log.info("POST /social-chat", { userId: req.user?.id });
   
@@ -21,19 +21,38 @@ router.post('/social-chat', protect, async (req, res) => {
     const { message, prompt, stream = true, conversationId, attachments } = req.body;
     const userMessage = message || prompt;
     const userId = req.user?.id;
+    const uploadedFiles = req.validatedFiles || [];
     
-    log.debug('Social chat request details', {
+    log.debug('Unified chat request', {
       correlationId,
       messageLength: userMessage?.length || 0,
       stream,
       conversationId,
       attachmentCount: attachments?.length || 0,
+      fileCount: uploadedFiles.length,
       userId
     });
     
-    if (!userMessage && (!attachments || attachments.length === 0)) {
+    if (!userMessage && (!attachments || attachments.length === 0) && uploadedFiles.length === 0) {
       log.warn('Social chat rejected - no content', { correlationId });
-      return res.status(400).json({ error: 'Message or attachments are required' });
+      return res.status(400).json({ error: 'Message, attachments, or files are required' });
+    }
+    
+    // Process uploaded files if any
+    let processedFiles = [];
+    if (uploadedFiles.length > 0) {
+      try {
+        processedFiles = await fileProcessingService.processFiles(uploadedFiles);
+        const summary = fileProcessingService.generateProcessingSummary(processedFiles);
+        log.file('File processing completed', { correlationId, ...summary });
+      } catch (processingError) {
+        log.error('File processing failed', processingError, { correlationId });
+        return res.status(500).json({
+          success: false,
+          error: 'File processing failed',
+          message: processingError.message
+        });
+      }
     }
     
     // Handle blank/contextless messages with attachments
@@ -109,7 +128,7 @@ Just give me your honest thoughts on what I've sent.`;
       // Smart search triggers - ONLY for external information
       const searchTriggers = [
         /(?:search|find|look up|google|web search)\s+(?:for\s+)?(.+)/i,
-        /(?:what'?s|latest|recent|current|news about|happening with)\s+(.+)/i,
+        /(?:what'?s|what is)\s+(the\s+)?(latest|recent|current|news about|happening with)\s+(.+)/i,
         /(?:when did|where is|what happened|current price|stock price|weather in)/i,
         /(?:latest news|recent developments|current events)/i
       ];
@@ -119,7 +138,10 @@ Just give me your honest thoughts on what I've sent.`;
         /^(?:how are you|good morning|good afternoon|good evening)$/i,
         /(?:who are you|what are you|tell me about yourself|introduce yourself)/i,
         /(?:who's this|whos this|what is this|whats this)/i,
-        /^(?:what\?|huh\?|why\?|how\?)$/i
+        /^(?:what\?|huh\?|why\?|how\?)$/i,
+        /^(?:yo|sup|whats up|wassup|hey there|whats happening)$/i,
+        /^(?:yo whats good|whats good|all good|im good|you good|doing good)$/i,
+        /^(?:yo|sup|hey)\s+(?:whats good|whats up|wassup)$/i
       ];
       
       // Check if should trigger search
@@ -161,8 +183,15 @@ Use this current information to provide an accurate, up-to-date response. Do not
         }
       }
 
-      // Get AI response with enhanced message, attachments, and user context
-      const aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-4o', userContext, attachments);
+      // Get AI streaming response - handle both attachments and processed files
+      let aiResponse;
+      if (processedFiles.length > 0) {
+        // Use processed files for multimodal AI
+        aiResponse = await aiService.chatWithFiles(enhancedMessage, 'openai/gpt-5', userContext, processedFiles);
+      } else {
+        // Use regular chat with attachments
+        aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-5', userContext, attachments);
+      }
       
       if (aiResponse.success) {
         // First send tool results if we have web search results
@@ -180,28 +209,60 @@ Use this current information to provide an accurate, up-to-date response. Do not
           res.write(`data: ${JSON.stringify({metadata: toolResultData})}\n\n`);
         }
         
-        // Stream response word by word in SSE format
-        const words = aiResponse.response.split(' ');
-        for (let i = 0; i < words.length; i++) {
-          const word = words[i];
-          res.write(`data: ${JSON.stringify({content: word})}\n\n`);
-          await new Promise(resolve => setTimeout(resolve, 25));
+        // SIMPLIFIED STREAMING - back to working approach but faster
+        let fullResponse = '';
+        
+        try {
+          // For now, let's fall back to the working method but make it faster
+          // TODO: Fix true streaming later - at least we eliminated the 15s delay!
+          const response = await fetch(aiResponse.originalUrl || 'https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: 'openai/gpt-5',
+              messages: aiResponse.messages,
+              max_tokens: 4000,
+              temperature: 0.7,
+              stream: false // Back to non-streaming temporarily
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (data.choices?.[0]?.message?.content) {
+            fullResponse = data.choices[0].message.content;
+            
+            // Fast word streaming (better than before)
+            const words = fullResponse.split(' ');
+            for (let i = 0; i < words.length; i++) {
+              const word = words[i];
+              res.write(`data: ${JSON.stringify({content: word})}\n\n`);
+              await new Promise(resolve => setTimeout(resolve, 15)); // Faster than before
+            }
+          }
+          
+          res.write(`data: [DONE]\n\n`);
+          
+        } catch (streamError) {
+          log.error('Streaming error:', streamError, { correlationId });
+          res.write(`data: ${JSON.stringify({content: 'Stream error occurred.'})}\n\n`);
+          res.write(`data: [DONE]\n\n`);
         }
         
-        // Send completion signal
-        res.write(`data: [DONE]\n\n`);
-        
         // Save AI response if authenticated
-        if (userId) {
+        if (userId && fullResponse) {
           await conversationService.addMessage(
             userId, 
             conversation._id, 
             'assistant', 
-            aiResponse.response, 
+            fullResponse, 
             null, 
             { 
               model: aiResponse.model,
-              responseTime: Date.now() - Date.now() // Could track actual response time
+              responseTime: Date.now() - startTime
             }
           );
 
@@ -460,7 +521,7 @@ Just give me your honest thoughts on what I've sent.`;
       }
 
       // Get AI response with enhanced message, processed files, and user context
-      const aiResponse = await aiService.chatWithFiles(finalMessage, 'openai/gpt-4o', userContext, processedFiles);
+      const aiResponse = await aiService.chatWithFiles(finalMessage, 'openai/gpt-5', userContext, processedFiles);
       
       if (aiResponse.success) {
         // Send tool results if we have web search results
