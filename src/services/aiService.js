@@ -250,7 +250,10 @@ Respond like a friend who actually remembers and cares about their world. Be rea
     try {
       const conversation = await conversationService.getConversation(userId, conversationId, messageLimit);
       
+      console.log(`🔍 DEBUG: conversationId=${conversationId}, userId=${userId}, conversation found=${!!conversation}, messageCount=${conversation?.messages?.length || 0}`);
+      
       if (!conversation || !conversation.messages || conversation.messages.length === 0) {
+        console.log(`⚠️ No conversation or messages found for conversationId: ${conversationId}`);
         return [];
       }
 
@@ -264,6 +267,11 @@ Respond like a friend who actually remembers and cares about their world. Be rea
           role: msg.role === 'assistant' ? 'assistant' : 'user',
           content: msg.content
         }));
+      
+      console.log(`🧠 Message filtering: raw=${messages.length}, filtered=${cleanMessages.length}`);
+      if (messages.length > 0 && cleanMessages.length === 0) {
+        console.log('🚨 All messages filtered out! Raw messages:', messages.map(m => ({role: m.role, hasContent: !!m.content, contentLength: m.content?.length})));
+      }
 
       // Smart context management with RAG integration
       if (cleanMessages.length <= 5) {
