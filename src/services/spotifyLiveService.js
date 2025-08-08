@@ -150,7 +150,19 @@ class SpotifyLiveService {
       this.stats.totalUpdates++;
 
     } catch (error) {
-      log.warn(`Failed to update Spotify for user ${user.username}:`, error.message);
+      // Handle token expiration gracefully - reduce log spam
+      if (error.message?.includes('SPOTIFY_TOKEN_EXPIRED') || error.message?.includes('401')) {
+        // Silently disconnect expired users instead of spamming logs
+        if (user.socialProxy?.spotify?.connected) {
+          user.socialProxy.spotify.connected = false;
+          user.socialProxy.spotify.accessToken = null;
+          user.socialProxy.spotify.refreshToken = null;
+          await user.save();
+          log.info(`🔄 Disconnected expired Spotify account for ${user.username}`);
+        }
+      } else {
+        log.warn(`Failed to update Spotify for user ${user.username}:`, error.message);
+      }
       this.stats.totalErrors++;
     }
   }

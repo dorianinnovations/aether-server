@@ -287,6 +287,11 @@ class SpotifyService {
       return true;
 
     } catch (error) {
+      // Propagate token expiration errors to calling service for proper handling
+      if (error.message?.includes('SPOTIFY_TOKEN_EXPIRED')) {
+        throw error; // Let the calling service (spotifyLiveService) handle it
+      }
+      
       log.error(`Failed to update Spotify data for user ${user.username}:`, error);
       
       // If refresh failed, disconnect Spotify
