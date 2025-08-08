@@ -49,6 +49,7 @@ const initializeServer = async () => {
   try {
     // Debug env loading
     console.log('[BOOT] OPENROUTER_API_KEY set:', !!process.env.OPENROUTER_API_KEY);
+    console.log('[BOOT] GPT-5 + RAG fixes deployed ✅');
     
     // Connect to database
     await connectDB();
