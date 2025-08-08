@@ -16,6 +16,7 @@ const router = express.Router();
 router.post('/social-chat', protect, uploadFiles, validateUploadedFiles, handleMulterError, async (req, res) => {
   const startTime = Date.now();
   const correlationId = log.info("POST /social-chat", { userId: req.user?.id });
+  console.log(`⏱️ Chat request started at ${new Date().toISOString()}`);
   
   try {
     const { message, prompt, stream = true, conversationId, attachments } = req.body;
@@ -189,6 +190,8 @@ Use this current information to provide an accurate, up-to-date response. Do not
       }
 
       // Get AI streaming response - handle both attachments and processed files
+      const aiCallStartTime = Date.now();
+      console.log(`🤖 Starting AI service call at +${aiCallStartTime - startTime}ms`);
       let aiResponse;
       if (processedFiles.length > 0) {
         // Use processed files for multimodal AI
@@ -197,6 +200,8 @@ Use this current information to provide an accurate, up-to-date response. Do not
         // Use regular chat with attachments
         aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-5', userContext, attachments);
       }
+      const aiCallTime = Date.now() - aiCallStartTime;
+      console.log(`🤖 AI service call completed in ${aiCallTime}ms`);
       
       if (aiResponse.success) {
         // First send tool results if we have web search results
@@ -309,7 +314,8 @@ Use this current information to provide an accurate, up-to-date response. Do not
         }
         
         // Save AI response if authenticated
-        console.log(`💾 Saving response: userId=${!!userId}, responseLength=${fullResponse?.length || 0}`);
+        const aiResponseTime = Date.now() - startTime;
+        console.log(`💾 Response complete: userId=${!!userId}, responseLength=${fullResponse?.length || 0}, totalTime=${aiResponseTime}ms`);
         
         if (userId && fullResponse) {
           await conversationService.addMessage(
@@ -324,14 +330,22 @@ Use this current information to provide an accurate, up-to-date response. Do not
             }
           );
 
-          // Queue user message for asynchronous profile analysis
-          const analysisJobId = analysisQueue.enqueue(userId, processedMessage, {
+          // Queue user message for asynchronous profile analysis  
+          const preAnalysisTime = Date.now();
+          console.log(`📊 Analysis queue time: +${preAnalysisTime - startTime}ms`);
+          
+          // TEMP: Skip analysis queue for performance testing
+          if (process.env.SKIP_ANALYSIS !== 'true') {
+            const analysisJobId = analysisQueue.enqueue(userId, processedMessage, {
             conversationId: conversation._id,
             timestamp: new Date(),
             source: 'social_chat'
           });
           
           log.debug(`📊 Profile analysis queued: ${analysisJobId}`, { userId, correlationId });
+          } else {
+            console.log('⏩ Skipping profile analysis for performance testing');
+          }
 
           // Auto-mark welcome as seen if this was a first time welcome response
           if (!userContext?.onboarding?.hasSeenWelcome) {
