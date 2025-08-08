@@ -149,7 +149,7 @@ ${turnsText}`
    */
   async maybeAutoDistill(userId, conversationId, recentTurns) {
     try {
-      if (recentTurns.length < 6) return 0;
+      if (recentTurns.length < 4) return 0; // Lowered from 6 to 4
       
       const facts = await this.distillFromTurns(recentTurns);
       if (facts.length === 0) return 0;

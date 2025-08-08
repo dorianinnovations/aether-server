@@ -123,14 +123,14 @@ ConversationSchema.virtual('recentMessages').get(function() {
 ConversationSchema.post('save', async function(doc) {
   try {
     const lastMsg = doc.messages[doc.messages.length - 1];
-    if (lastMsg && lastMsg.role === 'assistant' && doc.messages.length >= 6) {
-      // Auto-distill in background (don't await)
+    if (lastMsg && lastMsg.role === 'assistant' && doc.messages.length >= 4) {
+      // Auto-distill in background (don't await) - lowered threshold from 6 to 4
       setImmediate(async () => {
         try {
           await ragMemoryService.maybeAutoDistill(
             doc.creator, 
             doc._id, 
-            doc.messages.slice(-20)
+            doc.messages.slice(-12) // Use last 12 messages for better context
           );
         } catch (error) {
           console.error('Auto-distillation error:', error);

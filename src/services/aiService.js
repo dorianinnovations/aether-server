@@ -265,19 +265,48 @@ Respond like a friend who actually remembers and cares about their world. Be rea
           content: msg.content
         }));
 
-      // Smart context management: GPT-5 approved approach
-      if (cleanMessages.length <= 3) {
-        // 3 or fewer messages - send all verbatim
+      // Smart context management with RAG integration
+      if (cleanMessages.length <= 5) {
+        // 5 or fewer messages - send all verbatim
         return cleanMessages;
       } else {
-        // More than 3 messages - use fallback strategy (fast)
-        // GPT-5's advice: Use stale summary + recent messages, update async
+        // More than 5 messages - use intelligent context management
         const recentMessages = cleanMessages.slice(-3); // Last 3 verbatim
+        const olderMessages = cleanMessages.slice(0, -3); // Older messages
         
-        // TODO: Implement async background summarization
-        // For now, use simple truncation fallback as GPT-5 suggested
-        console.log(`🚀 Fast fallback: Using last 3 messages only (${cleanMessages.length - 3} older messages truncated)`);
+        // Try to get summarized context from RAG memories first
+        try {
+          const enhancedContext = await ragMemoryService.buildEnhancedContext(userId, 'recent conversation context');
+          if (enhancedContext && enhancedContext.trim()) {
+            console.log(`🧠 Using RAG memories instead of truncation for context`);
+            // Add a system message with the context summary
+            return [
+              { role: 'system', content: `Previous conversation summary: ${enhancedContext.substring(0, 500)}` },
+              ...recentMessages
+            ];
+          }
+        } catch (error) {
+          console.warn('RAG context retrieval failed:', error.message);
+        }
         
+        // Fallback: Smart summarization of older messages
+        if (olderMessages.length > 0) {
+          const olderContent = olderMessages.map(m => `${m.role}: ${m.content}`).join('\n');
+          try {
+            const { summarize } = await import('../utils/vectorUtils.js');
+            const summary = await summarize(olderContent, 200); // Concise summary
+            console.log(`📝 Summarized ${olderMessages.length} older messages into context`);
+            return [
+              { role: 'system', content: `Earlier conversation: ${summary}` },
+              ...recentMessages
+            ];
+          } catch (error) {
+            console.warn('Summarization failed, using truncation fallback:', error.message);
+          }
+        }
+        
+        // Last resort: truncation with warning
+        console.log(`🚀 Fallback truncation: Using last 3 messages only (${cleanMessages.length - 3} older messages truncated)`);
         return recentMessages;
       }
     } catch (error) {
