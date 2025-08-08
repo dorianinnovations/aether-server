@@ -266,8 +266,7 @@ class ConversationService {
         { 
           $push: { messages: newMessage },
           $set: { 
-            lastMessageAt: newMessage.timestamp,
-            summary: role === 'user' ? content.substring(0, 100) + (content.length > 100 ? '...' : '') : undefined
+            lastMessageAt: newMessage.timestamp
           },
           $inc: { messageCount: 1 }
         },

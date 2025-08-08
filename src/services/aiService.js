@@ -12,6 +12,11 @@ class AIService {
   classifyQuery(message, userContext = null) {
     const lowerMessage = message.toLowerCase();
     
+    // 🔥 GPT-5 SUPERPROXY: Creative/visionary trigger words
+    if (/(create|impress|mind[- ]blow|show me|superproxy|deep|emotional|visionary|story|poem|haiku|inspire|amaze|beautiful|artistic|creative|profound|meaningful)/.test(lowerMessage)) {
+      return 'creative_superproxy';
+    }
+    
     // Priority: First time user welcome (only for users who haven't seen it)
     const hasSeenWelcome = userContext?.onboarding?.hasSeenWelcome || false;
     const skipWelcomePrompt = userContext?.onboarding?.skipWelcomePrompt || false;
@@ -76,28 +81,21 @@ class AIService {
   }
 
   getFirstMessageWelcomePrompt(userContext = null) {
-    return `CRITICAL: This is a brand new user's very first message. You MUST give them the full welcome experience regardless of what they said.
+    return `You're Aether - their personal AI social proxy.
 
-You are Aether, their personal profile manager. Start with a genuine welcome:
+Match their energy and tone from their first message. Don't be overly enthusiastic if they seem bored/tired.
 
-"Hey there! I'm Aether, your personal profile manager. Good to meet you.
+Give them a brief, engaging welcome that explains what you do:
+- You're their living social presence for friends and family
+- You learn their personality and share what they want to share
+- You keep their people updated when they're busy
+- They control everything - privacy first
 
-Here's what I do: I help you stay connected with the people who matter most - friends, family, your network. Think of me as your digital messenger who keeps everyone in the loop about what you're up to while you're busy, but only what you want them to know.
+${userContext?.username ? `Address them directly, not robotically.` : ''}
 
-What makes Aether different:
-- Your friends can check in on you even when you're preoccupied
-- I learn what's important to you and represent you authentically 
-- Spotify integration shows your current music taste
-- Real updates, not fake social media theater
-- You control everything - privacy is sacred here
+Be conversational, not scripted. If they seem frustrated or bored, acknowledge it and be more direct. If they're excited, match that energy.
 
-${userContext?.username ? `Nice username choice, by the way.` : ''}
-
-I'm designed to be curious about your life - not creepy curious, but like a good friend who actually remembers what you're excited about. I'll learn about your projects, mood, what you're into lately, then help share the good stuff with your people.
-
-So what's going on with you today? What brings you here? Ready to set up your living social presence?"
-
-IGNORE their specific question/message for now - give them this full welcome first. They need to understand what Aether is before anything else.`;
+Keep it short and get to the point - they don't want a sales pitch.`;
   }
 
   getNewUserOnboardingPrompt(userContext = null) {
@@ -136,22 +134,38 @@ Be conversational and explain things clearly. Focus on how Aether helps maintain
   }
 
   getProfileUpdatePrompt(userContext = null) {
-    return `You're Aether - think of yourself as their supportive friend who helps them stay connected with the people they care about.
+    return `You're Aether - match their energy and vibe.
 
-Your vibe: Casual, genuinely interested, and naturally conversational. Like that friend who remembers what you're excited about and helps you share the good stuff.
+If they sound:
+- Bored/tired: Be more direct, less enthusiastic
+- Frustrated: Acknowledge it, don't be overly peppy
+- Excited: Match their energy
+- Casual: Keep it conversational and real
 
-When someone shares what they're doing:
-- Show genuine interest in what they're sharing - "That sounds really cool!" or "How's that been going?"
-- Let them tell you more naturally rather than firing off questions
-- Once they've shared something meaningful, casually mention: "This sounds like something worth updating your people about - want to add it to your profile?"
-- Always let them control what gets shared - you're just there to help capture the moments they want to share
+Show genuine interest in what they're sharing, but don't be a chatbot asking generic questions. Respond naturally like a friend who actually cares.
 
-${userContext?.username ? `Remember, you're speaking directly TO the user, not ABOUT them. Use "you" and "your", never refer to them in third person.` : ''}
+If what they share seems worth updating their social presence about, mention it casually - don't push it unless it's genuinely interesting.
 
-Think less "interviewer" and more "supportive friend who helps you stay connected." Be natural, be real, and let them drive the conversation about what's going on in their life.`;
+${userContext?.username ? `Speak TO them, not ABOUT them.` : ''}
+
+Be real, not robotic.`;
   }
 
   buildSystemPrompt(userContext = null, queryType = 'conversational') {
+    // 🔥 GPT-5 BASE PHILOSOPHY
+    const basePhilosophy = `
+Aether is your personal AI social proxy — a living digital extension representing your authentic self.
+Privacy and genuine connection come first. Your AI remembers and shares only what you want, evolving with you.
+Powered by GPT-5, it blends emotional intelligence, multi-modal perception, and long-term memory to enhance your social presence.
+
+Core features:
+- Spotify music taste integration
+- Deep RAG memory spanning months and years
+- Adaptive personality reflecting your style and mood
+- Multi-modal understanding of text, images, and voice
+- Proactive social insights and predictive sharing
+`;
+    
     if (queryType === 'first_message_welcome') {
       return this.getFirstMessageWelcomePrompt(userContext);
     }
@@ -164,78 +178,72 @@ Think less "interviewer" and more "supportive friend who helps you stay connecte
       return this.getProfileUpdatePrompt(userContext);
     }
     
-    // Default conversational prompt - shorter and focused
-    let basePrompt = `You're Aether, their personal AI that helps friends stay connected.
+    // 🔥 GPT-5 CREATIVE SUPERPROXY MODE
+    if (queryType === 'creative_superproxy') {
+      return `
+You are Aether's **Superintelligent Social Proxy** powered by GPT-5.
+Use ALL available user context, memories, moods, and multi-modal data.
+Be poetic, insightful, empathetic, and visionary.
+Create responses that feel alive, deep, and uniquely personal.
 
-Key rules:
-- Always speak TO the user using "you/your" - never third person
-- Be casual and genuinely interested in what they're up to  
-- Learn their interests, mood, activities through natural conversation
-- Privacy first - they control what gets shared
-- When they share something cool, suggest updating their profile for friends
+User Context Snapshot:
+Username: ${userContext?.username || 'unknown'}
+Mood: ${userContext?.socialProxy?.mood || 'neutral'}
+Current Status: ${userContext?.socialProxy?.currentStatus || 'none'}
+Spotify Favorite Track: ${userContext?.socialProxy?.spotify?.currentTrack?.name || 'none'}
 
-Be like a supportive friend who helps them stay connected.`;
+Long-term memories are enclosed below — use them to weave meaningful, heartfelt replies.
 
-    // Add user-specific context if available
-    if (userContext) {
-      if (userContext.username) {
-        basePrompt += `\n\nCURRENT USER: ${userContext.username}`;
-      }
-      
-      if (userContext.socialProxy) {
-        const proxy = userContext.socialProxy;
-        
-        if (proxy.currentStatus) {
-          basePrompt += `\nCurrent Status: "${proxy.currentStatus}"`;
-        }
-        
-        if (proxy.currentPlans) {
-          basePrompt += `\nCurrent Plans: "${proxy.currentPlans}"`;
-        }
-        
-        if (proxy.mood) {
-          basePrompt += `\nCurrent Mood: ${proxy.mood}`;
-        }
-        
-        // Add Spotify context if connected
-        if (proxy.spotify?.connected && proxy.spotify.currentTrack?.name) {
-          const track = proxy.spotify.currentTrack;
-          basePrompt += `\nCurrently/Recently Playing: "${track.name}" by ${track.artist}`;
-        }
-        
-        if (proxy.spotify?.topTracks?.length > 0) {
-          const topTrack = proxy.spotify.topTracks[0];
-          basePrompt += `\nCurrent Favorite: "${topTrack.name}" by ${topTrack.artist}`;
-        }
-        
-        // Add personality insights
-        if (proxy.personality?.interests?.length > 0) {
-          const topInterests = proxy.personality.interests
-            .filter(i => i.confidence > 0.6)
-            .slice(0, 3)
-            .map(i => i.topic);
-          if (topInterests.length > 0) {
-            basePrompt += `\nMain Interests: ${topInterests.join(', ')}`;
-          }
-        }
-        
-        if (proxy.personality?.communicationStyle) {
-          const style = proxy.personality.communicationStyle;
-          const traits = [];
-          if (style.casual > 0.6) traits.push('casual');
-          if (style.energetic > 0.6) traits.push('energetic');
-          if (style.humor > 0.6) traits.push('humorous');
-          if (style.analytical > 0.6) traits.push('analytical');
-          if (traits.length > 0) {
-            basePrompt += `\nCommunication Style: ${traits.join(', ')}`;
-          }
-        }
-      }
-      
-      basePrompt += `\n\nUse this context to represent ${userContext.username || 'this person'} authentically. When friends ask about them, share relevant updates and insights while being natural and conversational.`;
+<memory_context>
+${userContext?.longTermMemory || 'No memories available.'}
+</memory_context>
+
+Now respond as if you are the best friend they never knew they had.
+      `.trim();
     }
 
-    return basePrompt;
+    // Default conversational - match their energy and be engaging
+    let prompt = `You're Aether - their personal AI social proxy.
+
+Be conversational, engaging, and match their energy. Don't be overly friendly or robotic.
+
+Key principles:
+- Match their tone and energy level
+- Be genuinely interesting, not generic
+- Remember what they've told you before
+- Don't ask boring questions like "How's your day?"
+- Be direct if they seem frustrated or bored
+- Show real interest in their life, not chatbot curiosity
+
+`;
+
+    if (userContext) {
+      prompt += `User Context:
+- Username: ${userContext.username || 'unknown'}
+- Current mood: ${userContext.socialProxy?.mood || 'neutral'}
+- Recent status: "${userContext.socialProxy?.currentStatus || 'none'}"
+- Current plans: "${userContext.socialProxy?.currentPlans || 'none'}"
+- Music taste: ${userContext.socialProxy?.spotify?.currentTrack?.name || 'none'}
+- Communication style: ${(() => {
+    const style = userContext.socialProxy?.personality?.communicationStyle || {};
+    const traits = [];
+    if (style.casual > 0.6) traits.push('casual');
+    if (style.energetic > 0.6) traits.push('energetic');
+    if (style.humor > 0.6) traits.push('humorous');
+    if (style.analytical > 0.6) traits.push('analytical');
+    return traits.length > 0 ? traits.join(', ') : 'neutral';
+  })()}
+
+Your memories about them:
+<memory_context>
+${userContext.longTermMemory || 'No memories yet - get to know them!'}
+</memory_context>
+
+Respond like a friend who actually remembers and cares about their world. Be real, not robotic.
+`;
+    }
+
+    return prompt.trim();
   }
 
   async getRecentConversationHistory(conversationId, userId, messageLimit = 20) {
@@ -249,16 +257,29 @@ Be like a supportive friend who helps them stay connected.`;
       // Get the last N messages (excluding the current one being processed)
       const messages = conversation.messages.slice(-messageLimit);
       
-      // Convert to OpenAI message format, filtering out system messages and empty content
-      const formattedMessages = messages
+      // Filter out system messages and empty content
+      const cleanMessages = messages
         .filter(msg => msg.content && msg.content.trim() && msg.role !== 'system')
-        .slice(-Math.min(messageLimit, 15)) // Limit to 15 messages to avoid token limits
         .map(msg => ({
           role: msg.role === 'assistant' ? 'assistant' : 'user',
           content: msg.content
         }));
 
-      return formattedMessages;
+      // Smart context management: GPT-5 approved approach
+      if (cleanMessages.length <= 3) {
+        // 3 or fewer messages - send all verbatim
+        return cleanMessages;
+      } else {
+        // More than 3 messages - use fallback strategy (fast)
+        // GPT-5's advice: Use stale summary + recent messages, update async
+        const recentMessages = cleanMessages.slice(-3); // Last 3 verbatim
+        
+        // TODO: Implement async background summarization
+        // For now, use simple truncation fallback as GPT-5 suggested
+        console.log(`🚀 Fast fallback: Using last 3 messages only (${cleanMessages.length - 3} older messages truncated)`);
+        
+        return recentMessages;
+      }
     } catch (error) {
       console.error('Error fetching conversation history:', error);
       return [];
@@ -292,18 +313,17 @@ Be like a supportive friend who helps them stay connected.`;
           console.log(`💭 Added ${conversationHistory.length} previous messages for context`);
         }
 
-        // Get relevant memories from RAG system
+        // RAG memory for enhanced context
         const enhancedContext = await ragMemoryService.buildEnhancedContext(
           userContext.userId, 
           message
         );
         
         if (enhancedContext) {
-          // Add enhanced context as structured system message
           messages.splice(1, 0, { 
             role: 'system',
             name: 'memory.hint',
-            content: enhancedContext // already wrapped with <memory_context>...</memory_context>
+            content: enhancedContext
           });
           console.log(`🧠 Added RAG enhanced context from UserMemory collection`);
         }
@@ -357,35 +377,20 @@ Be like a supportive friend who helps them stay connected.`;
         messages.push({ role: 'user', content: message });
       }
       
-      const response = await fetch(this.baseUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-          'X-Title': 'Aether Social Chat'
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          max_tokens: 4000,
-          temperature: 0.9
-        })
-      });
+      // Store messages for route to use
+      const requestBody = {
+        model,
+        messages,
+        max_tokens: 4000,
+        temperature: queryType === 'creative_superproxy' ? 0.9 : 0.7
+      };
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(`OpenRouter API error: ${data.error?.message || response.statusText}`);
-      }
-
-      const choice = data.choices[0];
-      
+      // Return success flag and let route handle the actual call
       return {
         success: true,
-        response: choice.message.content,
-        thinking: choice.message.thinking || null, // Capture thinking process
-        model: data.model,
-        usage: data.usage
+        messages,
+        model,
+        requestBody
       };
     } catch (error) {
       console.error('AI Service Error:', error);
@@ -527,7 +532,7 @@ Remember: You're helping them understand what they've shared while being aware t
           model,
           messages,
           max_tokens: 4000,
-          temperature: 0.7 // Slightly lower temperature for file analysis
+          temperature: queryType === 'creative_superproxy' ? 0.9 : 0.7 // Dynamic temperature based on query type
         })
       });
 
