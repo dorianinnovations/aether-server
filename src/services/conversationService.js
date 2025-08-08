@@ -189,7 +189,7 @@ class ConversationService {
       };
 
       // Remove event broadcasting since we removed events
-      log.info(`Created new ${type} conversation for user ${userId}: ${conversation._id}`);
+      log.info(`Created new ${type} conversation`, { conversationId: conversation._id.toString().slice(-8) });
       return conversationData;
     } catch (error) {
       log.error('Error creating conversation:', error);
@@ -229,7 +229,7 @@ class ConversationService {
 
       // Event broadcasting removed
       
-      log.info(`Updated conversation title for user ${userId}: ${conversationId}`);
+      log.debug('Updated conversation title');
       return conversationData;
     } catch (error) {
       log.error('Error updating conversation title:', error);
@@ -289,7 +289,7 @@ class ConversationService {
 
       // Event broadcasting removed
 
-      log.info(`Added message to conversation ${conversationId} for user ${userId}`);
+      log.debug('Added message to conversation');
       return conversationData;
     } catch (error) {
       log.error('Error adding message:', error);
@@ -322,7 +322,7 @@ class ConversationService {
 
       // Event broadcasting removed
 
-      log.info(`Deleted conversation ${conversationId} for user ${userId} (${conversation.messageCount} messages)`);
+      log.info('Deleted conversation', { messageCount: conversation.messageCount });
       return { deletedCount: conversation.messageCount };
     } catch (error) {
       log.error('Error deleting conversation:', error);
@@ -345,7 +345,7 @@ class ConversationService {
 
       // Event broadcasting removed
 
-      log.info(`Deleted all conversations for user ${userId} (${result.modifiedCount} conversations)`);
+      log.info('Deleted all conversations', { count: result.modifiedCount });
       return { deletedCount: result.modifiedCount };
     } catch (error) {
       log.error('Error deleting all conversations:', error);

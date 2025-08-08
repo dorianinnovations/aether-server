@@ -50,7 +50,7 @@ class RAGMemoryService {
       // Update salience for used memories
       await this.bumpUsedMemories(diversified.map(d => d.memory._id));
       
-      log.debug(`Built memory context: ${diversified.length} memories, ${compressed.length} chars`);
+      log.debug('Built RAG memory context', { memoryCount: diversified.length, contentLength: compressed.length });
       
       return formatMemoryBlock(compressed);
     } catch (error) {
@@ -86,7 +86,7 @@ class RAGMemoryService {
         results.push(memory._id);
       }
 
-      log.info(`Upserted ${results.length} facts for user ${userId}`);
+      log.debug('Upserted RAG facts', { count: results.length });
       return results;
     } catch (error) {
       log.error('Error upserting facts:', error);
@@ -167,7 +167,7 @@ ${turnsText}`
       
       const stored = await this.upsertFacts(userId, factsWithSource);
       
-      log.info(`Auto-distilled ${stored.length} facts from conversation for user ${userId}`);
+      log.info('Auto-distilled conversation facts', { factCount: stored.length });
       return stored.length;
     } catch (error) {
       log.error('Error auto-distilling:', error);
@@ -236,7 +236,7 @@ ${turnsText}`
       
       if (facts.length > 0) {
         const stored = await this.upsertFacts(userId, facts);
-        log.info(`Distilled ${stored.length} facts from ${activities.length} activities for user ${userId}`);
+        log.info('Distilled activity facts', { factCount: stored.length, activityCount: activities.length });
         return stored.length;
       }
       
@@ -308,7 +308,7 @@ ${turnsText}`
   async clearUserMemories(userId) {
     try {
       const result = await UserMemory.deleteMany({ user: userId });
-      log.info(`Cleared ${result.deletedCount} memories for user ${userId}`);
+      log.info('Cleared user memories', { count: result.deletedCount });
       return result.deletedCount;
     } catch (error) {
       log.error('Error clearing memories:', error);
