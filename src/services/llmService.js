@@ -15,7 +15,7 @@ class LLMService {
   async makeLLMRequest(messages, options = {}) {
     try {
       const {
-        model = 'openai/gpt-4o',
+        model = 'openai/gpt-5',
         temperature = 0.9,
         n_predict = 4000,
         tools = [],
@@ -70,7 +70,7 @@ class LLMService {
   async makeStreamingRequest(messages, options = {}) {
     try {
       const {
-        model = 'openai/gpt-4o',
+        model = 'openai/gpt-5',
         temperature = 0.9,
         n_predict = 4000,
         tools = [],
@@ -127,7 +127,7 @@ class LLMService {
     try {
       const {
         prompt,
-        model = 'openai/gpt-4o-mini',
+        model = 'openai/gpt-5-mini',
         maxTokens = 500,
         temperature = 0.7
       } = options;

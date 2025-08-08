@@ -377,7 +377,7 @@ class ProfileAnalyzer {
           communicationStyle: user.socialProxy.personality.communicationStyle
         };
 
-        log.system(`Enhanced analysis completed for user ${userId}:`, updatesApplied);
+        log.info(`Enhanced analysis completed for user ${userId}:`, updatesApplied);
 
         return {
           success: true,
@@ -405,7 +405,7 @@ class ProfileAnalyzer {
         
         // Fallback to basic analysis on final failure
         if (attempt >= maxRetries) {
-          log.system(`Falling back to basic analysis for user ${userId}`);
+          log.info(`Falling back to basic analysis for user ${userId}`);
           return await this.analyzeMessage(userId, messageContent);
         }
       }
@@ -417,6 +417,15 @@ class ProfileAnalyzer {
    */
   async extractEntitiesWithAI(messageContent) {
     try {
+      // Check for empty input
+      if (!messageContent || messageContent.trim().length === 0) {
+        log.debug('Skipping entity extraction - empty message');
+        return {
+          success: false,
+          error: 'Empty message content'
+        };
+      }
+
       const prompt = `Analyze the following message and extract structured data about the person's interests, activities, mood, and communication style. 
 
 IMPORTANT: Output ONLY a valid JSON object with this exact structure:
@@ -457,18 +466,39 @@ Only extract what is genuinely present. Set "significant" to true only if this m
 
 Message: "${messageContent}"`;
 
-      const response = await llmService.generateCompletion({
-        prompt,
-        model: 'openai/gpt-4o-mini',
-        maxTokens: 500,
-        temperature: 0.1
-      });
+      let response;
+      try {
+        response = await llmService.generateCompletion({
+          prompt,
+          model: 'openai/gpt-4o-mini',
+          maxTokens: 500,
+          temperature: 0.1
+        });
 
-      if (!response.success) {
-        throw new Error(`LLM service failed: ${response.error}`);
+        if (!response.success) {
+          throw new Error(`LLM service failed: ${response.error}`);
+        }
+      } catch (llmError) {
+        log.error('LLM call failed in entity extraction:', llmError);
+        return {
+          success: false,
+          error: `LLM extraction failed: ${llmError.message}`
+        };
       }
 
-      const entities = JSON.parse(response.completion.trim());
+      let entities;
+      try {
+        entities = JSON.parse(response.completion.trim());
+      } catch (parseError) {
+        log.error('Failed to parse extracted entities JSON:', {
+          error: parseError.message,
+          rawResponse: response.completion
+        });
+        return {
+          success: false,
+          error: `JSON parse failed: ${parseError.message}`
+        };
+      }
       
       log.debug('🔍 Entities extracted:', {
         interests: entities.interests?.length || 0,
@@ -496,6 +526,12 @@ Message: "${messageContent}"`;
    */
   async synthesizeAndValidate(currentProfile, extractedEntities, originalMessage, context = {}) {
     try {
+      // Check for empty input
+      if (!originalMessage || originalMessage.trim().length === 0) {
+        log.debug('Skipping synthesis - empty message');
+        return { success: false, reason: 'empty_input' };
+      }
+
       // Skip if extracted data isn't significant
       if (!extractedEntities.significant) {
         log.debug('Skipping synthesis - extracted data not significant');
@@ -557,15 +593,24 @@ Output ONLY a valid JSON object:
   "reasoning": "overall reasoning for these updates"
 }`;
 
-      const response = await llmService.generateCompletion({
-        prompt,
-        model: 'openai/gpt-4o',
-        maxTokens: 800,
-        temperature: 0.2
-      });
+      let response;
+      try {
+        response = await llmService.generateCompletion({
+          prompt,
+          model: 'openai/gpt-4o',
+          maxTokens: 800,
+          temperature: 0.2
+        });
 
-      if (!response.success) {
-        throw new Error(`LLM service failed: ${response.error}`);
+        if (!response.success) {
+          throw new Error(`LLM service failed: ${response.error}`);
+        }
+      } catch (llmError) {
+        log.error('LLM call failed in synthesis:', llmError);
+        return {
+          success: false,
+          error: `LLM synthesis failed: ${llmError.message}`
+        };
       }
 
       const cleanJson = extractJsonFromMarkdown(response.completion);
@@ -807,7 +852,7 @@ Output ONLY a valid JSON object:
     );
     
     await Promise.allSettled(promises);
-    log.system(`Batch analyzed ${messages.length} messages`);
+    log.info(`Batch analyzed ${messages.length} messages`);
   }
 }
 

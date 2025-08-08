@@ -117,7 +117,7 @@ router.post(
       }
 
       const user = await User.create(userData);
-      log.auth('User registration successful', { email: user.email, username: user.username });
+      log.info('User registration successful', { email: user.email, username: user.username });
 
       res.status(HTTP_STATUS.CREATED).json({
         status: MESSAGES.SUCCESS,
@@ -169,7 +169,7 @@ router.post(
     }
 
     const { email, password } = req.body;
-    log.auth('Login attempt', { email });
+    log.info('Login attempt', { email });
 
     try {
       // Check if input contains "@" to determine if it's email or username
@@ -249,7 +249,7 @@ router.post('/spotify/connect', protect, async (req, res) => {
       });
     }
     
-    log.auth('Spotify account connected', { userId, spotifyDisplayName });
+    log.info('Spotify account connected', { userId, spotifyDisplayName });
     
     res.json({
       success: true,
@@ -299,7 +299,7 @@ router.post('/spotify/disconnect', protect, async (req, res) => {
       });
     }
     
-    log.auth('Spotify account disconnected', { userId });
+    log.info('Spotify account disconnected', { userId });
     
     res.json({
       success: true,
@@ -362,7 +362,7 @@ router.post("/onboarding/mark-welcome-seen", protect, async (req, res) => {
       });
     }
 
-    log.auth('Welcome prompt marked as seen', { userId });
+    log.info('Welcome prompt marked as seen', { userId });
 
     res.json({
       status: MESSAGES.SUCCESS,
@@ -405,7 +405,7 @@ router.post("/onboarding/complete", protect, async (req, res) => {
       });
     }
 
-    log.auth('Onboarding completed', { userId });
+    log.info('Onboarding completed', { userId });
 
     res.json({
       status: MESSAGES.SUCCESS,

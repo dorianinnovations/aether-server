@@ -15,7 +15,7 @@ const router = express.Router();
 // Regular chat endpoint without files
 router.post('/social-chat', protect, async (req, res) => {
   const startTime = Date.now();
-  const correlationId = log.request.start('POST', '/social-chat', { userId: req.user?.id });
+  const correlationId = log.info("POST /social-chat", { userId: req.user?.id });
   
   try {
     const { message, prompt, stream = true, conversationId, attachments } = req.body;
@@ -76,7 +76,7 @@ Just give me your honest thoughts on what I've sent.`;
       if (user) {
         // Use conversation message count for prompt classification
         const messageCount = conversation.messageCount || 0;
-        log.request.step(`Conversation loaded: ${messageCount} messages`, correlationId, { username: user.username, conversationId: conversation._id });
+        // // log step removed
         
         userContext = {
           username: user.username,
@@ -141,7 +141,7 @@ Just give me your honest thoughts on what I've sent.`;
       
       // Perform web search if needed
       if (shouldSearch) {
-        log.request.step('Web search triggered', correlationId, { query: cleanMessage.substring(0, 100) });
+        // // log step removed
         try {
           const searchResult = await webSearchTool({ query: cleanMessage }, { userId });
           if (searchResult.success && searchResult.structure.results.length > 0) {
@@ -154,7 +154,7 @@ ${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet
 Use this current information to provide an accurate, up-to-date response. Do not include the raw search results or JSON data in your response - just use the information naturally in your answer.`;
             
             enhancedMessage = `${processedMessage}\n\n${searchContext}`;
-            log.request.step('Web search completed', correlationId, { resultCount: searchResult.structure.results.length });
+            // // log step removed
           }
         } catch (error) {
           log.error('Web search failed', error, { correlationId });
@@ -243,7 +243,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
     
   } catch (error) {
     log.error('Social chat failed', error, { correlationId });
-    log.request.complete(correlationId, 500, Date.now() - startTime);
+    // log.info("Request completed");
     res.status(500).json({ 
       success: false, 
       error: 'Internal server error' 
@@ -251,7 +251,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
   } finally {
     // Ensure successful requests are logged
     if (res.statusCode !== 500) {
-      log.request.complete(correlationId, res.statusCode || 200, Date.now() - startTime);
+      // log.info("Request completed");
     }
   }
 });
@@ -259,7 +259,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
 // Enhanced chat endpoint with file upload support
 router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFiles, handleMulterError, async (req, res) => {
   const startTime = Date.now();
-  const correlationId = log.request.start('POST', '/social-chat-with-files', { userId: req.user?.id });
+  const correlationId = log.info("POST /social-chat", { userId: req.user?.id });
   
   try {
     const { message, prompt, stream = true, conversationId = 'default' } = req.body;
@@ -288,7 +288,7 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
     // Validate uploaded files
     let processedFiles = [];
     if (uploadedFiles.length > 0) {
-      log.request.step(`File processing started: ${uploadedFiles.length} files`, correlationId);
+      // // log step removed
       
       // Security validation
       const validationResult = await fileValidationService.validateFiles(uploadedFiles);
@@ -305,7 +305,7 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
       // Process validated files
       try {
         processedFiles = await fileProcessingService.processFiles(validationResult.files);
-        log.request.step(`Files processed successfully: ${processedFiles.length} files`, correlationId);
+        // // log step removed
         
         // Log processing summary
         const summary = fileProcessingService.generateProcessingSummary(processedFiles);
@@ -347,7 +347,7 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
       const user = await User.findById(userId).select('username socialProxy profile onboarding');
       if (user) {
         const messageCount = conversation.messageCount || 0;
-        log.request.step(`Conversation loaded: ${messageCount} messages`, correlationId, { username: user.username, conversationId: conversation._id });
+        // // log step removed
         
         userContext = {
           username: user.username,
@@ -421,7 +421,7 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
         }
         
         if (shouldSearch) {
-          log.request.step('Web search triggered', correlationId, { query: cleanMessage.substring(0, 100) });
+          // // log step removed
           try {
             const searchResult = await webSearchTool({ query: cleanMessage }, { userId });
             if (searchResult.success && searchResult.structure.results.length > 0) {
@@ -433,7 +433,7 @@ ${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet
 Use this current information to provide an accurate, up-to-date response. Do not include the raw search results or JSON data in your response - just use the information naturally in your answer.`;
               
               enhancedMessage = `${userMessage}\n\n${searchContext}`;
-              log.request.step('Web search completed', correlationId, { resultCount: searchResult.structure.results.length });
+              // // log step removed
             }
           } catch (error) {
             log.error('Web search failed', error, { correlationId });
@@ -566,7 +566,7 @@ Just give me your honest thoughts on what I've sent.`;
     
   } catch (error) {
     log.error('Social chat with files failed', error, { correlationId });
-    log.request.complete(correlationId, 500, Date.now() - startTime);
+    // log.info("Request completed");
     
     // Send error response if headers not sent
     if (!res.headersSent) {
@@ -579,7 +579,7 @@ Just give me your honest thoughts on what I've sent.`;
   } finally {
     // Ensure successful requests are logged
     if (res.statusCode !== 500) {
-      log.request.complete(correlationId, res.statusCode || 200, Date.now() - startTime);
+      // log.info("Request completed");
     }
   }
 });

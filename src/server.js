@@ -1,3 +1,6 @@
+// Ensure env is loaded in all entry points
+import 'dotenv/config';
+
 import express from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -23,12 +26,14 @@ import spotifyRoutes from './routes/spotify.js';
 import notificationRoutes from './routes/notifications.js';
 import friendMessagingRoutes from './routes/friendMessaging.js';
 import badgeRoutes from './routes/badges.js';
+import memoryRoutes from './routes/memory.js';
 
 // Initialize models
 import './models/User.js';
 import './models/UserBadge.js';
 import './models/Conversation.js';
 import './models/Activity.js';
+import './models/UserMemory.js';
 
 // Initialize services
 import analysisQueue from './services/analysisQueue.js';
@@ -42,9 +47,12 @@ const app = express();
  */
 const initializeServer = async () => {
   try {
+    // Debug env loading
+    console.log('[BOOT] OPENROUTER_API_KEY set:', !!process.env.OPENROUTER_API_KEY);
+    
     // Connect to database
     await connectDB();
-    log.database('✅ Database connection established');
+    log.info('✅ Database connection established');
 
     // Setup analysis queue event handlers for real-time notifications
     analysisQueue.on('analysisComplete', (result) => {
@@ -61,11 +69,11 @@ const initializeServer = async () => {
       // Could send error notification if desired
     });
 
-    log.system('Analysis queue event handlers initialized');
+    log.info('Analysis queue event handlers initialized');
 
     // Start Spotify Live Service for background updates
     spotifyLiveService.start();
-    log.system('Spotify Live Service started');
+    log.info('Spotify Live Service started');
 
     // Security middleware
     app.use(helmet({
@@ -98,6 +106,7 @@ const initializeServer = async () => {
     app.use('/spotify', spotifyRoutes);
     app.use('/notifications', notificationRoutes);
     app.use('/friend-messaging', friendMessagingRoutes);
+    app.use('/memory', memoryRoutes);
     app.use('/', socialChatRoutes);
     
     // Error handling
@@ -134,7 +143,7 @@ const initializeServer = async () => {
       
       // Stop background services
       spotifyLiveService.stop();
-      log.system('Background services stopped');
+      log.info('Background services stopped');
       
       server.close(() => {
         console.log('Server closed');

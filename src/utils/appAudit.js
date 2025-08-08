@@ -24,7 +24,7 @@ class AppAudit {
   }
 
   async runFullAudit() {
-    log.system('🔍 Starting comprehensive app audit...');
+    log.info('🔍 Starting comprehensive app audit...');
     
     try {
       await this.auditDatabase();
@@ -35,7 +35,7 @@ class AppAudit {
       
       this.calculateOverallHealth();
       
-      log.success('✅ App audit completed');
+      log.info('✅ App audit completed');
       return this.results;
       
     } catch (error) {

@@ -20,7 +20,7 @@ class SpotifyLiveService {
       lastUpdateCycle: null
     };
 
-    log.system('Spotify Live Service initialized');
+    log.info('Spotify Live Service initialized');
   }
 
   /**
@@ -37,7 +37,7 @@ class SpotifyLiveService {
       this.updateAllActiveUsers();
     }, this.updateFrequency);
 
-    log.system(`Spotify Live Service started (updates every ${this.updateFrequency / 1000}s)`);
+    log.info(`Spotify Live Service started (updates every ${this.updateFrequency / 1000}s)`);
   }
 
   /**
@@ -54,7 +54,7 @@ class SpotifyLiveService {
     }
 
     this.isRunning = false;
-    log.system('Spotify Live Service stopped');
+    log.info('Spotify Live Service stopped');
   }
 
   /**
@@ -203,7 +203,7 @@ class SpotifyLiveService {
     if (this.isRunning) {
       this.stop();
       this.start();
-      log.system(`Spotify Live Service frequency updated to ${seconds} seconds`);
+      log.info(`Spotify Live Service frequency updated to ${seconds} seconds`);
     }
   }
 
