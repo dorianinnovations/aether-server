@@ -344,7 +344,10 @@ Respond like a friend who actually remembers and cares about their world. Be rea
 
       // Add conversation history + RAG memories for enhanced context
       if (queryType !== 'first_message_welcome' && userContext?.conversationId) {
+        const contextStartTime = Date.now();
         const conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId);
+        const contextLoadTime = Date.now() - contextStartTime;
+        console.log(`🗺 Context loading took ${contextLoadTime}ms`);
         if (conversationHistory && conversationHistory.length > 0) {
           messages.push(...conversationHistory);
           console.log(`💭 Added ${conversationHistory.length} previous messages for context`);
