@@ -50,7 +50,15 @@ class LLMService {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(`OpenRouter API error: ${data.error?.message || response.statusText}`);
+        const errorDetails = {
+          status: response.status,
+          statusText: response.statusText,
+          data,
+          url: this.baseUrl,
+          model: requestBody.model
+        };
+        console.error('🚨 OpenRouter API Error Details:', errorDetails);
+        throw new Error(`OpenRouter API error (${response.status}): ${data.error?.message || response.statusText}`);
       }
 
       const choice = data.choices[0];
@@ -159,7 +167,15 @@ class LLMService {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(`OpenRouter API error: ${data.error?.message || response.statusText}`);
+        const errorDetails = {
+          status: response.status,
+          statusText: response.statusText,
+          data,
+          url: this.baseUrl,
+          model: requestBody.model
+        };
+        console.error('🚨 OpenRouter API Error Details:', errorDetails);
+        throw new Error(`OpenRouter API error (${response.status}): ${data.error?.message || response.statusText}`);
       }
 
       const choice = data.choices[0];

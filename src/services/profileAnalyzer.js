@@ -606,7 +606,13 @@ Output ONLY a valid JSON object:
           throw new Error(`LLM service failed: ${response.error}`);
         }
       } catch (llmError) {
-        log.error('LLM call failed in synthesis:', llmError);
+        log.error('LLM call failed in synthesis:', {
+          error: llmError.message,
+          stack: llmError.stack?.substring(0, 200),
+          userId,
+          model: 'openai/gpt-4o',
+          promptLength: prompt?.length || 0
+        });
         return {
           success: false,
           error: `LLM synthesis failed: ${llmError.message}`

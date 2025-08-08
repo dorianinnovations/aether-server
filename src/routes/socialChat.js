@@ -27,6 +27,8 @@ router.post('/social-chat', protect, uploadFiles, validateUploadedFiles, handleM
       correlationId,
       messageLength: userMessage?.length || 0,
       stream,
+      conversationId: conversationId || 'NOT_PROVIDED',
+      userId,
       conversationId,
       attachmentCount: attachments?.length || 0,
       fileCount: uploadedFiles.length,
@@ -80,9 +82,12 @@ Just give me your honest thoughts on what I've sent.`;
         type: 'aether'
       });
       
+      console.log(`🎯 Query classified as: conversational (msg count: ${conversations.conversations.length})`);
       if (conversations.conversations.length > 0) {
+        console.log(`📋 Using existing conversation: ${conversations.conversations[0]._id}`);
         conversation = conversations.conversations[0];
       } else {
+        console.log(`🆕 Creating new conversation for user ${userId}`);
         // Create new Aether conversation
         conversation = await conversationService.createConversation(userId, 'Chat with Aether', 'aether');
       }
@@ -212,8 +217,42 @@ Use this current information to provide an accurate, up-to-date response. Do not
         // SIMPLIFIED STREAMING - back to working approach but faster
         let fullResponse = '';
         
+        // Emergency streaming disable flag for debugging blank responses
+        const streamingDisabled = process.env.DISABLE_STREAMING === 'true';
+        console.log(`🌊 Streaming mode: ${streamingDisabled ? 'DISABLED' : 'ENABLED'}`);
+        
         try {
-          // For now, let's fall back to the working method but make it faster
+          if (streamingDisabled) {
+            console.log('⚡ Using NON-STREAMING mode for debugging');
+            // Just get the response without streaming
+            const data = await response.json();
+            
+            console.log(`📄 Non-streaming LLM Response Debug:`, {
+              hasData: !!data,
+              hasChoices: !!data.choices,
+              choicesLength: data.choices?.length || 0,
+              hasContent: !!data.choices?.[0]?.message?.content,
+              contentLength: data.choices?.[0]?.message?.content?.length || 0,
+              finishReason: data.choices?.[0]?.finish_reason,
+              model: data.model
+            });
+            
+            if (data.choices?.[0]?.message?.content) {
+              fullResponse = data.choices[0].message.content;
+              console.log(`✅ Non-streaming response: ${fullResponse.length} chars`);
+              
+              // Send complete response at once
+              res.write(`data: ${JSON.stringify({content: fullResponse})}\n\n`);
+            } else {
+              console.log(`⚠️ BLANK NON-STREAMING RESPONSE! Data:`, JSON.stringify(data, null, 2));
+              fullResponse = 'I apologize, but I\'m having trouble generating a response right now. Please try again.';
+              res.write(`data: ${JSON.stringify({content: fullResponse})}\n\n`);
+            }
+            
+            res.write(`data: [DONE]\n\n`);
+          } else {
+            console.log('🌊 Using STREAMING mode');
+            // For now, let's fall back to the working method but make it faster
           // TODO: Fix true streaming later - at least we eliminated the 15s delay!
           const response = await fetch(aiResponse.originalUrl || 'https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
@@ -232,8 +271,20 @@ Use this current information to provide an accurate, up-to-date response. Do not
           
           const data = await response.json();
           
+          console.log(`📄 LLM Response Debug:`, {
+            hasData: !!data,
+            hasChoices: !!data.choices,
+            choicesLength: data.choices?.length || 0,
+            hasContent: !!data.choices?.[0]?.message?.content,
+            contentLength: data.choices?.[0]?.message?.content?.length || 0,
+            finishReason: data.choices?.[0]?.finish_reason,
+            model: data.model
+          });
+          
           if (data.choices?.[0]?.message?.content) {
             fullResponse = data.choices[0].message.content;
+            
+            console.log(`✅ Full response received: ${fullResponse.length} chars, first 100: ${fullResponse.substring(0, 100)}`);
             
             // Fast word streaming (better than before)
             const words = fullResponse.split(' ');
@@ -242,9 +293,14 @@ Use this current information to provide an accurate, up-to-date response. Do not
               res.write(`data: ${JSON.stringify({content: word})}\n\n`);
               await new Promise(resolve => setTimeout(resolve, 15)); // Faster than before
             }
+          } else {
+            console.log(`⚠️ BLANK RESPONSE DETECTED! Data:`, JSON.stringify(data, null, 2));
+            fullResponse = 'I apologize, but I\'m having trouble generating a response right now. Please try again.';
+            res.write(`data: ${JSON.stringify({content: fullResponse})}\n\n`);
           }
           
           res.write(`data: [DONE]\n\n`);
+          }
           
         } catch (streamError) {
           log.error('Streaming error:', streamError, { correlationId });
@@ -253,6 +309,8 @@ Use this current information to provide an accurate, up-to-date response. Do not
         }
         
         // Save AI response if authenticated
+        console.log(`💾 Saving response: userId=${!!userId}, responseLength=${fullResponse?.length || 0}`);
+        
         if (userId && fullResponse) {
           await conversationService.addMessage(
             userId, 
