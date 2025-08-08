@@ -158,9 +158,11 @@ class SpotifyLiveService {
           user.socialProxy.spotify.accessToken = null;
           user.socialProxy.spotify.refreshToken = null;
           await user.save();
-          log.info(`🔄 Disconnected expired Spotify account for ${user.username}`);
+          // Only log once when disconnecting, not every update cycle
+          log.debug(`🔄 Disconnected expired Spotify account for ${user.username}`);
         }
       } else {
+        // Only log unexpected errors, not token expiration
         log.warn(`Failed to update Spotify for user ${user.username}:`, error.message);
       }
       this.stats.totalErrors++;
