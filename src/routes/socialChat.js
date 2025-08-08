@@ -225,7 +225,8 @@ Use this current information to provide an accurate, up-to-date response. Do not
         // Emergency streaming disable flag for debugging blank responses
         const streamingDisabled = process.env.DISABLE_STREAMING === 'true';
         const fastMode = process.env.FAST_MODE === 'true';
-        console.log(`🌊 Streaming mode: ${streamingDisabled ? 'DISABLED' : fastMode ? 'FAST' : 'ENABLED'}`);
+        const useFallback = process.env.USE_GPT4O_FALLBACK === 'true';
+        console.log(`🌊 Streaming: ${streamingDisabled ? 'DISABLED' : fastMode ? 'FAST' : 'ENABLED'}, Fallback: ${useFallback ? 'GPT-4o' : 'GPT-5 only'}`);
         
         try {
           if (streamingDisabled) {
@@ -259,23 +260,33 @@ Use this current information to provide an accurate, up-to-date response. Do not
           } else {
             console.log('🌊 Using STREAMING mode');
             // For now, let's fall back to the working method but make it faster
-          // TODO: Fix true streaming later - at least we eliminated the 15s delay!
+          // Add timeout to prevent hanging
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+          
+          console.log(`⏱️ Starting OpenRouter API call at +${Date.now() - startTime}ms`);
           const response = await fetch(aiResponse.originalUrl || 'https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
               'Content-Type': 'application/json'
+              signal: controller.signal
             },
             body: JSON.stringify({
-              model: 'openai/gpt-5',
+              model: useFallback ? 'openai/gpt-4o' : 'openai/gpt-5',
               messages: aiResponse.messages,
-              max_tokens: 800, // Reduced from 4000 to control costs
+              max_tokens: useFallback ? 1000 : 2000, // GPT-4o needs fewer tokens
               temperature: 0.7,
               stream: false // Back to non-streaming temporarily
             })
           });
           
+          clearTimeout(timeoutId);
+          const apiResponseTime = Date.now() - startTime;
+          console.log(`⏱️ OpenRouter API responded in ${apiResponseTime}ms total`);
+          
           const data = await response.json();
+          console.log(`📋 JSON parsing completed at +${Date.now() - startTime}ms`);
           
           console.log(`📄 LLM Response Debug:`, {
             hasData: !!data,
