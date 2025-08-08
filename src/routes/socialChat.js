@@ -270,8 +270,8 @@ Use this current information to provide an accurate, up-to-date response. Do not
             headers: {
               'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
               'Content-Type': 'application/json'
-              signal: controller.signal
             },
+            signal: controller.signal,
             body: JSON.stringify({
               model: useFallback ? 'openai/gpt-4o' : 'openai/gpt-5',
               messages: aiResponse.messages,
