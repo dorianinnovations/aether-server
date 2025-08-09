@@ -4,6 +4,7 @@
  */
 
 import User from '../models/User.js';
+import Activity from '../models/Activity.js';
 import { log } from '../utils/logger.js';
 import spotifyService from './spotifyService.js';
 import notificationService from './notificationService.js';
@@ -122,10 +123,34 @@ class SpotifyLiveService {
       const currentTrackId = currentTrack && currentTrack.name ? 
         `${currentTrack.name}-${currentTrack.artist}` : null;
 
-      // Send notification if track changed and user is actively listening
+      // Send notification and create activity if track changed and user is actively listening
       if (currentTrackId && currentTrackId !== previousTrackId) {
         // Only notify if the track is actually playing (not paused)
         if (currentTrack.isPlaying) {
+          // Create timeline activity for music update
+          try {
+            await Activity.create({
+              user: user._id,
+              type: 'spotify_track',
+              content: { 
+                text: `Now listening to ${currentTrack.name}`,
+                metadata: { 
+                  track: {
+                    name: currentTrack.name,
+                    artist: currentTrack.artist,
+                    album: currentTrack.album,
+                    imageUrl: currentTrack.imageUrl,
+                    spotifyUrl: currentTrack.spotifyUrl
+                  }
+                }
+              },
+              visibility: 'friends'
+            });
+            
+            log.debug(`🎵 Created music activity for ${user.username}: ${currentTrack.name} by ${currentTrack.artist}`);
+          } catch (activityError) {
+            log.error('Failed to create music activity:', activityError);
+          }
           const sent = notificationService.notifySpotifyUpdate(user._id.toString(), {
             type: 'track_change',
             currentTrack: {
