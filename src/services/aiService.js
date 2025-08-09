@@ -332,7 +332,7 @@ Respond like a friend who actually remembers and cares about their world. Be rea
     try {
       // Classify the query to choose appropriate prompt
       const queryType = this.classifyQuery(message, userContext);
-      console.log(`🎯 Query classified as: ${queryType} (msg count: ${userContext?.messageCount || 0})`);
+      // Query classification logged in route layer
       
       // Build messages array with conversation history
       const messages = [
@@ -453,7 +453,7 @@ Respond like a friend who actually remembers and cares about their world. Be rea
     try {
       // Classify the query to choose appropriate prompt
       const queryType = this.classifyQuery(message, userContext);
-      console.log(`🎯 Query classified as: ${queryType} (msg count: ${userContext?.messageCount || 0})`);
+      // Query classification logged in route layer
       console.log(`📁 Processing ${processedFiles.length} files for AI`);
       
       // Build system prompt with file context
