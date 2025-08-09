@@ -437,7 +437,7 @@ Respond like a friend who actually remembers and cares about their world. Be rea
       const requestBody = {
         model: selectedModel,
         messages,
-        max_tokens: selectedModel.includes('gpt-5') ? 2500 : 1500, // More tokens for GPT-5
+        max_tokens: selectedModel.includes('gpt-5') ? 3000 : 2000, // Increased tokens for complete responses
         temperature: queryType === 'creative_superproxy' ? 0.9 : 0.7
       };
 
@@ -588,7 +588,7 @@ Remember: You're helping them understand what they've shared while being aware t
         body: JSON.stringify({
           model: 'openai/gpt-4o', // Force GPT-4o for file processing to keep it fast
           messages,
-          max_tokens: 1500,
+          max_tokens: 2000,
           temperature: queryType === 'creative_superproxy' ? 0.9 : 0.7 // Dynamic temperature based on query type
         })
       });
