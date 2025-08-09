@@ -66,16 +66,20 @@ If this content reveals something compelling about my interests, hobbies, projec
 Just give me your honest thoughts on what I've sent.`;
     }
     
-    // Get or create conversation
+    // Get or create conversation - ALWAYS prefer continuing existing Aether thread
     let conversation;
-    if (conversationId && conversationId !== 'default') {
-      // Get existing conversation
+    if (conversationId && conversationId !== 'default' && conversationId !== 'undefined') {
+      // Get specific conversation if provided
       conversation = await conversationService.getConversation(userId, conversationId);
       if (!conversation) {
-        return res.status(404).json({ error: 'Conversation not found' });
+        // If specific conversation not found, fall back to main Aether thread
+        console.log(`⚠️ Conversation ${conversationId} not found, falling back to main Aether thread`);
+        conversationId = null;
       }
-    } else {
-      // Create or get default Aether conversation
+    }
+    
+    if (!conversation) {
+      // Always try to continue existing Aether conversation first
       const conversations = await conversationService.getUserConversations(userId, { 
         limit: 1,
         type: 'aether'
@@ -83,10 +87,10 @@ Just give me your honest thoughts on what I've sent.`;
       
       if (conversations.conversations.length > 0) {
         conversation = conversations.conversations[0];
-        log.debug('Using existing conversation', { conversationId: conversation._id, messageCount: conversations.conversations.length });
+        console.log(`✅ Continuing existing Aether thread: ${conversation._id} (${conversation.messageCount || 0} messages)`);
       } else {
         conversation = await conversationService.createConversation(userId, 'Chat with Aether', 'aether');
-        log.debug('Created new conversation', { conversationId: conversation._id, userId });
+        console.log(`🆕 Created new Aether thread: ${conversation._id}`);
       }
     }
     
@@ -482,14 +486,20 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
       }
     }
     
-    // Get or create conversation
+    // Get or create conversation - ALWAYS prefer continuing existing Aether thread
     let conversation;
-    if (conversationId && conversationId !== 'default') {
+    if (conversationId && conversationId !== 'default' && conversationId !== 'undefined') {
+      // Get specific conversation if provided
       conversation = await conversationService.getConversation(userId, conversationId);
       if (!conversation) {
-        return res.status(404).json({ error: 'Conversation not found' });
+        // If specific conversation not found, fall back to main Aether thread
+        console.log(`⚠️ Conversation ${conversationId} not found, falling back to main Aether thread`);
+        conversationId = null;
       }
-    } else {
+    }
+    
+    if (!conversation) {
+      // Always try to continue existing Aether conversation first
       const conversations = await conversationService.getUserConversations(userId, { 
         limit: 1,
         type: 'aether'
@@ -497,8 +507,10 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
       
       if (conversations.conversations.length > 0) {
         conversation = conversations.conversations[0];
+        console.log(`✅ Continuing existing Aether thread: ${conversation._id} (${conversation.messageCount || 0} messages)`);
       } else {
         conversation = await conversationService.createConversation(userId, 'Chat with Aether', 'aether');
+        console.log(`🆕 Created new Aether thread: ${conversation._id}`);
       }
     }
     
