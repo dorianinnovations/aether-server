@@ -196,7 +196,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
       let aiResponse;
       if (processedFiles.length > 0) {
         // Use processed files for multimodal AI
-        aiResponse = await aiService.chatWithFiles(enhancedMessage, 'openai/gpt-5', userContext, processedFiles);
+        aiResponse = await aiService.chatWithFiles(enhancedMessage, 'openai/gpt-4o', userContext, processedFiles);
       } else {
         // Use regular chat with attachments (model will be selected by tierService)
         aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-4o', userContext, attachments);
@@ -274,7 +274,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
             },
             signal: controller.signal,
             body: JSON.stringify({
-              model: useFallback ? 'openai/gpt-4o' : 'openai/gpt-5',
+              model: aiResponse.model || 'openai/gpt-4o', // Use model selected by tierService
               messages: aiResponse.messages,
               max_tokens: useFallback ? 1500 : 2500, // Increased tokens for better responses
               temperature: 0.7,
@@ -621,7 +621,7 @@ Just give me your honest thoughts on what I've sent.`;
       }
 
       // Get AI response with enhanced message, processed files, and user context
-      const aiResponse = await aiService.chatWithFiles(finalMessage, 'openai/gpt-5', userContext, processedFiles);
+      const aiResponse = await aiService.chatWithFiles(finalMessage, 'openai/gpt-4o', userContext, processedFiles);
       
       if (aiResponse.success) {
         // Send tool results if we have web search results
