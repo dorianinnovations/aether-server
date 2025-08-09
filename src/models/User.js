@@ -328,6 +328,36 @@ const UserSchema = new mongoose.Schema({
       
       lastSignificantUpdate: Date
     }
+  },
+
+  // User tier system with GPT-5 usage tracking
+  tier: {
+    type: String,
+    enum: ['free', 'pro', 'elite'],
+    default: 'free'
+  },
+  
+  // GPT-5 usage tracking
+  gpt5Usage: {
+    // Monthly usage tracking
+    currentMonth: {
+      type: String, // YYYY-MM format
+      default: () => new Date().toISOString().slice(0, 7)
+    },
+    monthlyCount: {
+      type: Number,
+      default: 0
+    },
+    // Track last reset to handle month rollover
+    lastReset: {
+      type: Date,
+      default: Date.now
+    },
+    // Lifetime usage for analytics
+    totalUsage: {
+      type: Number,
+      default: 0
+    }
   }
 }, {
   timestamps: true

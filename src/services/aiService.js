@@ -2,6 +2,7 @@ import fetch from 'node-fetch';
 import { env } from '../config/environment.js';
 import conversationService from './conversationService.js';
 import ragMemoryService from './ragMemoryService.js';
+import tierService from './tierService.js';
 
 class AIService {
   constructor() {
@@ -323,15 +324,30 @@ Respond like a friend who actually remembers and cares about their world. Be rea
     }
   }
 
-  async chatStream(message, model = 'openai/gpt-5') {
+  async chatStream(message, model = 'openai/gpt-4o') {
     // For now, use regular chat and return response for word-by-word streaming
     return await this.chat(message, model);
   }
 
-  async chat(message, model = 'openai/gpt-5', userContext = null, attachments = null) {
+  async chat(message, model = 'openai/gpt-4o', userContext = null, attachments = null) {
     try {
       // Classify the query to choose appropriate prompt
       const queryType = this.classifyQuery(message, userContext);
+      
+      // Smart model selection based on user tier and query type
+      let selectedModel = model;
+      let modelSelection = null;
+      
+      if (userContext?.userId) {
+        modelSelection = await tierService.selectModel(userContext.userId, queryType);
+        selectedModel = modelSelection.model;
+        
+        console.log(`🤖 Model selection: ${selectedModel} (${modelSelection.reason}) for ${queryType}`);
+        if (modelSelection.message) {
+          console.log(`💡 ${modelSelection.message}`);
+        }
+      }
+      
       // Query classification logged in route layer
       
       // Build messages array with conversation history
@@ -419,9 +435,9 @@ Respond like a friend who actually remembers and cares about their world. Be rea
       
       // Store messages for route to use
       const requestBody = {
-        model,
+        model: selectedModel,
         messages,
-        max_tokens: 800, // Reduced from 4000 to control GPT-5 costs
+        max_tokens: selectedModel.includes('gpt-5') ? 2500 : 1500, // More tokens for GPT-5
         temperature: queryType === 'creative_superproxy' ? 0.9 : 0.7
       };
 
@@ -429,8 +445,9 @@ Respond like a friend who actually remembers and cares about their world. Be rea
       return {
         success: true,
         messages,
-        model,
-        requestBody
+        model: selectedModel,
+        requestBody,
+        modelSelection // Include tier/usage info for route
       };
     } catch (error) {
       console.error('AI Service Error:', error);
@@ -449,7 +466,7 @@ Respond like a friend who actually remembers and cares about their world. Be rea
    * @param {Array} processedFiles - Array of processed files from fileProcessingService
    * @returns {Object} AI response
    */
-  async chatWithFiles(message, model = 'openai/gpt-5', userContext = null, processedFiles = []) {
+  async chatWithFiles(message, model = 'openai/gpt-4o', userContext = null, processedFiles = []) {
     try {
       // Classify the query to choose appropriate prompt
       const queryType = this.classifyQuery(message, userContext);
@@ -569,9 +586,9 @@ Remember: You're helping them understand what they've shared while being aware t
           'X-Title': 'Aether File Analysis'
         },
         body: JSON.stringify({
-          model,
+          model: 'openai/gpt-4o', // Force GPT-4o for file processing to keep it fast
           messages,
-          max_tokens: 800, // Reduced from 4000 to control GPT-5 costs
+          max_tokens: 1500,
           temperature: queryType === 'creative_superproxy' ? 0.9 : 0.7 // Dynamic temperature based on query type
         })
       });
