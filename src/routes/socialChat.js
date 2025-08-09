@@ -198,8 +198,8 @@ Use this current information to provide an accurate, up-to-date response. Do not
         // Use processed files for multimodal AI
         aiResponse = await aiService.chatWithFiles(enhancedMessage, 'openai/gpt-5', userContext, processedFiles);
       } else {
-        // Use regular chat with attachments
-        aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-5', userContext, attachments);
+        // Use regular chat with attachments (model will be selected by tierService)
+        aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-4o', userContext, attachments);
       }
       const aiCallTime = Date.now() - aiCallStartTime;
       log.debug('AI service call completed', { correlationId, aiCallTime });
@@ -276,7 +276,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
             body: JSON.stringify({
               model: useFallback ? 'openai/gpt-4o' : 'openai/gpt-5',
               messages: aiResponse.messages,
-              max_tokens: useFallback ? 1000 : 2000, // GPT-4o needs fewer tokens
+              max_tokens: useFallback ? 1500 : 2500, // Increased tokens for better responses
               temperature: 0.7,
               stream: false // Back to non-streaming temporarily
             })

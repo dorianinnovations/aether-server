@@ -294,7 +294,23 @@ class SpotifyService {
           lastPlayed: new Date()
         };
       } else {
-        user.socialProxy.spotify.currentTrack = null;
+        // If nothing is currently playing, use the most recent track but mark it as not playing
+        if (recentTracks && recentTracks.length > 0) {
+          const mostRecent = recentTracks[0];
+          user.socialProxy.spotify.currentTrack = {
+            name: mostRecent.name,
+            artist: mostRecent.artist,
+            album: mostRecent.album,
+            imageUrl: mostRecent.imageUrl,
+            spotifyUrl: mostRecent.spotifyUrl,
+            isPlaying: false,
+            progressMs: null,
+            durationMs: null,
+            lastPlayed: mostRecent.playedAt
+          };
+        } else {
+          user.socialProxy.spotify.currentTrack = null;
+        }
       }
 
       user.socialProxy.spotify.recentTracks = recentTracks;
