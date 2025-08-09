@@ -276,7 +276,9 @@ router.get('/status', protect, async (req, res) => {
     // Update Spotify data if connected
     if (user.socialProxy?.spotify?.connected) {
       await spotifyService.updateUserSpotifyData(user);
-      await user.reload(); // Refresh user data
+      // Re-fetch user data after update
+      const updatedUser = await User.findById(req.user.id).select('socialProxy.spotify');
+      user.socialProxy = updatedUser.socialProxy;
     }
 
     res.json({
