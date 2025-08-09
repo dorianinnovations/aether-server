@@ -29,8 +29,6 @@ router.post('/social-chat', protect, uploadFiles, validateUploadedFiles, handleM
       messageLength: userMessage?.length || 0,
       stream,
       conversationId: conversationId || 'NOT_PROVIDED',
-      userId,
-      conversationId,
       attachmentCount: attachments?.length || 0,
       fileCount: uploadedFiles.length,
       userId
@@ -83,14 +81,12 @@ Just give me your honest thoughts on what I've sent.`;
         type: 'aether'
       });
       
-      console.log(`🎯 Query classified as: conversational (msg count: ${conversations.conversations.length})`);
       if (conversations.conversations.length > 0) {
-        console.log(`📋 Using existing conversation: ${conversations.conversations[0]._id}`);
         conversation = conversations.conversations[0];
+        log.debug('Using existing conversation', { conversationId: conversation._id, messageCount: conversations.conversations.length });
       } else {
-        console.log(`🆕 Creating new conversation for user ${userId}`);
-        // Create new Aether conversation
         conversation = await conversationService.createConversation(userId, 'Chat with Aether', 'aether');
+        log.debug('Created new conversation', { conversationId: conversation._id, userId });
       }
     }
     
@@ -189,9 +185,14 @@ Use this current information to provide an accurate, up-to-date response. Do not
         }
       }
 
-      // Get AI streaming response - handle both attachments and processed files
+        // Get AI streaming response - handle both attachments and processed files
       const aiCallStartTime = Date.now();
-      console.log(`🤖 Starting AI service call at +${aiCallStartTime - startTime}ms`);
+      log.debug('Starting AI service call', { 
+        correlationId,
+        elapsedTime: aiCallStartTime - startTime,
+        hasProcessedFiles: processedFiles.length > 0,
+        hasAttachments: !!attachments?.length 
+      });
       let aiResponse;
       if (processedFiles.length > 0) {
         // Use processed files for multimodal AI
@@ -201,7 +202,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
         aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-5', userContext, attachments);
       }
       const aiCallTime = Date.now() - aiCallStartTime;
-      console.log(`🤖 AI service call completed in ${aiCallTime}ms`);
+      log.debug('AI service call completed', { correlationId, aiCallTime });
       
       if (aiResponse.success) {
         // First send tool results if we have web search results
