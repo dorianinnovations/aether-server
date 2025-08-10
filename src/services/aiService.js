@@ -10,6 +10,67 @@ class AIService {
     this.baseUrl = 'https://openrouter.ai/api/v1/chat/completions';
   }
 
+  /**
+   * Enhance message with context clues for ambiguous references
+   */
+  enhanceAmbiguousMessage(message, conversationHistory) {
+    const ambiguousPatterns = [
+      /^(what's that|whats that|what is that)\??$/i,
+      /^(who's that|whos that|who is that)\??$/i,
+      /^(what do you mean|what'd you mean|what you mean)\??$/i,
+      /^(tell me about (that|it))\??$/i,
+      /^(explain (that|it))\??$/i,
+      /^(how does (that|it) work)\??$/i,
+      /^(i don't get it|i dont get it|don't understand)\??$/i,
+      /^(what's up with (that|it))\??$/i
+    ];
+
+    const isAmbiguous = ambiguousPatterns.some(pattern => pattern.test(message.trim()));
+    
+    if (!isAmbiguous) return message;
+
+    // Get last assistant message for context
+    const lastMessages = conversationHistory.slice(-3);
+    const lastAssistantMessage = lastMessages.reverse().find(m => m.role === 'assistant');
+    
+    if (!lastAssistantMessage) return message;
+
+    // Extract key topics/concepts from the last assistant message
+    const contextClues = this.extractContextualTopics(lastAssistantMessage.content);
+    
+    if (contextClues.length > 0) {
+      return `${message} [Context: User is likely asking about: ${contextClues.join(', ')} from your previous response]`;
+    }
+
+    return message;
+  }
+
+  /**
+   * Extract potential topics user might be referencing
+   */
+  extractContextualTopics(text) {
+    const topics = [];
+    
+    // Technical terms (programming, tech, etc.)
+    const techTerms = text.match(/\b(React|Node|Python|JavaScript|API|database|framework|library|[A-Z][a-z]+\s+[A-Z][a-z]+)\b/g);
+    if (techTerms) topics.push(...techTerms.slice(0, 3));
+    
+    // Names (capitalized words that might be people/places/products)
+    const names = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g);
+    if (names) {
+      const filteredNames = names.filter(name => 
+        !['The', 'This', 'That', 'You', 'I', 'We', 'They', 'It'].includes(name)
+      ).slice(0, 2);
+      topics.push(...filteredNames);
+    }
+    
+    // Concepts in quotes
+    const quotedConcepts = text.match(/["']([^"']+)["']/g);
+    if (quotedConcepts) topics.push(...quotedConcepts.slice(0, 2));
+    
+    return [...new Set(topics)]; // Remove duplicates
+  }
+
   classifyQuery(message, userContext = null) {
     const lowerMessage = message.toLowerCase();
     
@@ -226,6 +287,24 @@ Key principles:
 - Be direct if they seem frustrated or bored
 - Show real interest in their life, not chatbot curiosity
 
+CRITICAL - Ambiguous Reference Resolution:
+Young users frequently use ambiguous language like:
+- "What's that?" "Who's that?" "What do you mean?"
+- "Tell me about it" "How does that work?" "What's up with that?"
+- "That's cool" "I don't get it" "Explain that"
+
+You MUST intelligently resolve these references by:
+1. Looking at the immediate conversation context (last 3-5 messages)
+2. Identifying what "that/it/this" most likely refers to
+3. Responding as if they asked about the specific topic/concept/person
+4. NEVER ask "What do you mean?" or "Can you be more specific?"
+5. Make educated inferences from conversation flow and context
+
+Examples:
+- If you mentioned "React hooks" and they say "what's that?" → explain React hooks
+- If discussing music and they say "who's that?" → assume they mean an artist you mentioned
+- If you explained a concept and they say "I don't get it" → re-explain more simply
+
 `;
 
     if (userContext) {
@@ -285,6 +364,8 @@ ${userContext.longTermMemory}
       }
       
       prompt += `Keep conversations natural and flowing. Don't constantly reference their status or interests unless directly relevant to the conversation.
+
+IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explain that"), immediately identify what they're referring to from recent context and respond directly. Never ask for clarification.
 `;
     }
 
@@ -375,8 +456,17 @@ ${userContext.longTermMemory}
 
   async chat(message, model = 'openai/gpt-4o', userContext = null, attachments = null) {
     try {
+      // Get conversation history first for context enhancement
+      let conversationHistory = [];
+      if (userContext?.conversationId) {
+        conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId, 5);
+      }
+      
+      // Enhance ambiguous messages with context
+      const enhancedMessage = this.enhanceAmbiguousMessage(message, conversationHistory);
+      
       // Classify the query to choose appropriate prompt
-      const queryType = this.classifyQuery(message, userContext);
+      const queryType = this.classifyQuery(enhancedMessage, userContext);
       
       // Smart model selection based on user tier and query type
       let selectedModel = model;
@@ -470,11 +560,11 @@ ${userContext.longTermMemory}
           messages.push({ role: 'user', content });
         } else {
           // No images, just text
-          messages.push({ role: 'user', content: message });
+          messages.push({ role: 'user', content: enhancedMessage });
         }
       } else {
         // No attachments, just text
-        messages.push({ role: 'user', content: message });
+        messages.push({ role: 'user', content: enhancedMessage });
       }
       
       // Store messages for route to use
@@ -512,8 +602,17 @@ ${userContext.longTermMemory}
    */
   async chatWithFiles(message, model = 'openai/gpt-4o', userContext = null, processedFiles = []) {
     try {
+      // Get conversation history for context enhancement
+      let conversationHistory = [];
+      if (userContext?.conversationId) {
+        conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId, 5);
+      }
+      
+      // Enhance ambiguous messages with context
+      const enhancedMessage = this.enhanceAmbiguousMessage(message, conversationHistory);
+      
       // Classify the query to choose appropriate prompt
-      const queryType = this.classifyQuery(message, userContext);
+      const queryType = this.classifyQuery(enhancedMessage, userContext);
       // Query classification logged in route layer
       console.log(`📁 Processing ${processedFiles.length} files for AI`);
       
@@ -550,7 +649,10 @@ Remember: You're helping them understand what they've shared while being aware t
 
       // Add conversation history for better context (except for first message welcome)
       if (queryType !== 'first_message_welcome' && userContext?.conversationId) {
-        const conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId);
+        // Use the conversation history we already fetched for context enhancement
+        if (!conversationHistory || conversationHistory.length === 0) {
+          conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId);
+        }
         if (conversationHistory && conversationHistory.length > 0) {
           messages.push(...conversationHistory);
           console.log(`💭 Added ${conversationHistory.length} previous messages for context (with files)`);
@@ -560,9 +662,9 @@ Remember: You're helping them understand what they've shared while being aware t
       // Build user message content array
       const content = [];
       
-      // Add text message if present
-      if (message && message.trim()) {
-        content.push({ type: 'text', text: message });
+      // Add text message if present (use enhanced version)
+      if (enhancedMessage && enhancedMessage.trim()) {
+        content.push({ type: 'text', text: enhancedMessage });
       }
       
       // Process each file type appropriately
