@@ -16,7 +16,7 @@ const router = express.Router();
 router.post('/social-chat', protect, uploadFiles, validateUploadedFiles, handleMulterError, async (req, res) => {
   const startTime = Date.now();
   const correlationId = log.info("POST /social-chat", { userId: req.user?.id });
-  console.log(`⏱️ Chat request started at ${new Date().toISOString()}`);
+  // Chat request timing - reduced logging
   
   try {
     const { message, prompt, stream = true, conversationId, attachments } = req.body;
@@ -87,7 +87,7 @@ Just give me your honest thoughts on what I've sent.`;
       
       if (conversations.conversations.length > 0) {
         conversation = conversations.conversations[0];
-        console.log(`✅ Continuing existing Aether thread: ${conversation._id} (${conversation.messageCount || 0} messages)`);
+        // Continuing existing conversation
       } else {
         conversation = await conversationService.createConversation(userId, 'Chat with Aether', 'aether');
         console.log(`🆕 Created new Aether thread: ${conversation._id}`);
@@ -231,7 +231,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
         const streamingDisabled = process.env.DISABLE_STREAMING === 'true';
         const fastMode = process.env.FAST_MODE === 'true';
         const useFallback = process.env.USE_GPT4O_FALLBACK === 'true';
-        console.log(`🌊 Streaming: ${streamingDisabled ? 'DISABLED' : fastMode ? 'FAST' : 'ENABLED'}, Fallback: ${useFallback ? 'GPT-4o' : 'GPT-5 only'}`);
+        // Streaming mode configured
         
         try {
           if (streamingDisabled) {
@@ -507,7 +507,7 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
       
       if (conversations.conversations.length > 0) {
         conversation = conversations.conversations[0];
-        console.log(`✅ Continuing existing Aether thread: ${conversation._id} (${conversation.messageCount || 0} messages)`);
+        // Continuing existing conversation
       } else {
         conversation = await conversationService.createConversation(userId, 'Chat with Aether', 'aether');
         console.log(`🆕 Created new Aether thread: ${conversation._id}`);

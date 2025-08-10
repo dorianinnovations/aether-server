@@ -19,8 +19,8 @@ class RAGMemoryService {
    */
   async buildEnhancedContext(userId, message) {
     try {
-      // Random chance to skip memory context to reduce repetitiveness
-      if (Math.random() < 0.3) return ''; // 30% chance to skip
+      // Memory context should always be available when relevant
+      // Skip random chance - memories should be used consistently
       
       const queryVec = await embed(message);
       if (!queryVec) return '';
@@ -39,8 +39,8 @@ class RAGMemoryService {
       // Score by cosine similarity with higher threshold to be more selective
       const scored = scoreByCosine(memories, queryVec);
       
-      // Filter for higher relevance to avoid weak connections
-      const relevant = scored.filter(s => s.similarity >= 0.4); // Increased from 0.25
+      // Filter for relevance - lowered threshold for better recall
+      const relevant = scored.filter(s => s.similarity >= 0.2); // Allow more memories through
       if (relevant.length === 0) return '';
 
       // Use fewer memories for less overwhelming context

@@ -376,7 +376,7 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
     try {
       const conversation = await conversationService.getConversation(userId, conversationId, messageLimit);
       
-      console.log(`🔍 DEBUG: conversationId=${conversationId}, userId=${userId}, conversation found=${!!conversation}, messageCount=${conversation?.messages?.length || 0}`);
+      // Debug conversation info - reduced logging
       
       if (!conversation || !conversation.messages || conversation.messages.length === 0) {
         console.log(`⚠️ No conversation or messages found for conversationId: ${conversationId}`);
