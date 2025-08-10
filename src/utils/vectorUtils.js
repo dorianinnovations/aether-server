@@ -20,9 +20,21 @@ export async function embed(text) {
     return cheapHashEmbedding(text, 1536);
   }
 
-  // EMERGENCY FIX: Skip API calls - they're all failing and causing 6+ second delays
-  // Use fast embedding immediately until APIs are stable
-  console.log('[EMBED] Using fast embedding to avoid API delays');
+  // Try OpenAI first (most reliable for embeddings)
+  if (OPENAI_API_KEY) {
+    const result = await openAIEmbedding(text);
+    if (result) return result;
+  }
+
+  // Try OpenRouter as backup
+  if (OPENROUTER_API_KEY) {
+    console.log('[EMBED] OpenAI failed, trying OpenRouter backup');
+    const result = await openRouterEmbeddingWithRetry(text);
+    if (result) return result;
+  }
+
+  // Final fallback to cheap embedding
+  console.log('[EMBED] All embedding providers failed, using cheap fallback');
   return cheapHashEmbedding(text, 1536);
 }
 
@@ -100,6 +112,12 @@ async function openRouterEmbedding(text) {
  */
 async function openAIEmbedding(text) {
   try {
+    console.log(`[EMBED] Trying OpenAI with key: ${OPENAI_API_KEY ? OPENAI_API_KEY.substring(0, 10) + '...' : 'MISSING'}`);
+    
+    if (!OPENAI_API_KEY) {
+      throw new Error('OpenAI API key missing');
+    }
+
     const response = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
       headers: {
@@ -107,27 +125,28 @@ async function openAIEmbedding(text) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: BACKUP_EMBEDDING_MODEL,
+        model: 'text-embedding-3-small', // Use small model for speed
         input: text
       })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[EMBED] OpenAI API error response: ${errorText}`);
+      console.error(`[EMBED] OpenAI API error response: ${errorText.substring(0, 200)}`);
       throw new Error(`OpenAI embedding failed: ${response.status} ${response.statusText}`);
     }
 
     const json = await response.json();
     
     if (!json.data || !json.data[0] || !json.data[0].embedding) {
+      console.error('[EMBED] Invalid OpenAI response structure:', JSON.stringify(json).substring(0, 200));
       throw new Error('Invalid OpenAI embedding response structure');
     }
 
-    console.log('[EMBED] OpenAI backup successful');
+    console.log(`[EMBED] OpenAI success - got ${json.data[0].embedding.length} dimensions`);
     return json.data[0].embedding;
   } catch (error) {
-    console.error('[EMBED] OpenAI backup error:', error.message);
+    console.error('[EMBED] OpenAI error:', error.message);
     return null;
   }
 }
