@@ -19,6 +19,9 @@ class RAGMemoryService {
    */
   async buildEnhancedContext(userId, message) {
     try {
+      // Random chance to skip memory context to reduce repetitiveness
+      if (Math.random() < 0.3) return ''; // 30% chance to skip
+      
       const queryVec = await embed(message);
       if (!queryVec) return '';
 
@@ -33,24 +36,24 @@ class RAGMemoryService {
 
       if (memories.length === 0) return '';
 
-      // Score by cosine similarity
+      // Score by cosine similarity with higher threshold to be more selective
       const scored = scoreByCosine(memories, queryVec);
       
-      // Filter minimum relevance
-      const relevant = scored.filter(s => s.similarity >= 0.25);
+      // Filter for higher relevance to avoid weak connections
+      const relevant = scored.filter(s => s.similarity >= 0.4); // Increased from 0.25
       if (relevant.length === 0) return '';
 
-      // Apply MMR for diversity
-      const diversified = mmr(relevant, queryVec, { k: MMR_K, lambda: MMR_LAMBDA });
+      // Use fewer memories for less overwhelming context
+      const diversified = mmr(relevant, queryVec, { k: Math.min(5, MMR_K), lambda: MMR_LAMBDA });
       
-      // Extract content and compress
+      // Extract content and compress more aggressively
       const content = diversified.map(d => d.memory.content).join('\n');
-      const compressed = await summarize(content, 1000);
+      const compressed = await summarize(content, 600); // Reduced from 1000
       
       // Update salience for used memories
       await this.bumpUsedMemories(diversified.map(d => d.memory._id));
       
-      log.debug('Built RAG memory context', { memoryCount: diversified.length, contentLength: compressed.length });
+      log.debug('Built selective RAG memory context', { memoryCount: diversified.length, contentLength: compressed.length });
       
       return formatMemoryBlock(compressed);
     } catch (error) {

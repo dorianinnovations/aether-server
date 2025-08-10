@@ -229,28 +229,62 @@ Key principles:
 `;
 
     if (userContext) {
+      // Build dynamic, non-repetitive context
+      const contextParts = [`- Username: ${userContext.username || 'unknown'}`];
+      
+      // Only include status if it's meaningful and recent
+      const status = userContext.socialProxy?.currentStatus;
+      const statusAge = userContext.socialProxy?.lastUpdated ? 
+        Date.now() - new Date(userContext.socialProxy.lastUpdated).getTime() : Infinity;
+      if (status && status !== 'none' && status.trim() && statusAge < 24 * 60 * 60 * 1000) {
+        contextParts.push(`- Current status: "${status}"`);
+      }
+      
+      // Include plans if they exist
+      const plans = userContext.socialProxy?.currentPlans;
+      if (plans && plans.trim() && plans !== 'none') {
+        contextParts.push(`- Plans: "${plans}"`);
+      }
+      
+      // Include mood if it's set
+      const mood = userContext.socialProxy?.mood;
+      if (mood && mood.trim() && mood !== 'neutral' && mood !== 'none') {
+        contextParts.push(`- Mood: ${mood}`);
+      }
+      
+      // Music context - be more selective
+      const currentTrack = userContext.socialProxy?.spotify?.currentTrack;
+      if (currentTrack?.name && Math.random() > 0.3) { // 70% chance to include
+        contextParts.push(`- Recently listening to: ${currentTrack.name}`);
+      }
+      
+      // Communication style - only if significant
+      const style = userContext.socialProxy?.personality?.communicationStyle || {};
+      const significantTraits = [];
+      if (style.casual > 0.7) significantTraits.push('casual');
+      if (style.energetic > 0.7) significantTraits.push('energetic');
+      if (style.humor > 0.7) significantTraits.push('humorous');
+      if (style.analytical > 0.7) significantTraits.push('analytical');
+      if (significantTraits.length > 0) {
+        contextParts.push(`- Communication style: ${significantTraits.join(', ')}`);
+      }
+      
       prompt += `User Context:
-- Username: ${userContext.username || 'unknown'}
-- Current mood: ${userContext.socialProxy?.mood || 'neutral'}
-- Recent status: "${userContext.socialProxy?.currentStatus || 'none'}"
-- Current plans: "${userContext.socialProxy?.currentPlans || 'none'}"
-- Music taste: ${userContext.socialProxy?.spotify?.currentTrack?.name || 'none'}
-- Communication style: ${(() => {
-    const style = userContext.socialProxy?.personality?.communicationStyle || {};
-    const traits = [];
-    if (style.casual > 0.6) traits.push('casual');
-    if (style.energetic > 0.6) traits.push('energetic');
-    if (style.humor > 0.6) traits.push('humorous');
-    if (style.analytical > 0.6) traits.push('analytical');
-    return traits.length > 0 ? traits.join(', ') : 'neutral';
-  })()}
+${contextParts.join('\n')}
 
-Your memories about them:
+`;
+      
+      // Only include memory context if it exists and is relevant
+      if (userContext.longTermMemory && userContext.longTermMemory.trim() !== 'No memories yet - get to know them!') {
+        prompt += `Previous context:
 <memory_context>
-${userContext.longTermMemory || 'No memories yet - get to know them!'}
+${userContext.longTermMemory}
 </memory_context>
 
-Respond like a friend who actually remembers and cares about their world. Be real, not robotic.
+`;
+      }
+      
+      prompt += `Keep conversations natural and flowing. Don't constantly reference their status or interests unless directly relevant to the conversation.
 `;
     }
 
