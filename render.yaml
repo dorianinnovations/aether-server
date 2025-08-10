@@ -5,8 +5,8 @@ services:
     region: oregon
     plan: starter
     instanceCount: 1
-    buildCommand: npm ci --production && node --check src/server-clean.js
-    startCommand: node --max-old-space-size=256 --optimize-for-size src/server-clean.js
+    buildCommand: npm ci --production && node --check src/server.js
+    startCommand: node --max-old-space-size=256 --optimize-for-size src/server.js
     healthCheckPath: /health
     autoDeploy: true
     envVars:
