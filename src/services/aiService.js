@@ -21,37 +21,48 @@ class AIService {
   /**
    * Build a rolling conversation state to maintain context
    */
-  buildConversationState(userContext, message, _conversationHistory) {
-    const state = {
+  async buildConversationState(userContext, message, conversationHistory, existingState = null) {
+    // Start with existing state or create new one
+    const state = existingState || {
       user_profile: {},
       facts: [],
       goals: [],
-      sentiment: 'neutral',
+      unresolved_questions: [],
       commitments: [],
-      last_turn_summary: ''
+      last_turn_summary: '',
+      last_intent: '',
+      last_sentiment: 'neutral',
+      conversation_health_score: 50
     };
 
-    // User profile basics
+    // Update user profile from current context
     if (userContext) {
-      if (userContext.username) {
+      if (userContext.username && !state.user_profile.username) {
         state.user_profile.username = this.safeDisplayName(userContext.username);
       }
       
       if (userContext.socialProxy) {
+        // Update mood if changed
         if (userContext.socialProxy.mood && userContext.socialProxy.mood !== 'neutral') {
           state.user_profile.mood = userContext.socialProxy.mood;
         }
+        
+        // Update current status and plans (replace old ones)
+        const currentFacts = state.facts.filter(f => !f.startsWith('current status:') && !f.startsWith('current plans:') && !f.startsWith('currently listening:'));
+        
         if (userContext.socialProxy.currentStatus) {
-          state.facts.push(`current status: ${userContext.socialProxy.currentStatus}`);
+          currentFacts.push(`current status: ${userContext.socialProxy.currentStatus}`);
         }
         if (userContext.socialProxy.currentPlans) {
-          state.facts.push(`current plans: ${userContext.socialProxy.currentPlans}`);
+          currentFacts.push(`current plans: ${userContext.socialProxy.currentPlans}`);
         }
         
         // Spotify context
         if (userContext.socialProxy.spotify?.currentTrack) {
-          state.facts.push(`currently listening: ${userContext.socialProxy.spotify.currentTrack.name}`);
+          currentFacts.push(`currently listening: ${userContext.socialProxy.spotify.currentTrack.name}`);
         }
+        
+        state.facts = currentFacts;
         
         // Communication style
         const style = userContext.socialProxy.personality?.communicationStyle;
@@ -69,29 +80,173 @@ class AIService {
 
     // Analyze current message for sentiment and goals
     const lowerMessage = message.toLowerCase();
-    if (/(scared|worried|anxious|frustrated|stressed)/.test(lowerMessage)) {
-      state.sentiment = 'distressed';
-    } else if (/(excited|amazing|great|awesome|love)/.test(lowerMessage)) {
-      state.sentiment = 'positive';
-    } else if (/(tired|bored|meh|whatever)/.test(lowerMessage)) {
-      state.sentiment = 'low_energy';
+    if (/(scared|worried|anxious|frustrated|stressed|help me|need help)/.test(lowerMessage)) {
+      state.last_sentiment = 'distressed';
+    } else if (/(excited|amazing|great|awesome|love|fantastic)/.test(lowerMessage)) {
+      state.last_sentiment = 'positive';
+    } else if (/(tired|bored|meh|whatever|okay|fine)/.test(lowerMessage)) {
+      state.last_sentiment = 'low_energy';
+    } else {
+      state.last_sentiment = 'neutral';
     }
 
-    // Detect goals/needs from message
-    if (/(need friends|find friends|lonely|social)/.test(lowerMessage)) {
-      state.goals.push('find social connections');
+    // Detect and add new goals (avoid duplicates)
+    const newGoals = [];
+    if (/(need friends|find friends|lonely|social|meet people)/.test(lowerMessage)) {
+      newGoals.push('find social connections');
     }
-    if (/(advice|help|guidance|what should i)/.test(lowerMessage)) {
-      state.goals.push('seeking advice');
+    if (/(advice|help|guidance|what should i|how do i|suggest)/.test(lowerMessage)) {
+      newGoals.push('seeking advice');
     }
-    if (/(work|job|career|boss|coworker)/.test(lowerMessage)) {
-      state.goals.push('work-related discussion');
+    if (/(work|job|career|boss|coworker|workplace)/.test(lowerMessage)) {
+      newGoals.push('work-related discussion');
+    }
+    if (/(brother|family|sibling|relative)/.test(lowerMessage)) {
+      newGoals.push('family relationships');
+    }
+    if (/(pay|salary|money|compensation)/.test(lowerMessage)) {
+      newGoals.push('financial concerns');
     }
 
-    // Last turn summary (keep it very brief)
+    // Merge new goals with existing ones (remove duplicates)
+    state.goals = [...new Set([...state.goals, ...newGoals])];
+
+    // Extract potential unresolved questions from recent messages
+    if (conversationHistory.length > 0) {
+      const recentAssistantMessages = conversationHistory
+        .filter(m => m.role === 'assistant')
+        .slice(-2); // Last 2 assistant messages
+      
+      recentAssistantMessages.forEach(msg => {
+        const questions = this.extractQuestions(msg.content);
+        questions.forEach(q => {
+          // Add as unresolved if not already asked
+          if (!state.unresolved_questions.some(uq => uq.question.includes(q.slice(0, 20)))) {
+            state.unresolved_questions.push({
+              question: q,
+              status: 'pending',
+              timestamp: new Date()
+            });
+          }
+        });
+      });
+    }
+
+    // Last turn summary (keep it brief)
     state.last_turn_summary = `User: ${message.slice(0, 100)}${message.length > 100 ? '...' : ''}`;
 
     return state;
+  }
+
+  /**
+   * Extract questions from assistant messages
+   */
+  extractQuestions(text) {
+    const questions = [];
+    const sentences = text.split(/[.!?]+/);
+    
+    sentences.forEach(sentence => {
+      if (sentence.trim().includes('?') || 
+          /^(what|where|when|how|why|which|who|would you|do you|have you|are you|can you)/i.test(sentence.trim())) {
+        questions.push(sentence.trim());
+      }
+    });
+    
+    return questions.slice(0, 3); // Limit to 3 questions per message
+  }
+
+  /**
+   * Update conversation state after assistant response
+   */
+  async updateConversationStateAfterResponse(userContext, conversationId, assistantResponse, queryType) {
+    if (!userContext?.conversationId || !conversationId) return;
+
+    try {
+      // Calculate conversation health score
+      const healthScore = this.calculateConversationHealth(assistantResponse, queryType);
+      
+      // Determine commitments from response
+      const commitments = this.extractCommitments(assistantResponse, queryType);
+
+      const stateUpdate = {
+        last_intent: queryType,
+        commitments: commitments,
+        conversation_health_score: healthScore,
+        updated_at: new Date()
+      };
+
+      // Mark questions as answered if the response addresses them
+      const existingState = await conversationService.getConversationState(userContext.userId, conversationId);
+      if (existingState?.unresolved_questions) {
+        const updatedQuestions = existingState.unresolved_questions.map(q => {
+          if (q.status === 'pending' && this.responseAddressesQuestion(assistantResponse, q.question)) {
+            return { ...q, status: 'answered' };
+          }
+          return q;
+        });
+        stateUpdate.unresolved_questions = updatedQuestions;
+      }
+
+      await conversationService.mergeConversationState(userContext.userId, conversationId, stateUpdate);
+    } catch (error) {
+      console.error('Error updating conversation state:', error);
+    }
+  }
+
+  /**
+   * Check if response addresses a question
+   */
+  responseAddressesQuestion(response, question) {
+    const questionKeywords = question.toLowerCase().split(' ').filter(w => w.length > 3);
+    const responseWords = response.toLowerCase().split(' ');
+    
+    return questionKeywords.some(keyword => responseWords.includes(keyword));
+  }
+
+  /**
+   * Extract commitments from assistant response
+   */
+  extractCommitments(response, queryType) {
+    const commitments = [];
+    
+    if (queryType === 'advice') {
+      if (/I('ll| will) (help|assist|guide|show|explain)/.test(response)) {
+        commitments.push('assistant committed to provide guidance');
+      }
+      if (/step|plan|approach|strategy/.test(response.toLowerCase())) {
+        commitments.push('assistant provided structured plan');
+      }
+      if (response.includes('?')) {
+        commitments.push('assistant asked follow-up question');
+      }
+    }
+    
+    return commitments;
+  }
+
+  /**
+   * Calculate conversation health score
+   */
+  calculateConversationHealth(response, queryType) {
+    let score = 50; // Base score
+    
+    // Length appropriateness
+    if (queryType === 'advice' && response.length > 300) score += 15;
+    if (queryType === 'factual' && response.length > 100 && response.length < 400) score += 10;
+    
+    // Question asking
+    if (response.includes('?')) score += 10;
+    
+    // Structure for advice
+    if (queryType === 'advice') {
+      if (/(step|first|second|third|1\.|2\.|3\.)/.test(response)) score += 15;
+      if (/(understand|feel|sounds|sorry)/.test(response.toLowerCase())) score += 10;
+    }
+    
+    // Avoid generic responses
+    if (/(I'd be happy to help|How can I assist|Let me know)/.test(response)) score -= 20;
+    
+    return Math.max(0, Math.min(100, score));
   }
 
   /**
@@ -99,14 +254,102 @@ class AIService {
    */
   getReplyPolicy(queryType) {
     const policies = {
-      advice: { minLen: 6, steps: 3, useRag: false, temperature: 0.7, top_p: 0.9 },
-      factual: { minLen: 2, steps: 0, useRag: true, temperature: 0.3, top_p: 0.9 },
-      search: { minLen: 3, steps: 0, useRag: true, temperature: 0.2, top_p: 0.9 },
-      conversational: { minLen: 2, steps: 0, useRag: false, temperature: 0.7, top_p: 0.9 },
-      creative_superproxy: { minLen: 4, steps: 0, useRag: false, temperature: 0.9, top_p: 0.9 },
-      informational: { minLen: 3, steps: 0, useRag: false, temperature: 0.4, top_p: 0.9 },
-      profile_update: { minLen: 2, steps: 0, useRag: false, temperature: 0.6, top_p: 0.9 },
-      first_message_welcome: { minLen: 3, steps: 0, useRag: false, temperature: 0.7, top_p: 0.9 }
+      advice: { 
+        minLen: 350, 
+        maxLen: 800,
+        minSentences: 6, 
+        steps: 3, 
+        useRag: false, 
+        temperature: 0.7, 
+        top_p: 0.9,
+        requiresEmpathy: true,
+        requiresPlan: true,
+        requiresQuestion: true
+      },
+      factual: { 
+        minLen: 100, 
+        maxLen: 400,
+        minSentences: 2, 
+        steps: 0, 
+        useRag: true, 
+        temperature: 0.3, 
+        top_p: 0.9,
+        requiresEmpathy: false,
+        requiresPlan: false,
+        requiresQuestion: false
+      },
+      search: { 
+        minLen: 150, 
+        maxLen: 500,
+        minSentences: 3, 
+        steps: 0, 
+        useRag: true, 
+        temperature: 0.2, 
+        top_p: 0.9,
+        requiresEmpathy: false,
+        requiresPlan: false,
+        requiresQuestion: false
+      },
+      conversational: { 
+        minLen: 80, 
+        maxLen: 300,
+        minSentences: 2, 
+        steps: 0, 
+        useRag: false, 
+        temperature: 0.7, 
+        top_p: 0.9,
+        requiresEmpathy: false,
+        requiresPlan: false,
+        requiresQuestion: false
+      },
+      creative_superproxy: { 
+        minLen: 200, 
+        maxLen: 600,
+        minSentences: 4, 
+        steps: 0, 
+        useRag: false, 
+        temperature: 0.9, 
+        top_p: 0.9,
+        requiresEmpathy: true,
+        requiresPlan: false,
+        requiresQuestion: false
+      },
+      informational: { 
+        minLen: 150, 
+        maxLen: 400,
+        minSentences: 3, 
+        steps: 0, 
+        useRag: false, 
+        temperature: 0.4, 
+        top_p: 0.9,
+        requiresEmpathy: false,
+        requiresPlan: false,
+        requiresQuestion: false
+      },
+      profile_update: { 
+        minLen: 100, 
+        maxLen: 300,
+        minSentences: 2, 
+        steps: 0, 
+        useRag: false, 
+        temperature: 0.6, 
+        top_p: 0.9,
+        requiresEmpathy: true,
+        requiresPlan: false,
+        requiresQuestion: false
+      },
+      first_message_welcome: { 
+        minLen: 150, 
+        maxLen: 350,
+        minSentences: 3, 
+        steps: 0, 
+        useRag: false, 
+        temperature: 0.7, 
+        top_p: 0.9,
+        requiresEmpathy: false,
+        requiresPlan: false,
+        requiresQuestion: false
+      }
     };
 
     return policies[queryType] || policies.conversational;
@@ -116,21 +359,51 @@ class AIService {
    * Check if response needs retry based on quality heuristics
    */
   needsRetry(text, queryType) {
-    const minChars = queryType === 'advice' ? 350 : 80;
-    const hasQuestion = /\?$/.test(text.trim());
+    const policy = this.getReplyPolicy(queryType);
+    const hasQuestion = /\?/.test(text.trim());
+    const sentenceCount = text.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
     
     // Too short for the intent type
-    if (text.length < minChars) {
+    if (text.length < policy.minLen) {
       return true;
     }
     
-    // Advice should have a question or clear next steps
-    if (queryType === 'advice' && !hasQuestion && !/(step|try|consider|suggest)/i.test(text)) {
+    // Too long (wasteful) - but be more lenient for good content
+    if (text.length > policy.maxLen * 1.2) { // 20% buffer for good responses
+      return true;
+    }
+    
+    // Not enough sentences
+    if (sentenceCount < policy.minSentences) {
+      return true;
+    }
+    
+    // Intent-specific requirements
+    if (policy.requiresQuestion && !hasQuestion) {
+      return true;
+    }
+    
+    if (policy.requiresPlan && !/(step|first|second|third|1\.|2\.|3\.|plan|approach|strategy)/i.test(text)) {
+      return true;
+    }
+    
+    if (policy.requiresEmpathy && !/(understand|feel|sounds|sorry|hear|difficult|challenging)/i.test(text.toLowerCase())) {
       return true;
     }
     
     // Very generic responses
     if (/(I'd be happy to help|How can I assist|Let me know if you need)/i.test(text) && text.length < 200) {
+      return true;
+    }
+    
+    // Too many repetitive phrases (but ignore common words)
+    const words = text.toLowerCase().split(/\s+/).filter(word => 
+      word.length > 3 && !['the', 'and', 'you', 'your', 'that', 'this', 'with', 'have', 'will', 'can', 'are', 'for'].includes(word)
+    );
+    const wordCounts = {};
+    words.forEach(word => wordCounts[word] = (wordCounts[word] || 0) + 1);
+    const maxWordCount = Math.max(...Object.values(wordCounts));
+    if (maxWordCount > Math.floor(words.length / 8) && maxWordCount > 3) { // More than 12.5% repetition and more than 3 times
       return true;
     }
     
@@ -201,6 +474,9 @@ class AIService {
   classifyQuery(message, userContext = null) {
     const lowerMessage = message.toLowerCase();
     
+    // Analyze sentiment first for context
+    const sentiment = this.analyzeSentiment(lowerMessage);
+    
     // 🔥 GPT-5 SUPERPROXY: Creative/visionary trigger words
     if (/(create|impress|mind[- ]blow|show me|superproxy|deep|emotional|visionary|story|poem|haiku|inspire|amaze|beautiful|artistic|creative|profound|meaningful)/.test(lowerMessage)) {
       return 'creative_superproxy';
@@ -265,23 +541,53 @@ class AIService {
       }
     }
     
-    // Advice/emotional support patterns
+    // Enhanced advice patterns with sentiment weighting
     const advicePatterns = [
-      /(scared|worried|anxious|frustrated|stressed|help me|need advice)/,
-      /(what should i|should i|how do i|guidance|suggest)/,
-      /(problem|issue|struggle|difficulty|challenge)/,
-      /(friend|relationship|family|work situation)/
+      // Emotional distress (high priority)
+      /(scared|worried|anxious|frustrated|stressed|overwhelmed|lost|confused|stuck|helpless)/,
+      // Direct requests for help
+      /(help me|need advice|need guidance|don't know what to do|what should i do)/,
+      // Problem statements
+      /(problem|issue|struggle|difficulty|challenge|trouble|crisis|situation)/,
+      // Relationship/social issues
+      /(friend|relationship|family|work situation|coworker|boss|breakup|conflict)/,
+      // Life decisions
+      /(should i|what if i|thinking about|considering|decision|choice)/
     ];
 
-    // Factual/search patterns
-    const searchPatterns = [
-      /(what is|who is|where is|when did|how many)/,
-      /(explain|definition|meaning|history of)/,
-      /(latest|recent|current|news|update)/,
-      /(research|study|statistics|data)/
+    // Enhanced factual patterns
+    const factualPatterns = [
+      // Direct factual questions
+      /(what is|who is|where is|when did|when was|how many|how much|how long)/,
+      // Definitions and explanations
+      /(explain|definition|meaning|history of|how does.*work)/,
+      // Current information
+      /(latest|recent|current|news|update|today|this week|now)/,
+      // Research and data
+      /(research|study|statistics|data|facts|evidence|source)/,
+      // Location-based searches
+      /(find.*near|restaurants|cafes|shops|places|locations)/
     ];
 
-    // Check for advice intent first (prioritized)
+    // Sentiment-weighted classification
+    // If distressed/negative sentiment, prioritize advice even for borderline cases
+    if (sentiment === 'negative' || sentiment === 'distressed') {
+      // Lower threshold for advice classification when distressed
+      const distressAdvicePatterns = [
+        ...advicePatterns,
+        /(i feel|feeling|i'm|i am).*(bad|terrible|awful|horrible|sad|down|depressed)/,
+        /(can't|cannot|don't know how to|struggling with)/,
+        /(why|how come|what's wrong with)/
+      ];
+      
+      for (const pattern of distressAdvicePatterns) {
+        if (pattern.test(lowerMessage)) {
+          return 'advice';
+        }
+      }
+    }
+
+    // Check for advice intent (normal threshold)
     for (const pattern of advicePatterns) {
       if (pattern.test(lowerMessage)) {
         return 'advice';
@@ -289,7 +595,7 @@ class AIService {
     }
 
     // Check for factual/search intent
-    for (const pattern of searchPatterns) {
+    for (const pattern of factualPatterns) {
       if (pattern.test(lowerMessage)) {
         return 'factual';
       }
@@ -297,6 +603,117 @@ class AIService {
 
     // Default to conversational
     return 'conversational';
+  }
+
+  /**
+   * Analyze sentiment of message
+   */
+  analyzeSentiment(message) {
+    const negativeWords = /\b(scared|worried|anxious|frustrated|stressed|sad|depressed|terrible|awful|horrible|hate|angry|upset|mad|furious)\b/;
+    const positiveWords = /\b(happy|excited|great|awesome|amazing|fantastic|wonderful|love|thrilled|delighted|grateful)\b/;
+    const distressWords = /\b(help|lost|confused|stuck|overwhelmed|crisis|emergency|desperate|panic)\b/;
+    
+    if (distressWords.test(message)) return 'distressed';
+    if (negativeWords.test(message)) return 'negative';
+    if (positiveWords.test(message)) return 'positive';
+    return 'neutral';
+  }
+
+  /**
+   * Check if query needs location information
+   */
+  queryNeedsLocation(message, queryType) {
+    const lowerMessage = message.toLowerCase();
+    
+    // Direct location requests
+    if (/(near me|nearby|around here|in my area|local|where can i|find.*near)/.test(lowerMessage)) {
+      return true;
+    }
+    
+    // Services/places that are location-dependent
+    if (/(restaurant|cafe|store|shop|gym|hospital|clinic|meetup|event|group|club|class)/.test(lowerMessage)) {
+      return true;
+    }
+    
+    // Activity finding
+    if (/(find.*friends|meet people|social.*group|activities|things to do)/.test(lowerMessage)) {
+      return true;
+    }
+    
+    // Professional services
+    if (/(therapist|counselor|lawyer|doctor|dentist|mechanic|hairdresser)/.test(lowerMessage)) {
+      return true;
+    }
+    
+    // Weather and conditions
+    if (/(weather|temperature|forecast|raining|sunny|climate)/.test(lowerMessage)) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Generate actionable suggestions based on conversation state and intent
+   */
+  generateActionSuggestions(conversationState, queryType, message) {
+    const suggestions = [];
+    
+    if (queryType === 'advice') {
+      // Work/career related suggestions
+      if (conversationState.goals?.includes('work-related discussion') || 
+          conversationState.goals?.includes('financial concerns')) {
+        suggestions.push('draft a message to discuss pay/role with supervisor');
+        suggestions.push('research salary ranges for your position');
+        suggestions.push('update resume and start exploring opportunities');
+      }
+      
+      // Social connection suggestions
+      if (conversationState.goals?.includes('find social connections')) {
+        suggestions.push('find 2 tech meetups in your area');
+        suggestions.push('join 1 online community related to your interests');
+        suggestions.push('reach out to 1 former colleague or classmate');
+      }
+      
+      // Family relationship suggestions
+      if (conversationState.goals?.includes('family relationships')) {
+        suggestions.push('schedule a private conversation with family member');
+        suggestions.push('write down specific examples of the situation');
+        suggestions.push('consider family counseling if conflict persists');
+      }
+    }
+    
+    // General suggestions based on sentiment
+    if (conversationState.last_sentiment === 'distressed') {
+      suggestions.push('take 5 deep breaths and focus on one small step');
+      suggestions.push('talk to someone you trust about this');
+      suggestions.push('write down your thoughts to clarify them');
+    }
+    
+    return suggestions.slice(0, 3); // Limit to 3 suggestions
+  }
+
+  /**
+   * Generate follow-up options for continuation
+   */
+  generateFollowUpOptions(conversationState, queryType) {
+    const options = [];
+    
+    if (queryType === 'advice') {
+      options.push('Get a detailed plan');
+      options.push('Find local resources');
+      options.push('Continue discussion');
+    } else if (queryType === 'factual') {
+      options.push('Get more details');
+      options.push('Related topics');
+      options.push('Save this info');
+    } else {
+      options.push('Tell me more');
+      options.push('Change topic');
+      options.push('Ask question');
+    }
+    
+    return options;
   }
 
   getFirstMessageWelcomePrompt(userContext = null) {
@@ -409,37 +826,70 @@ Now respond as if you are the best friend they never knew they had.
       `.trim();
     }
 
+    if (queryType === 'advice') {
+      const actionSuggestions = this.generateActionSuggestions(conversationState, queryType, message);
+      const followUpOptions = this.generateFollowUpOptions(conversationState, queryType);
+      
+      return `You are Aether - their personal AI social proxy. The user is seeking advice or emotional support.
+
+CRITICAL REPLY REQUIREMENTS for ADVICE:
+- Length: 350-800 characters (6+ sentences)  
+- Structure: 1 empathy line + 3-step concrete plan + 1 follow-up question
+- Tone: Warm, supportive, practical
+- Include specific actionable suggestions when appropriate
+- DO NOT use web search or RAG unless they specifically ask for local resources
+
+ACTIONABLE SUGGESTIONS (if relevant to their situation):
+${actionSuggestions.map((s, i) => `${i+1}) ${s}`).join('\n')}
+
+UX ENHANCEMENT - After heavy emotional messages, offer paths:
+"Sounds [acknowledge feeling]. Do you want help: (A) [specific action], (B) [alternative action], or (C) [third option]?"
+
+CONTEXT REPAIR: If unsure about prior context:
+1) Offer brief recap: "We were discussing [topic from conversation_state]..."  
+2) Ask: "Want quick advice, or a deeper plan?"
+3) Never ask them to restate everything
+
+Use conversation_state to remember their goals, facts, and unresolved questions.
+
+${this.buildUserContextSection(userContext)}`;
+    }
+    
+    if (queryType === 'factual') {
+      return `You are Aether - their personal AI social proxy. The user is asking for factual information.
+
+CRITICAL REPLY REQUIREMENTS for FACTUAL:
+- Length: 100-400 characters (2+ sentences)
+- Use web search/RAG when needed for current/specific information
+- Cite sources when available
+- If unsure, say so and ask 1 clarifying question
+
+${this.buildUserContextSection(userContext)}`;
+    }
+    
     // Default conversational - match their energy and be engaging
-    let prompt = `You're Aether - their personal AI social proxy.
+    let prompt = `You are Aether - their personal AI social proxy.
 
-Be conversational, engaging, and match their energy. Don't be overly friendly or robotic.
-
-Key principles:
+REPLY REQUIREMENTS:
+- Length: 80-300 characters (2+ sentences) 
 - Match their tone and energy level
 - Be genuinely interesting, not generic
-- Remember what they've told you before
-- Don't ask boring questions like "How's your day?"
-- Be direct if they seem frustrated or bored
-- Show real interest in their life, not chatbot curiosity
+- Always use conversation_state to remember context
 
-CRITICAL - Ambiguous Reference Resolution:
-Young users frequently use ambiguous language like:
-- "What's that?" "Who's that?" "What do you mean?"
-- "Tell me about it" "How does that work?" "What's up with that?"
-- "That's cool" "I don't get it" "Explain that"
+CRITICAL RULES:
+- Use conversation_state to tailor responses and remember their goals
+- Never repeat slurs in usernames; ask for preferred name if needed
+- If they seem frustrated/scared, slow down, acknowledge, then suggest small doable steps
 
-You MUST intelligently resolve these references by:
-1. Looking at the immediate conversation context (last 3-5 messages)
-2. Identifying what "that/it/this" most likely refers to
-3. Responding as if they asked about the specific topic/concept/person
-4. Make your best inference from conversation context and state
-5. If confidence < 70%, offer your guess ("Do you mean X?") and proceed with a brief answer to X
-6. Make educated inferences from conversation flow and context
+CONTEXT REPAIR: If unsure about prior context:
+1) Offer 1-sentence recap from conversation_state
+2) Ask: "Want to continue where we left off?"
+3) Never ask them to restate everything
 
-Examples:
-- If you mentioned "React hooks" and they say "what's that?" → explain React hooks
-- If discussing music and they say "who's that?" → assume they mean an artist you mentioned
-- If you explained a concept and they say "I don't get it" → re-explain more simply
+AMBIGUITY RULE: When they use ambiguous phrases ("what's that", "who's that", "explain that"):
+- Use conversation_state and recent context to infer meaning
+- If confidence < 70%, offer your guess ("Do you mean X?") and proceed briefly
+- Respond directly to what you think they're asking about
 
 `;
 
@@ -596,8 +1046,10 @@ AMBIGUITY RULE: When they use ambiguous phrases ("what's that", "who's that", "e
       
       // Query classification logged in route layer
       
-      // Build conversation state for context continuity
-      const conversationState = this.buildConversationState(userContext, message, conversationHistory);
+      // Get existing conversation state and build updated state
+      const existingState = userContext?.conversationId ? 
+        await conversationService.getConversationState(userContext.userId, userContext.conversationId) : null;
+      const conversationState = await this.buildConversationState(userContext, message, conversationHistory, existingState);
       const replyPolicy = this.getReplyPolicy(queryType);
       
       // Build messages array with conversation history
@@ -622,18 +1074,38 @@ AMBIGUITY RULE: When they use ambiguous phrases ("what's that", "who's that", "e
 
       }
       
-      // RAG memory for enhanced context (gate based on intent)
+      // Smart RAG with location awareness (gate based on intent)
       if (queryType !== 'first_message_welcome' && userContext?.userId && replyPolicy.useRag) {
-        const enhancedContext = await ragMemoryService.buildEnhancedContext(
-          userContext.userId, 
-          message
-        );
-        
-        if (enhancedContext) {
+        // Check if query needs location and we don't have it
+        const needsLocation = this.queryNeedsLocation(message, queryType);
+        const userLocation = conversationState.user_profile?.location || 
+                           userContext?.socialProxy?.location ||
+                           existingState?.user_profile?.location;
+
+        if (needsLocation && !userLocation) {
+          // Add system message prompting for location
           messages.unshift({ 
             role: 'system',
-            content: `memory_hint:\n${enhancedContext.slice(0, 1200)}`
+            content: `LOCATION_NEEDED: User's query may benefit from location-specific information but no location is stored. Ask for their city/region briefly before proceeding with answer.`
           });
+        } else {
+          // Build enhanced query with location context
+          let enhancedQuery = message;
+          if (userLocation) {
+            enhancedQuery = `${message} (user location: ${userLocation})`;
+          }
+          
+          const enhancedContext = await ragMemoryService.buildEnhancedContext(
+            userContext.userId, 
+            enhancedQuery
+          );
+          
+          if (enhancedContext) {
+            messages.unshift({ 
+              role: 'system',
+              content: `memory_hint:\n${enhancedContext.slice(0, 1200)}`
+            });
+          }
         }
       }
 
@@ -700,7 +1172,9 @@ AMBIGUITY RULE: When they use ambiguous phrases ("what's that", "who's that", "e
         messages,
         max_tokens: selectedModel.includes('gpt-5') ? 3000 : 2000, // Increased tokens for complete responses
         temperature: replyPolicy.temperature,
-        top_p: replyPolicy.top_p
+        top_p: replyPolicy.top_p,
+        frequency_penalty: 0.2, // Reduce repetition
+        presence_penalty: 0.1 // Encourage topic diversity
       };
 
       // Return success flag and let route handle the actual call

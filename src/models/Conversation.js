@@ -94,7 +94,46 @@ const ConversationSchema = new mongoose.Schema({
     default: 0
   },
   tags: [String],
-  summary: String
+  summary: String,
+  // Rolling conversation state for context preservation
+  conversationState: {
+    user_profile: {
+      age: Number,
+      prefs: [String],
+      sensitive: [String],
+      communication_style: String,
+      mood: String,
+      location: String
+    },
+    goals: [String],
+    facts: [String],
+    unresolved_questions: [{
+      question: String,
+      status: {
+        type: String,
+        enum: ['pending', 'answered', 'dismissed'],
+        default: 'pending'
+      },
+      timestamp: {
+        type: Date,
+        default: Date.now
+      }
+    }],
+    commitments: [String],
+    last_turn_summary: String,
+    last_intent: String,
+    last_sentiment: String,
+    conversation_health_score: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 50
+    },
+    updated_at: {
+      type: Date,
+      default: Date.now
+    }
+  }
 }, {
   timestamps: true
 });

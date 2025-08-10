@@ -346,6 +346,16 @@ Use this current information to provide an accurate, up-to-date response. Do not
             }
           );
 
+          // Update conversation state after assistant response
+          if (aiResponse.queryType) {
+            await aiService.updateConversationStateAfterResponse(
+              userContext, 
+              conversation._id, 
+              fullResponse, 
+              aiResponse.queryType
+            );
+          }
+
           // Queue user message for asynchronous profile analysis  
           const preAnalysisTime = Date.now();
           // Analysis queued

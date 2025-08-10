@@ -362,6 +362,97 @@ class ConversationService {
       throw error;
     }
   }
+
+  /**
+   * Get conversation state for context preservation
+   */
+  async getConversationState(userId, conversationId) {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+        return null;
+      }
+
+      const conversation = await Conversation.findOne({
+        _id: conversationId,
+        $or: [
+          { creator: userId },
+          { 'participants.user': userId }
+        ]
+      }).select('conversationState').lean();
+
+      return conversation?.conversationState || null;
+    } catch (error) {
+      log.error('Error getting conversation state:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update conversation state
+   */
+  async updateConversationState(userId, conversationId, stateUpdate) {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+        return false;
+      }
+
+      const result = await Conversation.updateOne(
+        {
+          _id: conversationId,
+          $or: [
+            { creator: userId },
+            { 'participants.user': userId }
+          ]
+        },
+        {
+          $set: {
+            'conversationState': {
+              ...stateUpdate,
+              updated_at: new Date()
+            }
+          }
+        }
+      );
+
+      return result.modifiedCount > 0;
+    } catch (error) {
+      log.error('Error updating conversation state:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Merge new state with existing state
+   */
+  async mergeConversationState(userId, conversationId, stateUpdate) {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+        return false;
+      }
+
+      const existingState = await this.getConversationState(userId, conversationId);
+      const mergedState = {
+        user_profile: { ...existingState?.user_profile, ...stateUpdate.user_profile },
+        goals: [...new Set([...(existingState?.goals || []), ...(stateUpdate.goals || [])])],
+        facts: [...new Set([...(existingState?.facts || []), ...(stateUpdate.facts || [])])],
+        unresolved_questions: [
+          ...(existingState?.unresolved_questions || []),
+          ...(stateUpdate.unresolved_questions || [])
+        ],
+        commitments: stateUpdate.commitments || existingState?.commitments || [],
+        last_turn_summary: stateUpdate.last_turn_summary || existingState?.last_turn_summary || '',
+        last_intent: stateUpdate.last_intent || existingState?.last_intent || '',
+        last_sentiment: stateUpdate.last_sentiment || existingState?.last_sentiment || 'neutral',
+        conversation_health_score: stateUpdate.conversation_health_score || existingState?.conversation_health_score || 50,
+        updated_at: new Date()
+      };
+
+      return await this.updateConversationState(userId, conversationId, mergedState);
+    } catch (error) {
+      log.error('Error merging conversation state:', error);
+      return false;
+    }
+  }
 }
 
 export default new ConversationService();
