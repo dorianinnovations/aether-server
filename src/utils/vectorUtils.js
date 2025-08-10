@@ -20,21 +20,9 @@ export async function embed(text) {
     return cheapHashEmbedding(text, 1536);
   }
 
-  // Try OpenAI first (most reliable for embeddings)
-  if (OPENAI_API_KEY) {
-    const result = await openAIEmbedding(text);
-    if (result) return result;
-  }
-
-  // Try OpenRouter as backup
-  if (OPENROUTER_API_KEY) {
-    console.log('[EMBED] OpenAI failed, trying OpenRouter backup');
-    const result = await openRouterEmbeddingWithRetry(text);
-    if (result) return result;
-  }
-
-  // Final fallback to cheap embedding
-  console.log('[EMBED] All embedding providers failed, using cheap fallback');
+  // EMERGENCY FIX: Skip API calls - they're all failing and causing 6+ second delays
+  // Use fast embedding immediately until APIs are stable
+  console.log('[EMBED] Using fast embedding to avoid API delays');
   return cheapHashEmbedding(text, 1536);
 }
 
