@@ -239,7 +239,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
             // Just get the response without streaming
             const data = await response.json();
             
-            console.log(`📄 Non-streaming LLM Response Debug:`, {
+            // Non-streaming response debug
               hasData: !!data,
               hasChoices: !!data.choices,
               choicesLength: data.choices?.length || 0,
@@ -263,13 +263,13 @@ Use this current information to provide an accurate, up-to-date response. Do not
             
             res.write(`data: [DONE]\n\n`);
           } else {
-            console.log('🌊 Using STREAMING mode');
+            // Using streaming mode
             // For now, let's fall back to the working method but make it faster
           // Add timeout to prevent hanging
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
           
-          console.log(`⏱️ Starting OpenRouter API call at +${Date.now() - startTime}ms`);
+          // Starting API call
           const response = await fetch(aiResponse.originalUrl || 'https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -288,12 +288,12 @@ Use this current information to provide an accurate, up-to-date response. Do not
           
           clearTimeout(timeoutId);
           const apiResponseTime = Date.now() - startTime;
-          console.log(`⏱️ OpenRouter API responded in ${apiResponseTime}ms total`);
+          // API responded
           
           const data = await response.json();
-          console.log(`📋 JSON parsing completed at +${Date.now() - startTime}ms`);
+          // JSON parsing completed
           
-          console.log(`📄 LLM Response Debug:`, {
+          // LLM response debug
             hasData: !!data,
             hasChoices: !!data.choices,
             choicesLength: data.choices?.length || 0,
@@ -306,14 +306,14 @@ Use this current information to provide an accurate, up-to-date response. Do not
           if (data.choices?.[0]?.message?.content) {
             fullResponse = data.choices[0].message.content;
             
-            console.log(`✅ Full response received: ${fullResponse.length} chars, first 100: ${fullResponse.substring(0, 100)}`);
+            // Response received
             
             const streamingStartTime = Date.now();
-            console.log(`🌊 Starting word streaming at +${streamingStartTime - startTime}ms`);
+            // Starting streaming
             
             // Fast word streaming (better than before)
             const words = fullResponse.split(' ');
-            console.log(`📝 Streaming ${words.length} words`);
+            // Streaming words
             for (let i = 0; i < words.length; i++) {
               const word = words[i];
               res.write(`data: ${JSON.stringify({content: word})}\n\n`);
@@ -324,16 +324,16 @@ Use this current information to provide an accurate, up-to-date response. Do not
             }
             
             const streamingTime = Date.now() - streamingStartTime;
-            console.log(`🌊 Streaming completed in ${streamingTime}ms`);
+            // Streaming completed
           } else {
             console.log(`⚠️ BLANK RESPONSE DETECTED! Data:`, JSON.stringify(data, null, 2));
             fullResponse = 'I apologize, but I\'m having trouble generating a response right now. Please try again.';
             res.write(`data: ${JSON.stringify({content: fullResponse})}\n\n`);
           }
           
-          console.log(`🏁 Sending [DONE] at +${Date.now() - startTime}ms`);
+          // Sending completion
           res.write(`data: [DONE]\n\n`);
-          console.log(`🏁 [DONE] sent successfully`);
+          // Completion sent
           }
           
         } catch (streamError) {
@@ -344,10 +344,10 @@ Use this current information to provide an accurate, up-to-date response. Do not
         
         // Save AI response if authenticated  
         const preSaveTime = Date.now();
-        console.log(`💾 Starting response save at +${preSaveTime - startTime}ms`);
+        // Saving response
         
         const aiResponseTime = Date.now() - startTime;
-        console.log(`💾 Response complete: userId=${!!userId}, responseLength=${fullResponse?.length || 0}, totalTime=${aiResponseTime}ms`);
+        // Response saved
         
         if (userId && fullResponse) {
           await conversationService.addMessage(
@@ -364,7 +364,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
 
           // Queue user message for asynchronous profile analysis  
           const preAnalysisTime = Date.now();
-          console.log(`📊 Analysis queue time: +${preAnalysisTime - startTime}ms`);
+          // Analysis queued
           
           // TEMP: Skip analysis queue for performance testing
           if (process.env.SKIP_ANALYSIS !== 'true') {

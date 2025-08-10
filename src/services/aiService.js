@@ -394,7 +394,7 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
           content: msg.content
         }));
       
-      console.log(`🧠 Message filtering: raw=${messages.length}, filtered=${cleanMessages.length}`);
+      // Message filtering completed
       if (messages.length > 0 && cleanMessages.length === 0) {
         console.log('🚨 All messages filtered out! Raw messages:', messages.map(m => ({role: m.role, hasContent: !!m.content, contentLength: m.content?.length})));
       }
@@ -412,7 +412,7 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
         try {
           const enhancedContext = await ragMemoryService.buildEnhancedContext(userId, 'recent conversation context');
           if (enhancedContext && enhancedContext.trim()) {
-            console.log(`🧠 Using RAG memories instead of truncation for context`);
+            // Using RAG memories for context
             // Add a system message with the context summary
             return [
               { role: 'system', content: `Previous conversation summary: ${enhancedContext.substring(0, 500)}` },
@@ -429,7 +429,7 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
           try {
             const { summarize } = await import('../utils/vectorUtils.js');
             const summary = await summarize(olderContent, 200); // Concise summary
-            console.log(`📝 Summarized ${olderMessages.length} older messages into context`);
+            // Summarized older messages
             return [
               { role: 'system', content: `Earlier conversation: ${summary}` },
               ...recentMessages
@@ -478,7 +478,7 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
         
         console.log(`🤖 Model selection: ${selectedModel} (${modelSelection.reason}) for ${queryType}`);
         if (modelSelection.message) {
-          console.log(`💡 ${modelSelection.message}`);
+          // Model selected
         }
       }
       
@@ -497,10 +497,10 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
         const contextStartTime = Date.now();
         const conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId);
         const contextLoadTime = Date.now() - contextStartTime;
-        console.log(`🗺 Context loading took ${contextLoadTime}ms`);
+        // Context loading completed
         if (conversationHistory && conversationHistory.length > 0) {
           messages.push(...conversationHistory);
-          console.log(`💭 Added ${conversationHistory.length} previous messages for context`);
+          // Added conversation history
         }
 
         // RAG memory for enhanced context
@@ -515,7 +515,7 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
             name: 'memory.hint',
             content: enhancedContext
           });
-          console.log(`🧠 Added RAG enhanced context from UserMemory collection`);
+          // Added RAG context
         }
       }
 
@@ -655,7 +655,7 @@ Remember: You're helping them understand what they've shared while being aware t
         }
         if (conversationHistory && conversationHistory.length > 0) {
           messages.push(...conversationHistory);
-          console.log(`💭 Added ${conversationHistory.length} previous messages for context (with files)`);
+          // Added conversation history with files
         }
       }
 
@@ -691,7 +691,7 @@ Remember: You're helping them understand what they've shared while being aware t
             });
           } else if (['document', 'code', 'text'].includes(file.type) && file.data) {
             // Handle text-based files
-            console.log(`📝 Adding text file: ${file.originalName} (${file.type})`);
+            // Adding text file
             
             let fileContent = `\n\n--- FILE: ${file.originalName} ---\n`;
             
@@ -750,7 +750,7 @@ Remember: You're helping them understand what they've shared while being aware t
 
       const choice = data.choices[0];
       
-      console.log(`✅ AI response received (${choice.message.content.length} characters)`);
+      // AI response received;
       
       return {
         success: true,
