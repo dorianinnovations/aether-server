@@ -28,6 +28,7 @@ export const env = {
   
   // AI Services
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   LLAMA_CPP_API_URL: process.env.LLAMA_CPP_API_URL || 'http://localhost:8000/completion',
   
   // Search APIs

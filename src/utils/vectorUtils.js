@@ -7,7 +7,7 @@ import 'dotenv/config';
 import { env } from '../config/environment.js';
 
 const OPENROUTER_API_KEY = env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
-const OPENAI_API_KEY = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY || 'MISSING';
+const OPENAI_API_KEY = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 const EMBEDDING_MODEL = 'text-embedding-3-small';  // Use small model - cheaper and OpenRouter compatible
 const BACKUP_EMBEDDING_MODEL = 'text-embedding-3-large';
 
@@ -21,12 +21,12 @@ export async function embed(text) {
   }
 
   // Try OpenAI first (most reliable for embeddings)
-  if (OPENAI_API_KEY !== 'MISSING') {
+  if (OPENAI_API_KEY) {
     const result = await openAIEmbedding(text);
     if (result) return result;
   }
 
-  // Try OpenRouter as backup (less reliable for embeddings)
+  // Try OpenRouter as backup
   if (OPENROUTER_API_KEY) {
     console.log('[EMBED] OpenAI failed, trying OpenRouter backup');
     const result = await openRouterEmbeddingWithRetry(text);
@@ -79,7 +79,7 @@ async function openRouterEmbedding(text) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'text-embedding-3-small', // OpenRouter doesn't support large model properly
+        model: 'openai/text-embedding-3-small', // Fix: OpenRouter needs provider prefix
         input: text
       })
     });
