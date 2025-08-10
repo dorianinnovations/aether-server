@@ -322,7 +322,7 @@ ${turnsText}`
   /**
    * Search memories directly
    */
-  async searchMemories(userId, query, limit = 10) {
+  async searchMemories(userId, query, limit = 10, minSimilarity = 0.6) {
     try {
       const queryVec = await embed(query);
       if (!queryVec) return [];
@@ -330,13 +330,60 @@ ${turnsText}`
       const memories = await UserMemory.find({ user: userId }).lean();
       const scored = scoreByCosine(memories, queryVec);
       
-      return scored.slice(0, limit).map(s => ({
-        ...s.memory,
-        similarity: s.similarity
-      }));
+      return scored
+        .filter(s => s.similarity >= minSimilarity)
+        .slice(0, limit)
+        .map(s => ({
+          ...s.memory,
+          similarity: s.similarity
+        }));
     } catch (error) {
       log.error('Error searching memories:', error);
       return [];
+    }
+  }
+
+  /**
+   * Store a single memory
+   */
+  async storeMemory(userId, content, metadata = {}) {
+    try {
+      const fact = {
+        kind: metadata.type || 'fact',
+        content,
+        tags: metadata.tags || [],
+        salience: metadata.salience || 0.7,
+        source: {
+          origin: metadata.source || 'manual',
+          ...metadata
+        }
+      };
+
+      const result = await this.upsertFacts(userId, [fact]);
+      return result.length > 0;
+    } catch (error) {
+      log.error('Error storing memory:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Auto-store conversation memories
+   */
+  async autoStoreConversation(userId, messages, conversationId) {
+    try {
+      if (!messages || messages.length < 4) return 0;
+      
+      // Convert messages to turns format
+      const turns = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
+      return await this.maybeAutoDistill(userId, conversationId, turns);
+    } catch (error) {
+      log.error('Error auto-storing conversation:', error);
+      return 0;
     }
   }
 

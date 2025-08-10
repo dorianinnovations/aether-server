@@ -11,6 +11,34 @@ const OPENAI_API_KEY = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 const EMBEDDING_MODEL = 'text-embedding-3-small';  // Use small model - cheaper and OpenRouter compatible
 const BACKUP_EMBEDDING_MODEL = 'text-embedding-3-large';
 
+// Circuit breaker for failed APIs
+const circuitBreaker = {
+  openai: { failures: 0, lastFailure: 0, disabled: false },
+  openrouter: { failures: 0, lastFailure: 0, disabled: false }
+};
+
+function checkCircuitBreaker(provider) {
+  const circuit = circuitBreaker[provider];
+  if (circuit.failures >= 3) {
+    const timeSinceFailure = Date.now() - circuit.lastFailure;
+    if (timeSinceFailure < 60000) { // 1 minute timeout
+      circuit.disabled = true;
+      return false;
+    } else {
+      // Reset after timeout
+      circuit.failures = 0;
+      circuit.disabled = false;
+    }
+  }
+  return !circuit.disabled;
+}
+
+function recordFailure(provider) {
+  const circuit = circuitBreaker[provider];
+  circuit.failures++;
+  circuit.lastFailure = Date.now();
+}
+
 /**
  * Generate embedding for text with fallback
  */
@@ -21,16 +49,25 @@ export async function embed(text) {
   }
 
   // Try OpenAI first (most reliable for embeddings)
-  if (OPENAI_API_KEY) {
-    const result = await openAIEmbedding(text);
-    if (result) return result;
+  if (OPENAI_API_KEY && checkCircuitBreaker('openai')) {
+    try {
+      const result = await Promise.race([
+        openAIEmbedding(text),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('OpenAI timeout')), 2000))
+      ]);
+      if (result) return result;
+    } catch (error) {
+      console.log(`[EMBED] OpenAI failed: ${error.message}`);
+      recordFailure('openai');
+    }
   }
 
   // Try OpenRouter as backup
-  if (OPENROUTER_API_KEY) {
-    console.log('[EMBED] OpenAI failed, trying OpenRouter backup');
+  if (OPENROUTER_API_KEY && checkCircuitBreaker('openrouter')) {
+    console.log('[EMBED] OpenAI failed/disabled, trying OpenRouter backup');
     const result = await openRouterEmbeddingWithRetry(text);
     if (result) return result;
+    recordFailure('openrouter');
   }
 
   // Final fallback to cheap embedding
@@ -39,31 +76,21 @@ export async function embed(text) {
 }
 
 /**
- * OpenRouter embedding with retry logic
+ * OpenRouter embedding with fast timeout (no retries)
  */
-async function openRouterEmbeddingWithRetry(text, maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const result = await openRouterEmbedding(text);
-      if (result) {
-        console.log(`[EMBED] OpenRouter success on attempt ${attempt}`);
-        return result;
-      }
-    } catch (error) {
-      // Only log detailed errors on final attempt to reduce spam
-      if (attempt === maxRetries) {
-        console.error(`[EMBED] OpenRouter failed after ${maxRetries} attempts:`, error.message);
-      } else {
-        console.log(`[EMBED] OpenRouter attempt ${attempt}/${maxRetries} failed, retrying...`);
-      }
-      
-      if (attempt < maxRetries) {
-        const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
+async function openRouterEmbeddingWithRetry(text, maxRetries = 1) {
+  try {
+    const result = await Promise.race([
+      openRouterEmbedding(text),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+    ]);
+    if (result) {
+      console.log(`[EMBED] OpenRouter success`);
+      return result;
     }
+  } catch (error) {
+    console.log(`[EMBED] OpenRouter failed: ${error.message}`);
   }
-  console.error('[EMBED] OpenRouter failed after all retries');
   return null;
 }
 

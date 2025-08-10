@@ -16,7 +16,7 @@ const router = express.Router();
 router.post('/store', protect, [
   body('content').notEmpty().trim().isLength({ min: 10, max: 2000 })
     .withMessage('Content must be between 10-2000 characters'),
-  body('type').optional().isIn(['conversation', 'interest', 'fact', 'preference'])
+  body('type').optional().isIn(['profile','preference','project','fact','task','contact','custom'])
     .withMessage('Invalid memory type')
 ], async (req, res) => {
   try {
@@ -29,7 +29,7 @@ router.post('/store', protect, [
       });
     }
 
-    const { content, type = 'conversation', metadata = {} } = req.body;
+    const { content, type = 'fact', metadata = {} } = req.body;
     const userId = req.user.id;
 
     const success = await ragMemoryService.storeMemory(userId, content, {
