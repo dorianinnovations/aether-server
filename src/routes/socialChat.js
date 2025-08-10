@@ -239,15 +239,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
             // Just get the response without streaming
             const data = await response.json();
             
-            // Non-streaming response debug
-              hasData: !!data,
-              hasChoices: !!data.choices,
-              choicesLength: data.choices?.length || 0,
-              hasContent: !!data.choices?.[0]?.message?.content,
-              contentLength: data.choices?.[0]?.message?.content?.length || 0,
-              finishReason: data.choices?.[0]?.finish_reason,
-              model: data.model
-            });
+            // Non-streaming response debug - removed
             
             if (data.choices?.[0]?.message?.content) {
               fullResponse = data.choices[0].message.content;
@@ -293,15 +285,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
           const data = await response.json();
           // JSON parsing completed
           
-          // LLM response debug
-            hasData: !!data,
-            hasChoices: !!data.choices,
-            choicesLength: data.choices?.length || 0,
-            hasContent: !!data.choices?.[0]?.message?.content,
-            contentLength: data.choices?.[0]?.message?.content?.length || 0,
-            finishReason: data.choices?.[0]?.finish_reason,
-            model: data.model
-          });
+          // LLM response debug - removed
           
           if (data.choices?.[0]?.message?.content) {
             fullResponse = data.choices[0].message.content;
