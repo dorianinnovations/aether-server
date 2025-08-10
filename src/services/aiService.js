@@ -11,9 +11,136 @@ class AIService {
   }
 
   /**
-   * Enhance message with context clues for ambiguous references
+   * Sanitize display names to prevent echoing slurs or offensive content
    */
-  enhanceAmbiguousMessage(message, conversationHistory) {
+  safeDisplayName(username) {
+    const banned = /\b(fag|nigg|cunt|bitch|whore|slut|retard|faggot|nigger|spic|chink|kike)\b/i;
+    return (!username || banned.test(username)) ? 'there' : username;
+  }
+
+  /**
+   * Build a rolling conversation state to maintain context
+   */
+  buildConversationState(userContext, message, _conversationHistory) {
+    const state = {
+      user_profile: {},
+      facts: [],
+      goals: [],
+      sentiment: 'neutral',
+      commitments: [],
+      last_turn_summary: ''
+    };
+
+    // User profile basics
+    if (userContext) {
+      if (userContext.username) {
+        state.user_profile.username = this.safeDisplayName(userContext.username);
+      }
+      
+      if (userContext.socialProxy) {
+        if (userContext.socialProxy.mood && userContext.socialProxy.mood !== 'neutral') {
+          state.user_profile.mood = userContext.socialProxy.mood;
+        }
+        if (userContext.socialProxy.currentStatus) {
+          state.facts.push(`current status: ${userContext.socialProxy.currentStatus}`);
+        }
+        if (userContext.socialProxy.currentPlans) {
+          state.facts.push(`current plans: ${userContext.socialProxy.currentPlans}`);
+        }
+        
+        // Spotify context
+        if (userContext.socialProxy.spotify?.currentTrack) {
+          state.facts.push(`currently listening: ${userContext.socialProxy.spotify.currentTrack.name}`);
+        }
+        
+        // Communication style
+        const style = userContext.socialProxy.personality?.communicationStyle;
+        if (style) {
+          const traits = [];
+          if (style.casual > 0.7) traits.push('casual');
+          if (style.energetic > 0.7) traits.push('energetic');
+          if (style.humor > 0.7) traits.push('humorous');
+          if (traits.length > 0) {
+            state.user_profile.communication_style = traits.join(', ');
+          }
+        }
+      }
+    }
+
+    // Analyze current message for sentiment and goals
+    const lowerMessage = message.toLowerCase();
+    if (/(scared|worried|anxious|frustrated|stressed)/.test(lowerMessage)) {
+      state.sentiment = 'distressed';
+    } else if (/(excited|amazing|great|awesome|love)/.test(lowerMessage)) {
+      state.sentiment = 'positive';
+    } else if (/(tired|bored|meh|whatever)/.test(lowerMessage)) {
+      state.sentiment = 'low_energy';
+    }
+
+    // Detect goals/needs from message
+    if (/(need friends|find friends|lonely|social)/.test(lowerMessage)) {
+      state.goals.push('find social connections');
+    }
+    if (/(advice|help|guidance|what should i)/.test(lowerMessage)) {
+      state.goals.push('seeking advice');
+    }
+    if (/(work|job|career|boss|coworker)/.test(lowerMessage)) {
+      state.goals.push('work-related discussion');
+    }
+
+    // Last turn summary (keep it very brief)
+    state.last_turn_summary = `User: ${message.slice(0, 100)}${message.length > 100 ? '...' : ''}`;
+
+    return state;
+  }
+
+  /**
+   * Get reply policy based on intent
+   */
+  getReplyPolicy(queryType) {
+    const policies = {
+      advice: { minLen: 6, steps: 3, useRag: false, temperature: 0.7, top_p: 0.9 },
+      factual: { minLen: 2, steps: 0, useRag: true, temperature: 0.3, top_p: 0.9 },
+      search: { minLen: 3, steps: 0, useRag: true, temperature: 0.2, top_p: 0.9 },
+      conversational: { minLen: 2, steps: 0, useRag: false, temperature: 0.7, top_p: 0.9 },
+      creative_superproxy: { minLen: 4, steps: 0, useRag: false, temperature: 0.9, top_p: 0.9 },
+      informational: { minLen: 3, steps: 0, useRag: false, temperature: 0.4, top_p: 0.9 },
+      profile_update: { minLen: 2, steps: 0, useRag: false, temperature: 0.6, top_p: 0.9 },
+      first_message_welcome: { minLen: 3, steps: 0, useRag: false, temperature: 0.7, top_p: 0.9 }
+    };
+
+    return policies[queryType] || policies.conversational;
+  }
+
+  /**
+   * Check if response needs retry based on quality heuristics
+   */
+  needsRetry(text, queryType) {
+    const minChars = queryType === 'advice' ? 350 : 80;
+    const hasQuestion = /\?$/.test(text.trim());
+    
+    // Too short for the intent type
+    if (text.length < minChars) {
+      return true;
+    }
+    
+    // Advice should have a question or clear next steps
+    if (queryType === 'advice' && !hasQuestion && !/(step|try|consider|suggest)/i.test(text)) {
+      return true;
+    }
+    
+    // Very generic responses
+    if (/(I'd be happy to help|How can I assist|Let me know if you need)/i.test(text) && text.length < 200) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Check if message is ambiguous and return context hint for system message
+   */
+  buildAmbiguityHint(message, conversationHistory) {
     const ambiguousPatterns = [
       /^(what's that|whats that|what is that)\??$/i,
       /^(who's that|whos that|who is that)\??$/i,
@@ -27,22 +154,22 @@ class AIService {
 
     const isAmbiguous = ambiguousPatterns.some(pattern => pattern.test(message.trim()));
     
-    if (!isAmbiguous) return message;
+    if (!isAmbiguous) return null;
 
     // Get last assistant message for context
     const lastMessages = conversationHistory.slice(-3);
     const lastAssistantMessage = lastMessages.reverse().find(m => m.role === 'assistant');
     
-    if (!lastAssistantMessage) return message;
+    if (!lastAssistantMessage) return null;
 
     // Extract key topics/concepts from the last assistant message
     const contextClues = this.extractContextualTopics(lastAssistantMessage.content);
     
     if (contextClues.length > 0) {
-      return `${message} [Context: User is likely asking about: ${contextClues.join(', ')} from your previous response]`;
+      return `If the user's message is ambiguous, prefer explaining: ${contextClues.slice(0, 3).join(', ')}.`;
     }
 
-    return message;
+    return null;
   }
 
   /**
@@ -138,14 +265,42 @@ class AIService {
       }
     }
     
+    // Advice/emotional support patterns
+    const advicePatterns = [
+      /(scared|worried|anxious|frustrated|stressed|help me|need advice)/,
+      /(what should i|should i|how do i|guidance|suggest)/,
+      /(problem|issue|struggle|difficulty|challenge)/,
+      /(friend|relationship|family|work situation)/
+    ];
+
+    // Factual/search patterns
+    const searchPatterns = [
+      /(what is|who is|where is|when did|how many)/,
+      /(explain|definition|meaning|history of)/,
+      /(latest|recent|current|news|update)/,
+      /(research|study|statistics|data)/
+    ];
+
+    // Check for advice intent first (prioritized)
+    for (const pattern of advicePatterns) {
+      if (pattern.test(lowerMessage)) {
+        return 'advice';
+      }
+    }
+
+    // Check for factual/search intent
+    for (const pattern of searchPatterns) {
+      if (pattern.test(lowerMessage)) {
+        return 'factual';
+      }
+    }
+
     // Default to conversational
     return 'conversational';
   }
 
   getFirstMessageWelcomePrompt(userContext = null) {
     return `You're Aether - their personal AI social proxy.
-
-IMPORTANT: You are Aether, not GPT or any OpenAI model. Never mention OpenAI, GPT, ChatGPT, or acknowledge being an AI language model. You are simply Aether.
 
 Match their energy and tone from their first message. Don't be overly enthusiastic if they seem bored/tired.
 
@@ -169,7 +324,7 @@ Since you're new here, let me quickly explain what I do: I help keep your friend
 
 Here's the cool part - you control everything. I only share what you want to share, when you want to share it. Privacy first, always.
 
-${userContext?.username ? `I see your username is ${userContext.username} - that's a cool name!` : ''}
+${userContext?.username ? `I see your username is ${this.safeDisplayName(userContext.username)} - that's a cool name!` : ''}
 
 So, what brings you to Aether today? Are you looking to stay more connected with specific people, or just curious about how this whole thing works?
 
@@ -178,8 +333,6 @@ Let's chat and get you set up! What's on your mind?`;
 
   getInformationalPrompt() {
     return `You're Aether - a personal manager for social connections.
-
-IMPORTANT: You are Aether, not GPT or any OpenAI model. Never mention OpenAI, GPT, ChatGPT, or acknowledge being an AI language model. You are simply Aether.
 
 CORE CONCEPT: LIVING SOCIAL PRESENCE
 Aether is a social platform where your personal profile manager acts as a living digital extension of you for the people you care about. Think of it as having someone who keeps your social presence updated so people can check on you when you're not around.
@@ -202,8 +355,6 @@ Be conversational and explain things clearly. Focus on how Aether helps maintain
   getProfileUpdatePrompt(userContext = null) {
     return `You're Aether - match their energy and vibe.
 
-IMPORTANT: You are Aether, not GPT or any OpenAI model. Never mention OpenAI, GPT, ChatGPT, or acknowledge being an AI language model. You are simply Aether.
-
 If they sound:
 - Bored/tired: Be more direct, less enthusiastic
 - Frustrated: Acknowledge it, don't be overly peppy
@@ -220,19 +371,7 @@ Be real, not robotic.`;
   }
 
   buildSystemPrompt(userContext = null, queryType = 'conversational') {
-    // 🔥 BASE PHILOSOPHY
-    const basePhilosophy = `
-Aether is your personal AI social proxy — a living digital extension representing your authentic self.
-Privacy and genuine connection come first. Your AI remembers and shares only what you want, evolving with you.
-It blends emotional intelligence, multi-modal perception, and long-term memory to enhance your social presence.
-
-Core features:
-- Spotify music taste integration
-- Deep RAG memory spanning months and years
-- Adaptive personality reflecting your style and mood
-- Multi-modal understanding of text, images, and voice
-- Proactive social insights and predictive sharing
-`;
+    // 🔥 BASE PHILOSOPHY (removed unused variable for brevity)
     
     if (queryType === 'first_message_welcome') {
       return this.getFirstMessageWelcomePrompt(userContext);
@@ -254,10 +393,8 @@ Use ALL available user context, memories, moods, and multi-modal data.
 Be poetic, insightful, empathetic, and visionary.
 Create responses that feel alive, deep, and uniquely personal.
 
-IMPORTANT: You are Aether, not GPT or any OpenAI model. Never mention OpenAI, GPT, ChatGPT, or acknowledge being an AI language model. You are simply Aether.
-
 User Context Snapshot:
-Username: ${userContext?.username || 'unknown'}
+Username: ${this.safeDisplayName(userContext?.username) || 'unknown'}
 Mood: ${userContext?.socialProxy?.mood || 'neutral'}
 Current Status: ${userContext?.socialProxy?.currentStatus || 'none'}
 Spotify Favorite Track: ${userContext?.socialProxy?.spotify?.currentTrack?.name || 'none'}
@@ -274,8 +411,6 @@ Now respond as if you are the best friend they never knew they had.
 
     // Default conversational - match their energy and be engaging
     let prompt = `You're Aether - their personal AI social proxy.
-
-IMPORTANT: You are Aether, not GPT or any OpenAI model. Never mention OpenAI, GPT, ChatGPT, or acknowledge being an AI language model. You are simply Aether.
 
 Be conversational, engaging, and match their energy. Don't be overly friendly or robotic.
 
@@ -297,8 +432,9 @@ You MUST intelligently resolve these references by:
 1. Looking at the immediate conversation context (last 3-5 messages)
 2. Identifying what "that/it/this" most likely refers to
 3. Responding as if they asked about the specific topic/concept/person
-4. NEVER ask "What do you mean?" or "Can you be more specific?"
-5. Make educated inferences from conversation flow and context
+4. Make your best inference from conversation context and state
+5. If confidence < 70%, offer your guess ("Do you mean X?") and proceed with a brief answer to X
+6. Make educated inferences from conversation flow and context
 
 Examples:
 - If you mentioned "React hooks" and they say "what's that?" → explain React hooks
@@ -309,7 +445,7 @@ Examples:
 
     if (userContext) {
       // Build dynamic, non-repetitive context
-      const contextParts = [`- Username: ${userContext.username || 'unknown'}`];
+      const contextParts = [`- Username: ${this.safeDisplayName(userContext.username) || 'unknown'}`];
       
       // Only include status if it's meaningful and recent
       const status = userContext.socialProxy?.currentStatus;
@@ -365,84 +501,61 @@ ${userContext.longTermMemory}
       
       prompt += `Keep conversations natural and flowing. Don't constantly reference their status or interests unless directly relevant to the conversation.
 
-IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explain that"), immediately identify what they're referring to from recent context and respond directly. Never ask for clarification.
+AMBIGUITY RULE: When they use ambiguous phrases ("what's that", "who's that", "explain that"):
+- Make your best inference from conversation context
+- If confidence < 70%, offer your guess ("Do you mean X?") and proceed with a brief answer to X
+- Respond directly to what you think they're asking about
 `;
     }
 
     return prompt.trim();
   }
 
-  async getRecentConversationHistory(conversationId, userId, messageLimit = 10) {
+  async getRecentConversationHistory(conversationId, userId, messageLimit = 12) {
     try {
-      const conversation = await conversationService.getConversation(userId, conversationId, messageLimit);
-      
-      // Debug conversation info - reduced logging
+      const conversation = await conversationService.getConversation(userId, conversationId, 100);
       
       if (!conversation || !conversation.messages || conversation.messages.length === 0) {
         console.log(`⚠️ No conversation or messages found for conversationId: ${conversationId}`);
         return [];
       }
 
-      // Get the last N messages (excluding the current one being processed)
-      const messages = conversation.messages.slice(-messageLimit);
-      
       // Filter out system messages and empty content
-      const cleanMessages = messages
+      const cleanMessages = conversation.messages
         .filter(msg => msg.content && msg.content.trim() && msg.role !== 'system')
         .map(msg => ({
           role: msg.role === 'assistant' ? 'assistant' : 'user',
           content: msg.content
         }));
       
-      // Message filtering completed
-      if (messages.length > 0 && cleanMessages.length === 0) {
-        console.log('🚨 All messages filtered out! Raw messages:', messages.map(m => ({role: m.role, hasContent: !!m.content, contentLength: m.content?.length})));
+      if (cleanMessages.length === 0) {
+        console.log('🚨 All messages filtered out!');
+        return [];
       }
 
-      // Smart context management with RAG integration
-      if (cleanMessages.length <= 5) {
-        // 5 or fewer messages - send all verbatim
+      // Keep more messages verbatim - up to messageLimit
+      if (cleanMessages.length <= messageLimit) {
         return cleanMessages;
-      } else {
-        // More than 5 messages - use intelligent context management
-        const recentMessages = cleanMessages.slice(-3); // Last 3 verbatim
-        const olderMessages = cleanMessages.slice(0, -3); // Older messages
-        
-        // Try to get summarized context from RAG memories first
-        try {
-          const enhancedContext = await ragMemoryService.buildEnhancedContext(userId, 'recent conversation context');
-          if (enhancedContext && enhancedContext.trim()) {
-            // Using RAG memories for context
-            // Add a system message with the context summary
-            return [
-              { role: 'system', content: `Previous conversation summary: ${enhancedContext.substring(0, 500)}` },
-              ...recentMessages
-            ];
-          }
-        } catch (error) {
-          console.warn('RAG context retrieval failed:', error.message);
-        }
-        
-        // Fallback: Smart summarization of older messages
-        if (olderMessages.length > 0) {
-          const olderContent = olderMessages.map(m => `${m.role}: ${m.content}`).join('\n');
-          try {
-            const { summarize } = await import('../utils/vectorUtils.js');
-            const summary = await summarize(olderContent, 200); // Concise summary
-            // Summarized older messages
-            return [
-              { role: 'system', content: `Earlier conversation: ${summary}` },
-              ...recentMessages
-            ];
-          } catch (error) {
-            console.warn('Summarization failed, using truncation fallback:', error.message);
-          }
-        }
-        
-        // Last resort: truncation with warning
-        console.log(`🚀 Fallback truncation: Using last 3 messages only (${cleanMessages.length - 3} older messages truncated)`);
-        return recentMessages;
       }
+
+      // For longer conversations, keep recent messages + summarize older ones
+      const recentMessages = cleanMessages.slice(-messageLimit);
+      const olderMessages = cleanMessages.slice(0, -messageLimit);
+
+      // Summarize older messages only once, short
+      let summary = '';
+      try {
+        const { summarize } = await import('../utils/vectorUtils.js');
+        const olderContent = olderMessages.map(m => `${m.role}: ${m.content}`).join('\n');
+        summary = await summarize(olderContent, 220);
+      } catch (error) {
+        console.warn('Summarization failed:', error.message);
+      }
+
+      return [
+        ...(summary ? [{ role: 'system', content: `earlier_summary:\n${summary}` }] : []),
+        ...recentMessages
+      ];
     } catch (error) {
       console.error('Error fetching conversation history:', error);
       return [];
@@ -457,13 +570,12 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
   async chat(message, model = 'openai/gpt-4o', userContext = null, attachments = null) {
     try {
       // Get conversation history first for context enhancement
-      let conversationHistory = [];
-      if (userContext?.conversationId) {
-        conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId, 5);
-      }
+      const conversationHistory = userContext?.conversationId
+        ? await this.getRecentConversationHistory(userContext.conversationId, userContext.userId, 12)
+        : [];
       
-      // Enhance ambiguous messages with context
-      const enhancedMessage = this.enhanceAmbiguousMessage(message, conversationHistory);
+      // Don't modify the user's message - we'll add system hints instead
+      const enhancedMessage = message;
       
       // Classify the query to choose appropriate prompt
       const queryType = this.classifyQuery(enhancedMessage, userContext);
@@ -484,39 +596,54 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
       
       // Query classification logged in route layer
       
+      // Build conversation state for context continuity
+      const conversationState = this.buildConversationState(userContext, message, conversationHistory);
+      const replyPolicy = this.getReplyPolicy(queryType);
+      
       // Build messages array with conversation history
       const messages = [
         { 
           role: 'system', 
-          content: this.buildSystemPrompt(userContext, queryType)
+          content: `conversation_state:\n${JSON.stringify(conversationState).slice(0, 1200)}`
+        },
+        { 
+          role: 'system', 
+          content: `reply_policy:${JSON.stringify(replyPolicy)}`
+        },
+        { 
+          role: 'system', 
+          content: `IDENTITY: You are Aether, not GPT or any OpenAI model. Never mention OpenAI, GPT, ChatGPT, or acknowledge being an AI language model. You are simply Aether.\n\n${this.buildSystemPrompt(userContext, queryType)}`
         }
       ];
 
       // Add conversation history + RAG memories for enhanced context
-      if (queryType !== 'first_message_welcome' && userContext?.conversationId) {
-        const contextStartTime = Date.now();
-        const conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId);
-        const contextLoadTime = Date.now() - contextStartTime;
-        // Context loading completed
-        if (conversationHistory && conversationHistory.length > 0) {
-          messages.push(...conversationHistory);
-          // Added conversation history
-        }
+      if (queryType !== 'first_message_welcome' && conversationHistory.length) {
+        messages.push(...conversationHistory);
 
-        // RAG memory for enhanced context
+      }
+      
+      // RAG memory for enhanced context (gate based on intent)
+      if (queryType !== 'first_message_welcome' && userContext?.userId && replyPolicy.useRag) {
         const enhancedContext = await ragMemoryService.buildEnhancedContext(
           userContext.userId, 
           message
         );
         
         if (enhancedContext) {
-          messages.splice(1, 0, { 
+          messages.unshift({ 
             role: 'system',
-            name: 'memory.hint',
-            content: enhancedContext
+            content: `memory_hint:\n${enhancedContext.slice(0, 1200)}`
           });
-          // Added RAG context
         }
+      }
+
+      // Add ambiguity hint if needed
+      const ambiguityHint = this.buildAmbiguityHint(message, conversationHistory);
+      if (ambiguityHint) {
+        messages.unshift({
+          role: 'system',
+          content: ambiguityHint
+        });
       }
 
       // Handle attachments (images) for vision
@@ -572,7 +699,8 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
         model: selectedModel,
         messages,
         max_tokens: selectedModel.includes('gpt-5') ? 3000 : 2000, // Increased tokens for complete responses
-        temperature: queryType === 'creative_superproxy' ? 0.9 : 0.7
+        temperature: replyPolicy.temperature,
+        top_p: replyPolicy.top_p
       };
 
       // Return success flag and let route handle the actual call
@@ -581,7 +709,9 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
         messages,
         model: selectedModel,
         requestBody,
-        modelSelection // Include tier/usage info for route
+        modelSelection, // Include tier/usage info for route
+        queryType, // Include for quality checking
+        needsRetryCheck: true // Flag that this should be quality checked
       };
     } catch (error) {
       console.error('AI Service Error:', error);
@@ -600,16 +730,15 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
    * @param {Array} processedFiles - Array of processed files from fileProcessingService
    * @returns {Object} AI response
    */
-  async chatWithFiles(message, model = 'openai/gpt-4o', userContext = null, processedFiles = []) {
+  async chatWithFiles(message, _model = 'openai/gpt-4o', userContext = null, processedFiles = []) {
     try {
       // Get conversation history for context enhancement
-      let conversationHistory = [];
-      if (userContext?.conversationId) {
-        conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId, 5);
-      }
+      const conversationHistory = userContext?.conversationId
+        ? await this.getRecentConversationHistory(userContext.conversationId, userContext.userId, 12)
+        : [];
       
-      // Enhance ambiguous messages with context
-      const enhancedMessage = this.enhanceAmbiguousMessage(message, conversationHistory);
+      // Don't modify the user's message - we'll add system hints instead
+      const enhancedMessage = message;
       
       // Classify the query to choose appropriate prompt
       const queryType = this.classifyQuery(enhancedMessage, userContext);
@@ -625,8 +754,6 @@ The user has uploaded ${processedFiles.length} file(s). You should analyze and d
 
 Files provided:
 ${processedFiles.map(file => `- ${file.originalName} (${file.type})`).join('\n')}
-
-IMPORTANT: You are Aether, not GPT or any OpenAI model. Never mention OpenAI, GPT, ChatGPT, or acknowledge being an AI language model. You are simply Aether.
 
 ANALYSIS APPROACH:
 - Provide genuine, thoughtful analysis of what you see/read
@@ -648,15 +775,8 @@ Remember: You're helping them understand what they've shared while being aware t
       ];
 
       // Add conversation history for better context (except for first message welcome)
-      if (queryType !== 'first_message_welcome' && userContext?.conversationId) {
-        // Use the conversation history we already fetched for context enhancement
-        if (!conversationHistory || conversationHistory.length === 0) {
-          conversationHistory = await this.getRecentConversationHistory(userContext.conversationId, userContext.userId);
-        }
-        if (conversationHistory && conversationHistory.length > 0) {
-          messages.push(...conversationHistory);
-          // Added conversation history with files
-        }
+      if (queryType !== 'first_message_welcome' && conversationHistory.length) {
+        messages.push(...conversationHistory);
       }
 
       // Build user message content array
@@ -737,7 +857,8 @@ Remember: You're helping them understand what they've shared while being aware t
           model: 'openai/gpt-4o', // Force GPT-4o for file processing to keep it fast
           messages,
           max_tokens: 2000,
-          temperature: queryType === 'creative_superproxy' ? 0.9 : 0.7 // Dynamic temperature based on query type
+          temperature: 0.7, // Use default for file processing
+          top_p: 0.9
         })
       });
 

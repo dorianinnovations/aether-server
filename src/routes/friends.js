@@ -208,7 +208,7 @@ router.get('/list', protect, async (req, res) => {
     const userId = req.user.id;
     
     const user = await User.findById(userId)
-      .populate('friends.user', 'username name profile.interests')
+      .populate('friends.user', 'username name profile.interests profilePhoto')
       .select('friends');
     
     if (!user) {
@@ -222,6 +222,7 @@ router.get('/list', protect, async (req, res) => {
       username: friendship.user.username,
       friendId: friendship.user.username, // For backward compatibility
       name: friendship.user.name,
+      avatar: friendship.user.profilePhoto?.url || null,
       addedAt: friendship.addedAt,
       topInterests: friendship.user.profile?.interests
         ?.filter(i => i.confidence > 0.6)
