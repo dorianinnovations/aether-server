@@ -653,18 +653,24 @@ Output ONLY a valid JSON object:
           parseError: parseError.message
         });
         
-        // Return fallback empty result instead of throwing
-        log.warn('Using fallback empty synthesis result due to JSON parse failure');
-        return {
-          success: true,
-          updates: {
-            interests: [],
-            communicationStyle: {},
-            status_updates: []
-          },
-          reasoning: 'JSON parse failed, using empty fallback',
-          significant: false
-        };
+        // Try aggressive fallback parsing
+        try {
+          const fallbackJson = this.aggressiveJsonFallback(response.completion);
+          synthesized = JSON.parse(fallbackJson);
+          log.info('Successfully recovered from JSON parse error with aggressive fallback');
+        } catch (fallbackError) {
+          log.warn('Aggressive fallback also failed, using empty synthesis result');
+          return {
+            success: true,
+            updates: {
+              interests: [],
+              communicationStyle: {},
+              status_updates: []
+            },
+            reasoning: 'JSON parse failed, using empty fallback',
+            significant: false
+          };
+        }
       }
       
       log.debug('🧠 Synthesis completed:', {
@@ -879,6 +885,54 @@ Output ONLY a valid JSON object:
     // Sort and limit interests
     profile.interests.sort((a, b) => b.confidence - a.confidence);
     profile.interests = profile.interests.slice(0, 25);
+  }
+
+  /**
+   * Aggressive fallback JSON parsing for malformed LLM responses
+   */
+  aggressiveJsonFallback(text) {
+    // Try to build valid JSON from text patterns
+    const interests = [];
+    const communicationStyle = {};
+    const statusUpdates = [];
+
+    // Extract interests using pattern matching
+    const interestPatterns = [
+      /"interests":\s*\[([^\]]+)\]/gi,
+      /interests?[^\[]*\[([^\]]+)\]/gi,
+      /"[^"]*":\s*"[^"]*"/g
+    ];
+    
+    for (const pattern of interestPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        try {
+          const cleanMatch = match[0].replace(/'/g, '"');
+          const parsed = JSON.parse(`{${cleanMatch}}`);
+          if (parsed.interests) {
+            interests.push(...parsed.interests);
+            break;
+          }
+        } catch (e) {
+          // Continue to next pattern
+        }
+      }
+    }
+
+    // Extract communication style patterns
+    const stylePattern = /"(analytical|casual|energetic|humor|social)":\s*([0-9.-]+)/gi;
+    let styleMatch;
+    while ((styleMatch = stylePattern.exec(text)) !== null) {
+      const [, key, value] = styleMatch;
+      communicationStyle[key] = parseFloat(value) || 0;
+    }
+
+    // Build fallback JSON
+    return JSON.stringify({
+      interests: interests.slice(0, 3),
+      communicationStyle,
+      status_updates: statusUpdates
+    });
   }
 
   /**

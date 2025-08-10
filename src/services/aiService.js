@@ -372,7 +372,7 @@ IMPORTANT: When they use ambiguous phrases ("what's that", "who's that", "explai
     return prompt.trim();
   }
 
-  async getRecentConversationHistory(conversationId, userId, messageLimit = 20) {
+  async getRecentConversationHistory(conversationId, userId, messageLimit = 10) {
     try {
       const conversation = await conversationService.getConversation(userId, conversationId, messageLimit);
       

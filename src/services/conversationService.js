@@ -108,8 +108,8 @@ class ConversationService {
         return null;
       }
 
-      // Find the conversation using the Conversation model - user can be creator or participant
-      const conversation = await Conversation.findOne({
+      // Optimized query with message slice and selective projection
+      let query = Conversation.findOne({
         _id: conversationId,
         $or: [
           { creator: userId },
@@ -118,15 +118,25 @@ class ConversationService {
         isActive: true
       }).lean();
 
+      // Add message limit projection if specified
+      if (messageLimit && messageLimit > 0) {
+        query = query.select({
+          title: 1,
+          creator: 1,
+          isActive: 1,
+          participants: 1,
+          messages: { $slice: -messageLimit }
+        });
+      }
+
+      const conversation = await query;
+
       if (!conversation) {
         return null;
       }
 
-      // Limit messages if needed
+      // Messages already limited at database level via $slice projection
       let messages = conversation.messages || [];
-      if (messageLimit && messages.length > messageLimit) {
-        messages = messages.slice(-messageLimit); // Get the most recent messages
-      }
 
       return {
         _id: conversation._id.toString(),

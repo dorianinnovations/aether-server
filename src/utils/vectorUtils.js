@@ -15,9 +15,8 @@ const BACKUP_EMBEDDING_MODEL = 'text-embedding-3-large';
  * Generate embedding for text with fallback
  */
 export async function embed(text) {
-  // TEMPORARILY DISABLED: OpenRouter embeddings are broken (returning HTML)
-  // Skip API calls and use fast fallback until embedding service is fixed
-  if (process.env.RAG_EMBED_DISABLED === '1' || true) {
+  // Check if embeddings are disabled via env var
+  if (process.env.RAG_EMBED_DISABLED === '1') {
     return cheapHashEmbedding(text, 1536);
   }
 
