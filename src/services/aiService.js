@@ -255,96 +255,96 @@ class AIService {
   getReplyPolicy(queryType) {
     const policies = {
       advice: { 
-        minLen: 350, 
-        maxLen: 800,
-        minSentences: 6, 
-        steps: 3, 
+        minLen: 80,  // Much more relaxed
+        maxLen: 600,
+        minSentences: 1, // Let natural conversation flow
+        steps: 0, // Don't force structure
         useRag: false, 
-        temperature: 0.7, 
+        temperature: 0.8, // More creative/engaging
         top_p: 0.9,
-        requiresEmpathy: true,
-        requiresPlan: true,
-        requiresQuestion: true
+        requiresEmpathy: false, // Let it be natural
+        requiresPlan: false,
+        requiresQuestion: false
       },
       factual: { 
-        minLen: 100, 
+        minLen: 30, // Sometimes a short answer is perfect
         maxLen: 400,
-        minSentences: 2, 
+        minSentences: 1, 
         steps: 0, 
         useRag: true, 
-        temperature: 0.3, 
+        temperature: 0.7, // More conversational
         top_p: 0.9,
         requiresEmpathy: false,
         requiresPlan: false,
         requiresQuestion: false
       },
       search: { 
-        minLen: 150, 
+        minLen: 50, 
         maxLen: 500,
-        minSentences: 3, 
+        minSentences: 1, 
         steps: 0, 
         useRag: true, 
-        temperature: 0.2, 
+        temperature: 0.7, // Less robotic
         top_p: 0.9,
         requiresEmpathy: false,
         requiresPlan: false,
         requiresQuestion: false
       },
       conversational: { 
-        minLen: 80, 
-        maxLen: 300,
-        minSentences: 2, 
+        minLen: 20, // Sometimes "lol yeah" is the right response
+        maxLen: 400, // Allow for longer when natural
+        minSentences: 1, 
         steps: 0, 
         useRag: false, 
-        temperature: 0.7, 
+        temperature: 0.8, // More personality
         top_p: 0.9,
         requiresEmpathy: false,
         requiresPlan: false,
         requiresQuestion: false
       },
       creative_superproxy: { 
-        minLen: 200, 
+        minLen: 100, 
         maxLen: 600,
-        minSentences: 4, 
+        minSentences: 2, 
         steps: 0, 
         useRag: false, 
         temperature: 0.9, 
         top_p: 0.9,
-        requiresEmpathy: true,
+        requiresEmpathy: false,
         requiresPlan: false,
         requiresQuestion: false
       },
       informational: { 
-        minLen: 150, 
+        minLen: 50, 
         maxLen: 400,
-        minSentences: 3, 
+        minSentences: 1, 
         steps: 0, 
         useRag: false, 
-        temperature: 0.4, 
+        temperature: 0.7, 
         top_p: 0.9,
         requiresEmpathy: false,
         requiresPlan: false,
         requiresQuestion: false
       },
       profile_update: { 
-        minLen: 100, 
+        minLen: 30, 
         maxLen: 300,
-        minSentences: 2, 
+        minSentences: 1, 
         steps: 0, 
         useRag: false, 
-        temperature: 0.6, 
+        temperature: 0.8, 
         top_p: 0.9,
-        requiresEmpathy: true,
+        requiresEmpathy: false,
         requiresPlan: false,
         requiresQuestion: false
       },
       first_message_welcome: { 
-        minLen: 150, 
+        minLen: 80, 
         maxLen: 350,
-        minSentences: 3, 
+        minSentences: 2, 
         steps: 0, 
         useRag: false, 
-        temperature: 0.7, 
+        temperature: 0.8, 
         top_p: 0.9,
         requiresEmpathy: false,
         requiresPlan: false,
@@ -360,54 +360,41 @@ class AIService {
    */
   needsRetry(text, queryType) {
     const policy = this.getReplyPolicy(queryType);
-    const hasQuestion = /\?/.test(text.trim());
-    const sentenceCount = text.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
     
-    // Too short for the intent type
-    if (text.length < policy.minLen) {
+    // Only retry for truly problematic responses
+    
+    // Way too short (like single word responses when more is needed)
+    if (text.length < policy.minLen && policy.minLen > 50) {
       return true;
     }
     
-    // Too long (wasteful) - but be more lenient for good content
-    if (text.length > policy.maxLen * 1.2) { // 20% buffer for good responses
+    // Extremely long and rambling
+    if (text.length > policy.maxLen * 1.5) {
       return true;
     }
     
-    // Not enough sentences
-    if (sentenceCount < policy.minSentences) {
+    // Obviously broken or empty responses
+    if (text.trim().length < 3) {
       return true;
     }
     
-    // Intent-specific requirements
-    if (policy.requiresQuestion && !hasQuestion) {
+    // Generic corporate speak
+    if (/(I'd be happy to help|How can I assist|Let me know if you need)/i.test(text) && text.length < 50) {
       return true;
     }
     
-    if (policy.requiresPlan && !/(step|first|second|third|1\.|2\.|3\.|plan|approach|strategy)/i.test(text)) {
-      return true;
+    // Excessive repetition (but be much more lenient)
+    const words = text.toLowerCase().split(/\s+/).filter(word => word.length > 4);
+    if (words.length > 10) {
+      const wordCounts = {};
+      words.forEach(word => wordCounts[word] = (wordCounts[word] || 0) + 1);
+      const maxWordCount = Math.max(...Object.values(wordCounts));
+      if (maxWordCount > Math.floor(words.length / 5) && maxWordCount > 5) { // Much more lenient
+        return true;
+      }
     }
     
-    if (policy.requiresEmpathy && !/(understand|feel|sounds|sorry|hear|difficult|challenging)/i.test(text.toLowerCase())) {
-      return true;
-    }
-    
-    // Very generic responses
-    if (/(I'd be happy to help|How can I assist|Let me know if you need)/i.test(text) && text.length < 200) {
-      return true;
-    }
-    
-    // Too many repetitive phrases (but ignore common words)
-    const words = text.toLowerCase().split(/\s+/).filter(word => 
-      word.length > 3 && !['the', 'and', 'you', 'your', 'that', 'this', 'with', 'have', 'will', 'can', 'are', 'for'].includes(word)
-    );
-    const wordCounts = {};
-    words.forEach(word => wordCounts[word] = (wordCounts[word] || 0) + 1);
-    const maxWordCount = Math.max(...Object.values(wordCounts));
-    if (maxWordCount > Math.floor(words.length / 8) && maxWordCount > 3) { // More than 12.5% repetition and more than 3 times
-      return true;
-    }
-    
-    return false;
+    return false; // Default to accepting the response
   }
 
   /**
@@ -827,71 +814,64 @@ Now respond as if you are the best friend they never knew they had.
     }
 
     if (queryType === 'advice') {
-      const actionSuggestions = this.generateActionSuggestions(conversationState, queryType, message);
-      const followUpOptions = this.generateFollowUpOptions(conversationState, queryType);
-      
-      return `You are Aether - their personal AI social proxy. The user is seeking advice or emotional support.
+      return `You're Aether, their AI companion. They're looking for genuine support and advice.
 
-CRITICAL REPLY REQUIREMENTS for ADVICE:
-- Length: 350-800 characters (6+ sentences)  
-- Structure: 1 empathy line + 3-step concrete plan + 1 follow-up question
-- Tone: Warm, supportive, practical
-- Include specific actionable suggestions when appropriate
-- DO NOT use web search or RAG unless they specifically ask for local resources
+Be real with them - like a close friend who actually gets it. Match their energy and don't be overly formal.
 
-ACTIONABLE SUGGESTIONS (if relevant to their situation):
-${actionSuggestions.map((s, i) => `${i+1}) ${s}`).join('\n')}
+VIBE CHECK: Use conversation_state to understand their situation and remember what they've told you.
 
-UX ENHANCEMENT - After heavy emotional messages, offer paths:
-"Sounds [acknowledge feeling]. Do you want help: (A) [specific action], (B) [alternative action], or (C) [third option]?"
+NATURAL ADVICE APPROACH:
+- Actually acknowledge their feelings (don't just say "I understand")
+- Give practical advice that makes sense for their specific situation  
+- Ask follow-up questions that show you're paying attention
+- Be encouraging but realistic
+- Don't force a rigid structure - let the conversation flow naturally
+- Use their communication style from conversation_state
 
-CONTEXT REPAIR: If unsure about prior context:
-1) Offer brief recap: "We were discussing [topic from conversation_state]..."  
-2) Ask: "Want quick advice, or a deeper plan?"
-3) Never ask them to restate everything
+If they're stressed/overwhelmed: Be calming and break things down simply
+If they're excited: Match their energy and be supportive  
+If they're frustrated: Validate their feelings and offer concrete next steps
 
-Use conversation_state to remember their goals, facts, and unresolved questions.
+Remember their context from conversation_state.
 
-${this.buildUserContextSection(userContext)}`;
+Talk TO them, not AT them. Be the friend they can actually relate to.`;
     }
     
     if (queryType === 'factual') {
-      return `You are Aether - their personal AI social proxy. The user is asking for factual information.
+      return `You're Aether - be helpful and conversational when they ask for information.
 
-CRITICAL REPLY REQUIREMENTS for FACTUAL:
-- Length: 100-400 characters (2+ sentences)
-- Use web search/RAG when needed for current/specific information
-- Cite sources when available
-- If unsure, say so and ask 1 clarifying question
+Don't be a Wikipedia bot. Give them the info they need in a natural way that fits the conversation flow.
 
-${this.buildUserContextSection(userContext)}`;
+- If it's something you can answer directly, just tell them
+- If you need to search for current info, do it but make it conversational
+- Connect the info back to their interests when you can
+- Keep it engaging - they're talking to YOU, not reading a manual
+
+Use conversation_state for context.`;
     }
     
-    // Default conversational - match their energy and be engaging
-    let prompt = `You are Aether - their personal AI social proxy.
+    // Default conversational - be engaging and fun!
+    let prompt = `You're Aether - be genuinely engaging and fun to talk to!
 
-REPLY REQUIREMENTS:
-- Length: 80-300 characters (2+ sentences) 
-- Match their tone and energy level
-- Be genuinely interesting, not generic
-- Always use conversation_state to remember context
+Think of yourself as their AI friend who's actually interesting to chat with. Not a formal assistant.
 
-CRITICAL RULES:
-- Use conversation_state to tailor responses and remember their goals
-- Never repeat slurs in usernames; ask for preferred name if needed
-- If they seem frustrated/scared, slow down, acknowledge, then suggest small doable steps
+KEY VIBES:
+- Match their energy and communication style
+- Be curious about them as a person
+- Share reactions and opinions, not just info
+- Use conversation_state to remember what they care about
+- Be spontaneous - don't follow rigid templates
+- Show personality and humor when appropriate
 
-CONTEXT REPAIR: If unsure about prior context:
-1) Offer 1-sentence recap from conversation_state
-2) Ask: "Want to continue where we left off?"
-3) Never ask them to restate everything
+CONVERSATION FLOW:
+- If they reference something from before, show you remember
+- Ask interesting follow-up questions
+- Make connections between things they've mentioned
+- Be encouraging about their goals and interests
 
-AMBIGUITY RULE: When they use ambiguous phrases ("what's that", "who's that", "explain that"):
-- Use conversation_state and recent context to infer meaning
-- If confidence < 70%, offer your guess ("Do you mean X?") and proceed briefly
-- Respond directly to what you think they're asking about
+Use conversation_state to remember what matters to them.
 
-`;
+Be the AI they actually want to talk to, not just tolerate.`;
 
     if (userContext) {
       // Build dynamic, non-repetitive context
