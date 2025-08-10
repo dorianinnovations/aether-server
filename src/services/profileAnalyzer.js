@@ -46,11 +46,29 @@ function extractJsonFromMarkdown(text) {
   const firstBrace = trimmed.indexOf('{');
   const lastBrace = trimmed.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    return trimmed.substring(firstBrace, lastBrace + 1);
+    const extracted = trimmed.substring(firstBrace, lastBrace + 1);
+    return cleanInvalidJsonSyntax(extracted);
   }
   
-  // Return original if no patterns match
-  return trimmed;
+  // Return cleaned original if no patterns match
+  return cleanInvalidJsonSyntax(trimmed);
+}
+
+// Helper function to clean common invalid JSON patterns
+function cleanInvalidJsonSyntax(json) {
+  return json
+    // Fix invalid numeric increments like "+0.1" -> "0.1" (CRITICAL FIX)
+    .replace(/":\s*\+([0-9\.]+)/g, '": $1')
+    // Fix communication style increments like '"analytical": +0.1' -> '"analytical": 0.1'
+    .replace(/("(?:analytical|casual|energetic|humor|social)"\s*:\s*)\+([0-9\.]+)/g, '$1$2')
+    // Fix invalid decrements like "-0.1" in wrong places
+    .replace(/":\s*\-([0-9\.]+)(?=[^,}])/g, '": -$1')
+    // Fix missing quotes around string values
+    .replace(/":\s*([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*[,}])/g, '": "$1"')
+    // Fix trailing commas
+    .replace(/,\s*([}\]])/g, '$1')
+    // Fix any remaining + signs in numeric contexts
+    .replace(/:\s*\+/g, ': ');
 }
 
 class ProfileAnalyzer {
@@ -619,7 +637,9 @@ Output ONLY a valid JSON object:
         };
       }
 
-      const cleanJson = extractJsonFromMarkdown(response.completion);
+      let cleanJson = extractJsonFromMarkdown(response.completion);
+      // Additional cleaning for common LLM JSON issues
+      cleanJson = cleanInvalidJsonSyntax(cleanJson);
       let synthesized;
       
       try {
@@ -632,7 +652,19 @@ Output ONLY a valid JSON object:
           cleanedPreview: cleanJson.substring(0, 200),
           parseError: parseError.message
         });
-        throw new Error(`Failed to parse synthesized profile data: ${parseError.message}`);
+        
+        // Return fallback empty result instead of throwing
+        log.warn('Using fallback empty synthesis result due to JSON parse failure');
+        return {
+          success: true,
+          updates: {
+            interests: [],
+            communicationStyle: {},
+            status_updates: []
+          },
+          reasoning: 'JSON parse failed, using empty fallback',
+          significant: false
+        };
       }
       
       log.debug('🧠 Synthesis completed:', {
