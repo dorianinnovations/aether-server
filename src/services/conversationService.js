@@ -404,15 +404,26 @@ class ConversationService {
       /what.*new music/i,
       /new.*music.*out/i,
       /latest.*releases/i,
+      /any.*new.*releases/i,
+      /new.*releases/i,
+      /recent.*releases/i,
       /recommend.*music/i,
       /discover.*music/i,
       /music.*recommendations/i,
       /new.*songs/i,
       /new.*albums/i,
+      /latest.*songs/i,
+      /latest.*albums/i,
       /what.*should.*listen/i,
       /music.*discover/i,
       /find.*new.*artists/i,
-      /music.*suggestions/i
+      /music.*suggestions/i,
+      /any.*music.*recommendations/i,
+      /got.*any.*music/i,
+      /suggest.*music/i,
+      /music.*out.*now/i,
+      /what.*music.*is.*good/i,
+      /good.*music.*lately/i
     ];
 
     return musicDiscoveryPatterns.some(pattern => pattern.test(message));
