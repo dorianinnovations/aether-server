@@ -43,15 +43,17 @@ router.get("/profile", protect, async (req, res) => {
 // Update user profile
 router.put("/profile", protect, async (req, res) => {
   try {
-    const { name, bio, location, website, dateOfBirth } = req.body;
+    const { name, displayName, bio, location, website, dateOfBirth, socialLinks } = req.body;
     
     // Build update object with only provided fields
     const updateData = {};
     if (name !== undefined) updateData.name = name;
+    if (displayName !== undefined) updateData.displayName = displayName;
     if (bio !== undefined) updateData.bio = bio;
     if (location !== undefined) updateData.location = location;
     if (website !== undefined) updateData.website = website;
     if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth;
+    if (socialLinks !== undefined) updateData.socialLinks = socialLinks;
     
     const user = await User.findByIdAndUpdate(
       req.user.id,

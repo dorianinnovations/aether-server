@@ -20,6 +20,11 @@ const UserSchema = new mongoose.Schema({
     trim: true,
     maxlength: 100
   },
+  displayName: {
+    type: String,
+    trim: true,
+    maxlength: 100
+  },
   username: {
     type: String,
     required: [true, 'Username is required'],
@@ -43,6 +48,48 @@ const UserSchema = new mongoose.Schema({
         return validFormat && notTooShort && notReserved;
       },
       message: 'Username must be 3+ characters, alphanumeric/underscore only, and not reserved'
+    }
+  },
+  bio: {
+    type: String,
+    trim: true,
+    maxlength: 500
+  },
+  location: {
+    type: String,
+    trim: true,
+    maxlength: 100
+  },
+  website: {
+    type: String,
+    trim: true,
+    maxlength: 200
+  },
+  socialLinks: {
+    instagram: {
+      type: String,
+      trim: true,
+      maxlength: 100
+    },
+    x: {
+      type: String,
+      trim: true,
+      maxlength: 100
+    },
+    spotify: {
+      type: String,
+      trim: true,
+      maxlength: 200
+    },
+    facebook: {
+      type: String,
+      trim: true,
+      maxlength: 100
+    },
+    website: {
+      type: String,
+      trim: true,
+      maxlength: 200
     }
   },
   isActive: {
