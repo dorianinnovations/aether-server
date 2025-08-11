@@ -239,6 +239,27 @@ const UserSchema = new mongoose.Schema({
     uploadedAt: Date
   },
 
+  // User badges for profile display - aligned with tier system
+  badges: [{
+    id: {
+      type: String,
+      required: true
+    },
+    badgeType: {
+      type: String,
+      enum: ['Standard', 'Legendary', 'VIP'],
+      required: true
+    },
+    isVisible: {
+      type: Boolean,
+      default: true
+    },
+    awardedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+
   // Artist Preferences & Music Profile - Core user music identity
   artistPreferences: {
     // Followed artists with notification preferences
