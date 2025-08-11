@@ -247,12 +247,12 @@ class SpotifyService {
 
   // Update user's Spotify data
   async updateUserSpotifyData(user) {
-    if (!user.socialProxy?.spotify?.connected || !user.socialProxy.spotify.accessToken) {
+    if (!user.musicProfile?.spotify?.connected || !user.musicProfile.spotify.accessToken) {
       return false;
     }
 
     try {
-      let accessToken = user.socialProxy.spotify.accessToken;
+      let accessToken = user.musicProfile.spotify.accessToken;
       let tokenRefreshed = false;
 
       // Helper function to attempt API call with token refresh if needed
@@ -261,11 +261,11 @@ class SpotifyService {
           return await apiCall(accessToken);
         } catch (error) {
           // If token expired and we haven't tried refreshing yet, try once
-          if (error.message === 'SPOTIFY_TOKEN_EXPIRED' && !tokenRefreshed && user.socialProxy.spotify.refreshToken) {
+          if (error.message === 'SPOTIFY_TOKEN_EXPIRED' && !tokenRefreshed && user.musicProfile.spotify.refreshToken) {
             try {
-              const tokens = await this.refreshAccessToken(user.socialProxy.spotify.refreshToken);
-              user.socialProxy.spotify.accessToken = tokens.accessToken;
-              user.socialProxy.spotify.refreshToken = tokens.refreshToken;
+              const tokens = await this.refreshAccessToken(user.musicProfile.spotify.refreshToken);
+              user.musicProfile.spotify.accessToken = tokens.accessToken;
+              user.musicProfile.spotify.refreshToken = tokens.refreshToken;
               accessToken = tokens.accessToken;
               tokenRefreshed = true;
               
@@ -289,7 +289,7 @@ class SpotifyService {
 
       // Update user data
       if (currentTrack) {
-        user.socialProxy.spotify.currentTrack = {
+        user.musicProfile.spotify.currentTrack = {
           ...currentTrack,
           lastPlayed: new Date()
         };
@@ -297,7 +297,7 @@ class SpotifyService {
         // If nothing is currently playing, use the most recent track but mark it as not playing
         if (recentTracks && recentTracks.length > 0) {
           const mostRecent = recentTracks[0];
-          user.socialProxy.spotify.currentTrack = {
+          user.musicProfile.spotify.currentTrack = {
             name: mostRecent.name,
             artist: mostRecent.artist,
             album: mostRecent.album,
@@ -309,12 +309,12 @@ class SpotifyService {
             lastPlayed: mostRecent.playedAt
           };
         } else {
-          user.socialProxy.spotify.currentTrack = null;
+          user.musicProfile.spotify.currentTrack = null;
         }
       }
 
-      user.socialProxy.spotify.recentTracks = recentTracks;
-      user.socialProxy.spotify.topTracks = topTracks;
+      user.musicProfile.spotify.recentTracks = recentTracks;
+      user.musicProfile.spotify.topTracks = topTracks;
 
       await user.save();
       
@@ -333,9 +333,9 @@ class SpotifyService {
       
       // If refresh failed, disconnect Spotify
       if (error.message.includes('refresh')) {
-        user.socialProxy.spotify.connected = false;
-        user.socialProxy.spotify.accessToken = null;
-        user.socialProxy.spotify.refreshToken = null;
+        user.musicProfile.spotify.connected = false;
+        user.musicProfile.spotify.accessToken = null;
+        user.musicProfile.spotify.refreshToken = null;
         await user.save();
       }
       

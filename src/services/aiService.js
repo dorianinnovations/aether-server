@@ -58,8 +58,8 @@ class AIService {
         }
         
         // Spotify context
-        if (userContext.socialProxy.spotify?.currentTrack) {
-          currentFacts.push(`currently listening: ${userContext.socialProxy.spotify.currentTrack.name}`);
+        if (userContext.musicProfile?.spotify?.currentTrack) {
+          currentFacts.push(`currently listening: ${userContext.musicProfile.spotify.currentTrack.name}`);
         }
         
         state.facts = currentFacts;

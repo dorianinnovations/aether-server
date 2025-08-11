@@ -80,11 +80,17 @@ router.get('/callback', async (req, res) => {
       return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3000'}/profile?spotify_error=user_not_found`);
     }
 
-    user.socialProxy.spotify = {
-      connected: true,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken
-    };
+    // Initialize musicProfile if it doesn't exist
+    if (!user.musicProfile) {
+      user.musicProfile = {};
+    }
+    if (!user.musicProfile.spotify) {
+      user.musicProfile.spotify = {};
+    }
+
+    user.musicProfile.spotify.connected = true;
+    user.musicProfile.spotify.accessToken = tokens.accessToken;
+    user.musicProfile.spotify.refreshToken = tokens.refreshToken;
 
     await user.save();
 
@@ -195,11 +201,17 @@ router.post('/mobile-callback', async (req, res) => {
       });
     }
 
-    user.socialProxy.spotify = {
-      connected: true,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken
-    };
+    // Initialize musicProfile if it doesn't exist
+    if (!user.musicProfile) {
+      user.musicProfile = {};
+    }
+    if (!user.musicProfile.spotify) {
+      user.musicProfile.spotify = {};
+    }
+
+    user.musicProfile.spotify.connected = true;
+    user.musicProfile.spotify.accessToken = tokens.accessToken;
+    user.musicProfile.spotify.refreshToken = tokens.refreshToken;
 
     await user.save();
 
@@ -231,15 +243,20 @@ router.post('/disconnect', protect, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Clear Spotify data
-    user.socialProxy.spotify = {
-      connected: false,
-      accessToken: null,
-      refreshToken: null,
-      currentTrack: {},
-      recentTracks: [],
-      topTracks: []
-    };
+    // Initialize and clear Spotify data
+    if (!user.musicProfile) {
+      user.musicProfile = {};
+    }
+    if (!user.musicProfile.spotify) {
+      user.musicProfile.spotify = {};
+    }
+    
+    user.musicProfile.spotify.connected = false;
+    user.musicProfile.spotify.accessToken = null;
+    user.musicProfile.spotify.refreshToken = null;
+    user.musicProfile.spotify.currentTrack = {};
+    user.musicProfile.spotify.recentTracks = [];
+    user.musicProfile.spotify.topTracks = [];
 
     await user.save();
 
@@ -256,18 +273,18 @@ router.post('/disconnect', protect, async (req, res) => {
 // Get current Spotify status
 router.get('/status', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('socialProxy.spotify');
+    const user = await User.findById(req.user.id).select('musicProfile.spotify');
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Update Spotify data if connected
-    if (user.socialProxy?.spotify?.connected) {
+    if (user.musicProfile?.spotify?.connected) {
       await spotifyService.updateUserSpotifyData(user);
       // Re-fetch user data after update
-      const updatedUser = await User.findById(req.user.id).select('socialProxy.spotify');
-      user.socialProxy = updatedUser.socialProxy;
+      const updatedUser = await User.findById(req.user.id).select('musicProfile.spotify');
+      user.musicProfile = updatedUser.musicProfile;
     }
 
     res.json({
@@ -289,7 +306,7 @@ router.post('/refresh', protect, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    if (!user.socialProxy?.spotify?.connected) {
+    if (!user.musicProfile?.spotify?.connected) {
       return res.status(400).json({ error: 'Spotify not connected' });
     }
 
@@ -300,7 +317,7 @@ router.post('/refresh', protect, async (req, res) => {
     }
 
     // Check if there's a new current track to share
-    const currentTrack = user.socialProxy.spotify.currentTrack;
+    const currentTrack = user.musicProfile.spotify.currentTrack;
     if (currentTrack && currentTrack.name) {
       // Check if we recently logged this track to avoid duplicates
       const recentActivities = user.musicProfile?.musicPersonality?.recentMusicActivities || [];
@@ -339,7 +356,7 @@ router.post('/refresh', protect, async (req, res) => {
     res.json({
       success: true,
       message: 'Spotify data refreshed successfully',
-      spotify: user.socialProxy.spotify
+      spotify: user.musicProfile.spotify
     });
   } catch (error) {
     log.error('Refresh Spotify data error:', error);
@@ -386,7 +403,7 @@ router.get('/live-status/:username', protect, async (req, res) => {
     const requestingUserId = req.user.id;
     
     // Find the target user
-    const targetUser = await User.findOne({ username }).select('_id username socialProxy.spotify friends');
+    const targetUser = await User.findOne({ username }).select('_id username musicProfile.spotify friends');
     
     if (!targetUser) {
       return res.status(404).json({ 
@@ -431,7 +448,7 @@ router.get('/live-status/:username', protect, async (req, res) => {
       const updateSuccess = await spotifyService.updateUserSpotifyData(targetUser);
       
       if (updateSuccess) {
-        const currentTrack = targetUser.socialProxy.spotify.currentTrack;
+        const currentTrack = targetUser.musicProfile.spotify.currentTrack;
         
         if (currentTrack && currentTrack.name) {
           // Calculate how old this status is
@@ -463,7 +480,7 @@ router.get('/live-status/:username', protect, async (req, res) => {
     // If no live data, get cached recent tracks
     let recentActivity = null;
     if (!liveData) {
-      const recentTracks = targetUser.socialProxy.spotify.recentTracks;
+      const recentTracks = targetUser.musicProfile.spotify.recentTracks;
       if (recentTracks && recentTracks.length > 0) {
         const mostRecent = recentTracks[0];
         recentActivity = {
@@ -486,7 +503,7 @@ router.get('/live-status/:username', protect, async (req, res) => {
       username: targetUser.username,
       live: liveData,
       recent: recentActivity,
-      topTracks: targetUser.socialProxy.spotify.topTracks?.slice(0, 3) || [],
+      topTracks: targetUser.musicProfile.spotify.topTracks?.slice(0, 3) || [],
       lastRefreshed: new Date().toISOString()
     });
 

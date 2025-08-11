@@ -64,10 +64,10 @@ class SpotifyLiveService {
     try {
       // Find users with Spotify connected, populate friends
       const spotifyUsers = await User.find({
-        'socialProxy.spotify.connected': true,
-        'socialProxy.spotify.accessToken': { $exists: true, $ne: null }
+        'musicProfile.spotify.connected': true,
+        'musicProfile.spotify.accessToken': { $exists: true, $ne: null }
       })
-      .select('_id username socialProxy.spotify friends musicProfile')
+      .select('_id username musicProfile friends')
       .populate('friends.user', '_id');
 
       if (spotifyUsers.length === 0) {
@@ -108,12 +108,12 @@ class SpotifyLiveService {
   async updateUserSpotifyStatus(user) {
     try {
       // Check if user has Spotify configuration
-      if (!user.socialProxy?.spotify) {
+      if (!user.musicProfile?.spotify) {
         return;
       }
       
       // Store previous track for comparison
-      const previousTrack = user.socialProxy.spotify.currentTrack;
+      const previousTrack = user.musicProfile.spotify.currentTrack;
       const previousTrackId = previousTrack ? 
         `${previousTrack.name}-${previousTrack.artist}` : null;
 
@@ -125,7 +125,7 @@ class SpotifyLiveService {
       }
 
       // Check if current track changed
-      const currentTrack = user.socialProxy.spotify.currentTrack;
+      const currentTrack = user.musicProfile.spotify.currentTrack;
       const currentTrackId = currentTrack && currentTrack.name ? 
         `${currentTrack.name}-${currentTrack.artist}` : null;
 
@@ -213,10 +213,10 @@ class SpotifyLiveService {
       // Handle token expiration gracefully - reduce log spam
       if (error.message?.includes('SPOTIFY_TOKEN_EXPIRED') || error.message?.includes('401')) {
         // Silently disconnect expired users instead of spamming logs
-        if (user.socialProxy?.spotify?.connected) {
-          user.socialProxy.spotify.connected = false;
-          user.socialProxy.spotify.accessToken = null;
-          user.socialProxy.spotify.refreshToken = null;
+        if (user.musicProfile?.spotify?.connected) {
+          user.musicProfile.spotify.connected = false;
+          user.musicProfile.spotify.accessToken = null;
+          user.musicProfile.spotify.refreshToken = null;
           await user.save();
           // Only log once when disconnecting, not every update cycle
           log.debug(`🔄 Disconnected expired Spotify account for ${user.username}`);
@@ -234,9 +234,9 @@ class SpotifyLiveService {
    */
   async forceUpdateUser(userId) {
     try {
-      const user = await User.findById(userId).select('username socialProxy.spotify');
+      const user = await User.findById(userId).select('username musicProfile.spotify');
       
-      if (!user || !user.socialProxy?.spotify?.connected) {
+      if (!user || !user.musicProfile?.spotify?.connected) {
         return false;
       }
 
@@ -287,14 +287,14 @@ class SpotifyLiveService {
   async getTrackedUsers() {
     try {
       const users = await User.find({
-        'socialProxy.spotify.connected': true
-      }).select('username socialProxy.spotify.currentTrack');
+        'musicProfile.spotify.connected': true
+      }).select('username musicProfile.spotify.currentTrack');
 
       return users.map(user => ({
         username: user.username,
-        hasCurrentTrack: !!(user.socialProxy?.spotify?.currentTrack?.name),
-        currentTrack: user.socialProxy?.spotify?.currentTrack?.name || null,
-        currentArtist: user.socialProxy?.spotify?.currentTrack?.artist || null
+        hasCurrentTrack: !!(user.musicProfile?.spotify?.currentTrack?.name),
+        currentTrack: user.musicProfile?.spotify?.currentTrack?.name || null,
+        currentArtist: user.musicProfile?.spotify?.currentTrack?.artist || null
       }));
 
     } catch (error) {
