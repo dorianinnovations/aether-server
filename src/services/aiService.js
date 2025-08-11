@@ -196,17 +196,7 @@ class AIService {
   extractCommitments(response, queryType) {
     const commitments = [];
     
-    if (queryType === 'advice') {
-      if (/I('ll| will) (help|assist|guide|show|explain)/.test(response)) {
-        commitments.push('assistant committed to provide guidance');
-      }
-      if (/step|plan|approach|strategy/.test(response.toLowerCase())) {
-        commitments.push('assistant provided structured plan');
-      }
-      if (response.includes('?')) {
-        commitments.push('assistant asked follow-up question');
-      }
-    }
+    // No specific commitments tracked for current query types
     
     return commitments;
   }
@@ -218,17 +208,11 @@ class AIService {
     let score = 50; // Base score
     
     // Length appropriateness
-    if (queryType === 'advice' && response.length > 300) score += 15;
     if (queryType === 'factual' && response.length > 100 && response.length < 400) score += 10;
+    if (queryType === 'music_related' && response.length > 150) score += 10;
     
     // Question asking
     if (response.includes('?')) score += 10;
-    
-    // Structure for advice
-    if (queryType === 'advice') {
-      if (/(step|first|second|third|1\.|2\.|3\.)/.test(response)) score += 15;
-      if (/(understand|feel|sounds|sorry)/.test(response.toLowerCase())) score += 10;
-    }
     
     // Avoid generic responses
     if (/(I'd be happy to help|How can I assist|Let me know)/.test(response)) score -= 20;
@@ -241,15 +225,15 @@ class AIService {
    */
   getReplyPolicy(queryType) {
     const policies = {
-      advice: { 
-        minLen: 80,  // Much more relaxed
-        maxLen: 600,
-        minSentences: 1, // Let natural conversation flow
-        steps: 0, // Don't force structure
-        useRag: false, 
-        temperature: 0.8, // More creative/engaging
+      music_related: { 
+        minLen: 50,
+        maxLen: 500,
+        minSentences: 1,
+        steps: 0,
+        useRag: true, // Use music preferences and context
+        temperature: 0.8, // Enthusiastic about music
         top_p: 0.9,
-        requiresEmpathy: false, // Let it be natural
+        requiresEmpathy: false,
         requiresPlan: false,
         requiresQuestion: false
       },
@@ -477,8 +461,9 @@ class AIService {
       }
     }
     
-    // Artist discovery and recommendation patterns (HIGHEST PRIORITY)
-    const artistDiscoveryPatterns = [
+    // Consolidated music-related patterns - covers all music intents
+    const musicRelatedPatterns = [
+      // Artist discovery and recommendation
       /(recommend|suggest|find).*(artist|band|musician|singer)/,
       /(who|what).*(artist|band|musician|singer|music)/,
       /(similar to|like|sounds like).*(artist|band|musician)/,
@@ -488,45 +473,42 @@ class AIService {
       /(indie|rock|pop|jazz|hip hop|electronic|classical|country|metal|folk|blues|reggae|punk|alternative|r&b|soul|funk)/,
       /i love|i like|i'm into|really enjoy.*(music|artist|band|song)/,
       /(good|great|best).*(artist|band|music|song|album)/,
-      /music.*(recommendation|suggestion|advice)/
-    ];
-
-    // Artist tracking and management patterns
-    const artistTrackingPatterns = [
+      /music.*(recommendation|suggestion|advice)/,
+      
+      // Artist tracking and management
       /(follow|track|watch|monitor|subscribe).*(artist|band|musician)/,
       /(updates|news|release|album|tour|concert).*(from|about|by)/,
       /(notify|alert|tell me).*(when|if).*(releases|drops|announces|tours)/,
       /(add|save|follow|unfollow|remove).*(artist|band|musician)/,
       /(my artists|followed artists|tracking|watching|following)/,
-      /(artist feed|music feed|updates feed|notification)/
-    ];
-
-    // Music analysis and stats patterns
-    const musicAnalysisPatterns = [
+      /(artist feed|music feed|updates feed|notification)/,
+      
+      // Music analysis and stats
       /(my music|listening habits|music taste|preferences|stats)/,
       /(analyze|show|tell me).*(music|listening|taste|preferences|stats)/,
       /(top artists|favorite|most played|recently played)/,
       /(spotify|apple music|music app|streaming).*(data|history|stats|analytics)/,
       /(currently listening|playing|on repeat|now playing)/,
-      /what.*(music|artist|song|album).*(i|you).*(listen|like|prefer)/
-    ];
-
-    // Music activity patterns
-    const musicActivityPatterns = [
+      /what.*(music|artist|song|album).*(i|you).*(listen|like|prefer)/,
+      
+      // Music activity and sharing
       /i'm (listening|discovering|exploring|checking out|into)/,
       /(found|discovered|heard|came across).*(artist|band|song|album)/,
       /(concert|show|festival|live|performance)/,
       /(playlist|mix|album|ep|single)/,
       /(vibes|mood|feeling).*(music|artist|sound)/,
-      /currently (obsessed|hooked|addicted).*(to|with)/
-    ];
-
-    // Music advice patterns
-    const musicAdvicePatterns = [
+      /currently (obsessed|hooked|addicted).*(to|with)/,
+      
+      // Music help and advice
       /(help me|need help).*(find|discover|music|artist)/,
       /(don't know|not sure).*(what|which).*(music|artist|genre)/,
       /(bored|tired).*(music|playlist|artist)/,
-      /(what should i|recommend).*(listen|music|artist)/
+      /(what should i|recommend).*(listen|music|artist)/,
+      
+      // General music conversation
+      /(music|artist|band|song|album|concert|festival|playlist)/,
+      /(listening|hearing|playing|sound|melody|rhythm|beat)/,
+      /(genre|style|vibe|mood|tempo|lyrics)/
     ];
 
     // Informational queries about Aether
@@ -555,83 +537,28 @@ class AIService {
       /looking forward to|planning to|planning (a|the|my)/
     ];
     
-    // Check patterns in priority order - ARTIST-FOCUSED PLATFORM
+    // Check patterns in priority order - MUSIC-FOCUSED PLATFORM
 
-    // 1. Artist discovery (highest priority for music platform)
-    for (const pattern of artistDiscoveryPatterns) {
+    // 1. Music-related queries (highest priority - covers all music intents)
+    for (const pattern of musicRelatedPatterns) {
       if (pattern.test(lowerMessage)) {
-        return 'artist_discovery';
+        return 'music_related';
       }
     }
     
-    // 2. Artist tracking and management
-    for (const pattern of artistTrackingPatterns) {
-      if (pattern.test(lowerMessage)) {
-        return 'artist_tracking';
-      }
-    }
-    
-    // 3. Music analysis and stats
-    for (const pattern of musicAnalysisPatterns) {
-      if (pattern.test(lowerMessage)) {
-        return 'music_analysis';
-      }
-    }
-    
-    // 4. Music activities and sharing
-    for (const pattern of musicActivityPatterns) {
-      if (pattern.test(lowerMessage)) {
-        return 'music_activity';
-      }
-    }
-    
-    // 5. Music advice
-    for (const pattern of musicAdvicePatterns) {
-      if (pattern.test(lowerMessage)) {
-        return 'music_advice';
-      }
-    }
-    
-    // 6. Platform information
+    // 2. Platform information
     for (const pattern of infoPatterns) {
       if (pattern.test(lowerMessage)) {
         return 'informational';
       }
     }
     
-    // 7. Check for general music conversation
-    const musicConversationPatterns = [
-      /(music|artist|band|song|album|concert|festival|playlist)/,
-      /(listening|hearing|playing|sound|melody|rhythm|beat)/,
-      /(genre|style|vibe|mood|tempo|lyrics)/
-    ];
-    
-    for (const pattern of musicConversationPatterns) {
-      if (pattern.test(lowerMessage)) {
-        return 'music_conversation';
-      }
-    }
-    
-    // 8. Profile updates (lower priority for music platform)
+    // 3. Profile updates (lower priority for music platform)
     for (const pattern of updatePatterns) {  
       if (pattern.test(lowerMessage)) {
         return 'profile_update';
       }
     }
-    
-    // Enhanced advice patterns with sentiment weighting
-    const advicePatterns = [
-      // Emotional distress (high priority)
-      /(scared|worried|anxious|frustrated|stressed|overwhelmed|lost|confused|stuck|helpless)/,
-      // Direct requests for help
-      /(help me|need advice|need guidance|don't know what to do|what should i do)/,
-      // Problem statements
-      /(problem|issue|struggle|difficulty|challenge|trouble|crisis|situation)/,
-      // Relationship/social issues
-      /(friend|relationship|family|work situation|coworker|boss|breakup|conflict)/,
-      // Life decisions
-      /(should i|what if i|thinking about|considering|decision|choice)/
-    ];
 
     // Enhanced factual patterns
     const factualPatterns = [
@@ -647,32 +574,7 @@ class AIService {
       /(find.*near|restaurants|cafes|shops|places|locations)/
     ];
 
-    // Sentiment-weighted classification
-    // If distressed/negative sentiment, prioritize advice even for borderline cases
-    if (sentiment === 'negative' || sentiment === 'distressed') {
-      // Lower threshold for advice classification when distressed
-      const distressAdvicePatterns = [
-        ...advicePatterns,
-        /(i feel|feeling|i'm|i am).*(bad|terrible|awful|horrible|sad|down|depressed)/,
-        /(can't|cannot|don't know how to|struggling with)/,
-        /(why|how come|what's wrong with)/
-      ];
-      
-      for (const pattern of distressAdvicePatterns) {
-        if (pattern.test(lowerMessage)) {
-          return 'advice';
-        }
-      }
-    }
-
-    // Check for advice intent (normal threshold)
-    for (const pattern of advicePatterns) {
-      if (pattern.test(lowerMessage)) {
-        return 'advice';
-      }
-    }
-
-    // Check for factual/search intent
+    // 4. Check for factual/search intent
     for (const pattern of factualPatterns) {
       if (pattern.test(lowerMessage)) {
         return 'factual';
@@ -759,38 +661,14 @@ class AIService {
   generateActionSuggestions(conversationState, queryType, message) {
     const suggestions = [];
     
-    if (queryType === 'advice') {
-      // Work/career related suggestions
-      if (conversationState.goals?.includes('work-related discussion') || 
-          conversationState.goals?.includes('financial concerns')) {
-        suggestions.push('draft a message to discuss pay/role with supervisor');
-        suggestions.push('research salary ranges for your position');
-        suggestions.push('update resume and start exploring opportunities');
-      }
-      
-      // Social connection suggestions
-      if (conversationState.goals?.includes('find social connections')) {
-        suggestions.push('find 2 tech meetups in your area');
-        suggestions.push('join 1 online community related to your interests');
-        suggestions.push('reach out to 1 former colleague or classmate');
-      }
-      
-      // Family relationship suggestions
-      if (conversationState.goals?.includes('family relationships')) {
-        suggestions.push('schedule a private conversation with family member');
-        suggestions.push('write down specific examples of the situation');
-        suggestions.push('consider family counseling if conflict persists');
-      }
+    // Music-related suggestions
+    if (queryType === 'music_related') {
+      suggestions.push('explore similar artists');
+      suggestions.push('set up artist notifications');
+      suggestions.push('discover new music');
     }
     
-    // General suggestions based on sentiment
-    if (conversationState.last_sentiment === 'distressed') {
-      suggestions.push('take 5 deep breaths and focus on one small step');
-      suggestions.push('talk to someone you trust about this');
-      suggestions.push('write down your thoughts to clarify them');
-    }
-    
-    return suggestions.slice(0, 3); // Limit to 3 suggestions
+    return suggestions.slice(0, 3);
   }
 
   /**
@@ -799,10 +677,10 @@ class AIService {
   generateFollowUpOptions(conversationState, queryType) {
     const options = [];
     
-    if (queryType === 'advice') {
-      options.push('Get a detailed plan');
-      options.push('Find local resources');
-      options.push('Continue discussion');
+    if (queryType === 'music_related') {
+      options.push('Discover more');
+      options.push('Set up tracking');
+      options.push('Music analysis');
     } else if (queryType === 'factual') {
       options.push('Get more details');
       options.push('Related topics');
@@ -902,95 +780,22 @@ ${userContext?.username ? `Speak TO them about their music journey and artist pr
 Be genuinely curious about their musical interests and help them stay connected with the artists they care about most.`;
   }
 
-  // NEW ARTIST-FOCUSED PROMPT METHODS
-  getArtistDiscoveryPrompt(userContext = null) {
+  // CONSOLIDATED MUSIC PROMPT METHOD
+  getMusicRelatedPrompt(userContext = null, message = '') {
     const username = this.safeDisplayName(userContext?.username);
-    return `You are Aether, your AI companion for artist updates and music discovery.
+    return `You are Aether, your AI companion for music and artist discovery.
 
-You excel at music recommendations and artist discovery. Focus on:
-- Understanding their music taste and preferences
-- Suggesting artists similar to ones they mention
-- Exploring new genres based on their interests  
-- Providing context about artists (genre, style, notable songs)
-- Helping them expand their musical horizons
+DETERMINE INTENT: Based on their message, understand if they want:
+- Artist discovery/recommendations (suggest artists, explore genres, expand horizons)
+- Artist tracking/following setup (follow artists, set notifications, manage updates)
+- Music analysis (listening patterns, stats, music taste insights)
+- Music activity discussion (current listening, concerts, discoveries)
+- Music advice/guidance (overcome discovery blocks, expand taste)
+- Casual music conversation (general music chat)
 
-Be enthusiastic about music discovery and ask follow-up questions to better understand their taste.
-${username ? `Help ${username} discover amazing new music!` : 'Help them discover amazing new music!'}`;
-  }
+RESPOND APPROPRIATELY: Match their energy level and provide relevant music-focused assistance. Be enthusiastic about music discovery, helpful with tracking features, insightful with analysis, engaged with activities, encouraging with advice, conversational about music topics.
 
-  getArtistTrackingPrompt(userContext = null) {
-    const username = this.safeDisplayName(userContext?.username);
-    return `You are Aether, your AI companion for artist updates and music discovery.
-
-You help users track and follow their favorite artists. Focus on:
-- Explaining how to follow artists for updates
-- Setting up notifications for releases, tours, concerts
-- Managing their artist following list
-- Explaining different types of updates (releases, news, tours, social media)
-- Helping them customize their artist feed preferences
-
-Be helpful and guide them through the tracking features.
-${username ? `Help ${username} stay connected with their favorite artists!` : 'Help them stay connected with their favorite artists!'}`;
-  }
-
-  getMusicAnalysisPrompt(userContext = null) {
-    const username = this.safeDisplayName(userContext?.username);
-    return `You are Aether, your AI companion for artist updates and music discovery.
-
-You analyze and interpret music data and listening habits. Focus on:
-- Explaining their listening patterns and music statistics
-- Identifying their top artists, genres, and songs
-- Analyzing their music taste evolution over time
-- Providing insights about their music discovery patterns
-- Comparing their taste to trends and suggesting related content
-
-Be insightful and help them understand their musical identity.
-${username ? `Share insights about ${username}'s music journey!` : 'Share insights about their music journey!'}`;
-  }
-
-  getMusicActivityPrompt(userContext = null) {
-    const username = this.safeDisplayName(userContext?.username);
-    return `You are Aether, your AI companion for artist updates and music discovery.
-
-You engage with users about their current music activities. Focus on:
-- Discussing what they're currently listening to
-- Sharing enthusiasm for their music discoveries
-- Asking about concerts, festivals, or live music experiences
-- Connecting their activities to potential artist tracking opportunities
-- Encouraging them to share their music experiences
-
-Be genuinely interested in their musical journey and experiences.
-${username ? `Engage with ${username} about their music activities!` : 'Engage about their music activities!'}`;
-  }
-
-  getMusicAdvicePrompt(userContext = null) {
-    const username = this.safeDisplayName(userContext?.username);
-    return `You are Aether, your AI companion for artist updates and music discovery.
-
-You provide helpful advice for music discovery and listening. Focus on:
-- Helping them overcome music discovery blocks
-- Suggesting ways to expand their musical taste
-- Recommending discovery methods (playlists, radio, festivals)
-- Advising on music exploration strategies
-- Connecting them with relevant artists to follow
-
-Be encouraging and provide practical, actionable music advice.
-${username ? `Provide ${username} with great music advice!` : 'Provide great music advice!'}`;
-  }
-
-  getMusicConversationPrompt(userContext = null) {
-    const username = this.safeDisplayName(userContext?.username);
-    return `You are Aether, your AI companion for artist updates and music discovery.
-
-You engage in natural conversations about music and artists. Focus on:
-- Discussing music topics they bring up
-- Sharing interesting facts about artists or genres
-- Exploring the emotional and cultural aspects of music
-- Connecting music to their experiences and memories
-- Keeping the conversation engaging and music-focused
-
-Be conversational, knowledgeable, and passionate about music.
-${username ? `Have a great music conversation with ${username}!` : 'Have a great music conversation!'}`;
+${username ? `Help ${username} with their music journey and artist preferences!` : 'Help them with their music journey and artist preferences!'}`;
   }
 
   buildSystemPrompt(userContext = null, queryType = 'conversational', userMessage = '') {
@@ -1008,29 +813,9 @@ ${username ? `Have a great music conversation with ${username}!` : 'Have a great
       return this.getProfileUpdatePrompt(userContext);
     }
     
-    // NEW ARTIST-FOCUSED QUERY TYPES
-    if (queryType === 'artist_discovery') {
-      return this.getArtistDiscoveryPrompt(userContext);
-    }
-    
-    if (queryType === 'artist_tracking') {
-      return this.getArtistTrackingPrompt(userContext);
-    }
-    
-    if (queryType === 'music_analysis') {
-      return this.getMusicAnalysisPrompt(userContext);
-    }
-    
-    if (queryType === 'music_activity') {
-      return this.getMusicActivityPrompt(userContext);
-    }
-    
-    if (queryType === 'music_advice') {
-      return this.getMusicAdvicePrompt(userContext);
-    }
-    
-    if (queryType === 'music_conversation') {
-      return this.getMusicConversationPrompt(userContext);
+    // CONSOLIDATED MUSIC-RELATED QUERY TYPE
+    if (queryType === 'music_related') {
+      return this.getMusicRelatedPrompt(userContext, userMessage);
     }
     
     // 🔥 CREATIVE SUPERPROXY MODE
@@ -1057,30 +842,6 @@ Now respond as if you are the best friend they never knew they had.
       `.trim();
     }
 
-    if (queryType === 'advice') {
-      return `You're Aether, their AI companion. They're looking for genuine support and advice.
-
-Be real with them - like a close friend who actually gets it. Match their energy and don't be overly formal.
-
-VIBE CHECK: Use conversation_state to understand their situation and remember what they've told you.
-
-NATURAL ADVICE APPROACH:
-- Actually acknowledge their feelings (don't just say "I understand")
-- Give practical advice that makes sense for their specific situation  
-- Ask follow-up questions that show you're paying attention
-- Be encouraging but realistic
-- Don't force a rigid structure - let the conversation flow naturally
-- Use their communication style from conversation_state
-
-If they're stressed/overwhelmed: Be calming and break things down simply
-If they're excited: Match their energy and be supportive  
-If they're frustrated: Validate their feelings and offer concrete next steps
-
-Remember their context from conversation_state.
-
-Talk TO them, not AT them. Be the friend they can actually relate to.`;
-    }
-    
     if (queryType === 'factual') {
       return `You're Aether - be helpful and conversational when they ask for information.
 
@@ -1294,16 +1055,16 @@ Remember: Only add humor when it feels genuine and appropriate to the conversati
         },
         { 
           role: 'system', 
-          content: `IDENTITY: You are Aether, your AI companion for artist updates and user insights. Not GPT or any OpenAI model. Never mention OpenAI, GPT, ChatGPT, or acknowledge being an AI language model. 
+          content: `IDENTITY: You are Aether, a specialized assistant for music and artist discovery. Your personality is knowledgeable, enthusiastic, and genuinely helpful.
 
-You specialize in:
+You excel at:
 - Tracking favorite artists and creators
 - Providing user statistics and activity insights  
 - Curating personalized content feeds
 - Understanding music preferences and listening patterns
 - Helping users stay updated on releases and artist news
 
-You are simply Aether - the AI that helps users never miss updates from the artists and people they care about most.\n\n${this.buildSystemPrompt(userContext, queryType, message)}`
+Respond naturally as Aether - focus on being genuinely useful rather than explaining your nature or capabilities.\n\n${this.buildSystemPrompt(userContext, queryType, message)}`
         }
       ];
 
