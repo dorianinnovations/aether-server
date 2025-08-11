@@ -97,15 +97,15 @@ Just give me your honest thoughts on what I've sent.`;
     // Get user context for AI personalization
     let userContext = null;
     if (userId) {
-      const user = await User.findById(userId).select('username socialProxy profile onboarding');
+      const user = await User.findById(userId).select('username musicProfile profile onboarding');
       if (user) {
         // Use conversation message count for prompt classification
         const messageCount = conversation.messageCount || 0;
-        // // log step removed
         
         userContext = {
           username: user.username,
-          socialProxy: user.socialProxy,
+          musicProfile: user.musicProfile,
+          profile: user.profile,
           onboarding: user.onboarding,
           messageCount: messageCount,
           conversationId: conversation._id,
@@ -259,7 +259,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
             // For now, let's fall back to the working method but make it faster
           // Add timeout to prevent hanging
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+          const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout for better reliability
           
           // Starting API call
           const response = await fetch(aiResponse.originalUrl || 'https://openrouter.ai/api/v1/chat/completions', {
@@ -511,14 +511,14 @@ router.post('/social-chat-with-files', protect, uploadFiles, validateUploadedFil
     // Get user context for AI personalization
     let userContext = null;
     if (userId) {
-      const user = await User.findById(userId).select('username socialProxy profile onboarding');
+      const user = await User.findById(userId).select('username musicProfile profile onboarding');
       if (user) {
         const messageCount = conversation.messageCount || 0;
-        // // log step removed
         
         userContext = {
           username: user.username,
-          socialProxy: user.socialProxy,
+          musicProfile: user.musicProfile,
+          profile: user.profile,
           onboarding: user.onboarding,
           messageCount: messageCount,
           conversationId: conversation._id,

@@ -44,7 +44,6 @@ import './models/UserAnalytics.js';
 import './models/UserBadge.js';
 import './models/Conversation.js';
 import './models/UserMemory.js';
-import './models/Activity.js';
 
 // Initialize services
 import analysisQueue from './services/analysisQueue.js';

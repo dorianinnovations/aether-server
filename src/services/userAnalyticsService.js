@@ -698,7 +698,7 @@ class UserAnalyticsService {
   }
 
   calculateDataFreshness(user) {
-    const lastActivity = user.socialProxy?.lastUpdated || user.updatedAt;
+    const lastActivity = user.musicProfile?.lastUpdated || user.updatedAt;
     const daysSinceActivity = (Date.now() - new Date(lastActivity).getTime()) / (1000 * 60 * 60 * 24);
     
     if (daysSinceActivity < 1) return 1.0;

@@ -41,40 +41,27 @@ class AIService {
         state.user_profile.username = this.safeDisplayName(userContext.username);
       }
       
-      if (userContext.socialProxy) {
+      if (userContext.musicProfile) {
         // Update mood if changed
-        if (userContext.socialProxy.mood && userContext.socialProxy.mood !== 'neutral') {
-          state.user_profile.mood = userContext.socialProxy.mood;
+        if (userContext.musicProfile.mood && userContext.musicProfile.mood !== 'neutral') {
+          state.user_profile.mood = userContext.musicProfile.mood;
         }
         
-        // Update current status and plans (replace old ones)
-        const currentFacts = state.facts.filter(f => !f.startsWith('current status:') && !f.startsWith('current plans:') && !f.startsWith('currently listening:'));
+        // Update current status (replace old ones)
+        const currentFacts = state.facts.filter(f => !f.startsWith('current status:') && !f.startsWith('currently listening:'));
         
-        if (userContext.socialProxy.currentStatus) {
-          currentFacts.push(`current status: ${userContext.socialProxy.currentStatus}`);
-        }
-        if (userContext.socialProxy.currentPlans) {
-          currentFacts.push(`current plans: ${userContext.socialProxy.currentPlans}`);
+        if (userContext.musicProfile.currentStatus) {
+          currentFacts.push(`current status: ${userContext.musicProfile.currentStatus}`);
         }
         
         // Spotify context
-        if (userContext.musicProfile?.spotify?.currentTrack) {
+        if (userContext.musicProfile.spotify?.currentTrack) {
           currentFacts.push(`currently listening: ${userContext.musicProfile.spotify.currentTrack.name}`);
         }
         
         state.facts = currentFacts;
         
-        // Communication style
-        const style = userContext.socialProxy.personality?.communicationStyle;
-        if (style) {
-          const traits = [];
-          if (style.casual > 0.7) traits.push('casual');
-          if (style.energetic > 0.7) traits.push('energetic');
-          if (style.humor > 0.7) traits.push('humorous');
-          if (traits.length > 0) {
-            state.user_profile.communication_style = traits.join(', ');
-          }
-        }
+        // Communication style removed - was part of legacy socialProxy system
       }
     }
 
@@ -1034,8 +1021,8 @@ Create responses that feel alive, deep, and uniquely personal.
 
 User Context Snapshot:
 Username: ${this.safeDisplayName(userContext?.username) || 'unknown'}
-Mood: ${userContext?.socialProxy?.mood || 'neutral'}
-Current Status: ${userContext?.socialProxy?.currentStatus || 'none'}
+Mood: ${userContext?.musicProfile?.mood || 'neutral'}
+Current Status: ${userContext?.musicProfile?.currentStatus || 'none'}
 Spotify Favorite Track: ${userContext?.musicProfile?.spotify?.currentTrack?.name || 'none'}
 
 Long-term memories are enclosed below — use them to weave meaningful, heartfelt replies.
@@ -1120,21 +1107,15 @@ Be the AI companion that helps them never miss updates from the artists and peop
       const contextParts = [`- Username: ${this.safeDisplayName(userContext.username) || 'unknown'}`];
       
       // Only include status if it's meaningful and recent
-      const status = userContext.socialProxy?.currentStatus;
-      const statusAge = userContext.socialProxy?.lastUpdated ? 
-        Date.now() - new Date(userContext.socialProxy.lastUpdated).getTime() : Infinity;
+      const status = userContext.musicProfile?.currentStatus;
+      const statusAge = userContext.musicProfile?.lastUpdated ? 
+        Date.now() - new Date(userContext.musicProfile.lastUpdated).getTime() : Infinity;
       if (status && status !== 'none' && status.trim() && statusAge < 24 * 60 * 60 * 1000) {
         contextParts.push(`- Current status: "${status}"`);
       }
       
-      // Include plans if they exist
-      const plans = userContext.socialProxy?.currentPlans;
-      if (plans && plans.trim() && plans !== 'none') {
-        contextParts.push(`- Plans: "${plans}"`);
-      }
-      
       // Include mood if it's set
-      const mood = userContext.socialProxy?.mood;
+      const mood = userContext.musicProfile?.mood;
       if (mood && mood.trim() && mood !== 'neutral' && mood !== 'none') {
         contextParts.push(`- Mood: ${mood}`);
       }
@@ -1146,15 +1127,7 @@ Be the AI companion that helps them never miss updates from the artists and peop
       }
       
       // Communication style - only if significant
-      const style = userContext.socialProxy?.personality?.communicationStyle || {};
-      const significantTraits = [];
-      if (style.casual > 0.7) significantTraits.push('casual');
-      if (style.energetic > 0.7) significantTraits.push('energetic');
-      if (style.humor > 0.7) significantTraits.push('humorous');
-      if (style.analytical > 0.7) significantTraits.push('analytical');
-      if (significantTraits.length > 0) {
-        contextParts.push(`- Communication style: ${significantTraits.join(', ')}`);
-      }
+      // Communication style removed - was part of legacy socialProxy system
       
       prompt += `User Context:
 ${contextParts.join('\n')}
@@ -1310,7 +1283,7 @@ You are simply Aether - the AI that helps users never miss updates from the arti
         // Check if query needs location and we don't have it
         const needsLocation = this.queryNeedsLocation(message, queryType);
         const userLocation = conversationState.user_profile?.location || 
-                           userContext?.socialProxy?.location ||
+                           userContext?.profile?.location ||
                            existingState?.user_profile?.location;
 
         if (needsLocation && !userLocation) {

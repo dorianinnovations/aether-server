@@ -133,50 +133,44 @@ class ProfileAnalyzer {
         const user = await User.findById(userId);
         if (!user) return;
 
-        // Initialize social proxy personality if it doesn't exist
-        if (!user.socialProxy) {
-          user.socialProxy = { personality: {} };
-        }
-        if (!user.socialProxy.personality) {
-          user.socialProxy.personality = {
-            interests: [],
-            communicationStyle: {
-              casual: 0,
-              energetic: 0,
-              analytical: 0,
-              social: 0,
-              humor: 0
+        // Initialize music personality if it doesn't exist
+        if (!user.musicPersonality) {
+          user.musicPersonality = {
+            musicInterests: [],
+            listeningPatterns: {
+              preferredTimes: [],
+              averageSessionLength: 0,
+              totalSessions: 0
+            },
+            discoveryBehavior: {
+              openToNew: 0.5, // 0-1 scale
+              preferredSources: [], // 'spotify', 'recommendations', 'friends', etc.
+              genreExploration: 0.5
             },
             totalMessages: 0,
-            analysisVersion: '3.0'
+            analysisVersion: '4.0'
           };
         }
 
-        // Extract interests
-        const detectedInterests = this.extractInterests(messageContent);
-        if (!user.musicPersonality) {
-          user.musicPersonality = {};
-        }
-        this.updateInterests(user.musicPersonality, detectedInterests);
+        // Extract music-related interests only
+        const detectedMusicInterests = this.extractMusicInterests(messageContent);
+        this.updateMusicInterests(user.musicPersonality, detectedMusicInterests);
 
-        // Analyze communication style
-        const styleScores = this.analyzeCommunicationStyle(messageContent);
-        // Skip communication style update for music-focused platform
-        // this.updateCommunicationStyle(user.socialProxy.personality, styleScores);
+        // Analyze music discovery behavior from conversation
+        const discoveryBehavior = this.analyzeMusicDiscoveryBehavior(messageContent);
+        this.updateDiscoveryBehavior(user.musicPersonality, discoveryBehavior);
 
         // Update metadata
-        if (!user.musicPersonality.totalMusicInteractions) {
-          user.musicPersonality.totalMusicInteractions = 0;
-        }
-        user.musicPersonality.totalMusicInteractions += 1;
+        user.musicPersonality.totalMessages += 1;
         user.musicPersonality.lastAnalyzed = new Date();
 
         await user.save();
         
-        log.debug(`Profile updated for user ${userId}:`, {
-          interests: user.socialProxy.personality.interests.length,
-          totalMessages: user.socialProxy.personality.totalMessages,
-          tags: this.generateCompatibilityTags(user.socialProxy.personality)
+        log.debug(`Music profile updated for user ${userId}:`, {
+          musicInterests: user.musicPersonality.musicInterests.length,
+          totalMessages: user.musicPersonality.totalMessages,
+          openToNew: user.musicPersonality.discoveryBehavior?.openToNew || 0.5,
+          preferredSources: user.musicPersonality.discoveryBehavior?.preferredSources || []
         });
 
         return; // Success, exit retry loop
@@ -207,129 +201,280 @@ class ProfileAnalyzer {
   /**
    * Extract interests from message content
    */
-  extractInterests(content) {
-    const interests = [];
+  extractMusicInterests(content) {
+    const musicInterests = [];
     
-    for (const pattern of this.interestPatterns) {
+    // Music-specific patterns
+    const musicPatterns = [
+      // Artists and bands
+      { regex: /(?:i love|i like|listening to|favorite artist|really into|obsessed with) ([a-z\s\-']+)/gi, weight: 0.8, type: 'artist' },
+      { regex: /(?:artist|band|musician|singer) (?:like|such as|including) ([a-z\s\-']+)/gi, weight: 0.7, type: 'artist' },
+      
+      // Genres
+      { regex: /(?:i love|i like|into|favorite|really enjoy) ([a-z\s]+) music/gi, weight: 0.9, type: 'genre' },
+      { regex: /(?:listen to|enjoy|prefer) ([a-z\s]+) (?:music|songs|tracks)/gi, weight: 0.8, type: 'genre' },
+      
+      // Albums and songs
+      { regex: /(?:album|song|track) (?:called|named) ([a-z\s\-']+)/gi, weight: 0.6, type: 'content' },
+      { regex: /(?:listening to|playing|heard) (?:the song|album) ([a-z\s\-']+)/gi, weight: 0.7, type: 'content' },
+      
+      // Instruments
+      { regex: /(?:i play|playing|learning) (?:the )?([a-z]+)/gi, weight: 0.8, type: 'instrument' }
+    ];
+    
+    for (const pattern of musicPatterns) {
       let match;
       while ((match = pattern.regex.exec(content)) !== null) {
         const interest = match[1].trim().toLowerCase();
         if (interest.length > 2 && interest.length < 50) {
-          interests.push({
+          musicInterests.push({
             topic: interest,
             confidence: pattern.weight,
+            type: pattern.type,
             source: 'pattern_match'
           });
         }
       }
     }
 
-    return interests;
+    return musicInterests;
   }
 
   /**
-   * Analyze communication style
+   * Analyze music discovery behavior from conversation
    */
-  analyzeCommunicationStyle(content) {
-    const scores = {};
-    
-    for (const [style, indicators] of Object.entries(this.styleIndicators)) {
-      let totalScore = 0;
-      let matchCount = 0;
-      
-      for (const indicator of indicators) {
-        const matches = content.match(indicator.regex) || [];
-        if (matches.length > 0) {
-          totalScore += matches.length * indicator.weight;
-          matchCount++;
-        }
-      }
-      
-      // Normalize score (0-1 range)
-      scores[style] = Math.min(totalScore / content.length * 100, 1);
+  analyzeMusicDiscoveryBehavior(content) {
+    const behavior = {
+      openToNew: 0.5,
+      preferredSources: [],
+      genreExploration: 0.5
+    };
+
+    // Check for openness to new music
+    const opennessPhrases = [
+      /(?:love discovering|always looking for|open to new|try new|explore different)/i,
+      /(?:hate when|don't like new|stick to what|only listen to)/i
+    ];
+
+    if (opennessPhrases[0].test(content)) {
+      behavior.openToNew = Math.min(1.0, behavior.openToNew + 0.2);
     }
-    
-    return scores;
+    if (opennessPhrases[1].test(content)) {
+      behavior.openToNew = Math.max(0.0, behavior.openToNew - 0.2);
+    }
+
+    // Check for discovery sources
+    if (/spotify.*discover|spotify.*recommend/i.test(content)) {
+      behavior.preferredSources.push('spotify');
+    }
+    if (/friend.*recommend|friends.*told me|someone suggested/i.test(content)) {
+      behavior.preferredSources.push('friends');
+    }
+    if (/youtube|tiktok|social media/i.test(content)) {
+      behavior.preferredSources.push('social');
+    }
+
+    return behavior;
   }
 
   /**
-   * Update user interests with decay for old interests
+   * Update music interests in user profile
    */
-  updateInterests(musicPersonality, newInterests) {
-    const now = new Date();
-    
-    // Initialize musicInterests if it doesn't exist
+  updateMusicInterests(musicPersonality, newInterests) {
     if (!musicPersonality.musicInterests) {
       musicPersonality.musicInterests = [];
     }
-    
-    // Decay existing interests (older interests lose confidence)
-    for (const interest of musicPersonality.musicInterests) {
-      if (interest.lastMentioned) {
-        const daysSinceLastMentioned = (now - interest.lastMentioned) / (1000 * 60 * 60 * 24);
-        interest.confidence = Math.max(interest.confidence * Math.exp(-daysSinceLastMentioned * 0.1), 0.1);
-      }
-    }
 
-    // Add/update new interests
     for (const newInterest of newInterests) {
-      const existing = musicPersonality.musicInterests.find(i => i.genre === newInterest.topic);
-      
+      const existing = musicPersonality.musicInterests.find(
+        i => i.topic === newInterest.topic && i.type === newInterest.type
+      );
+
       if (existing) {
-        // Boost confidence for repeated mentions
-        existing.confidence = Math.min(existing.confidence + newInterest.confidence * 0.5, 1);
-        existing.lastMentioned = now;
+        // Boost confidence if mentioned again
+        existing.confidence = Math.min(1.0, existing.confidence + 0.1);
+        existing.mentions = (existing.mentions || 1) + 1;
+        existing.lastMentioned = new Date();
       } else {
         musicPersonality.musicInterests.push({
-          genre: newInterest.topic,
-          confidence: newInterest.confidence,
-          lastMentioned: now,
-          category: 'favorite'
+          ...newInterest,
+          mentions: 1,
+          firstMentioned: new Date(),
+          lastMentioned: new Date()
         });
       }
     }
 
-    // Remove very low-confidence interests (< 0.1)
-    musicPersonality.musicInterests = musicPersonality.musicInterests.filter(i => i.confidence >= 0.1);
-    
-    // Keep only top 20 interests
-    musicPersonality.musicInterests.sort((a, b) => b.confidence - a.confidence);
-    musicPersonality.musicInterests = musicPersonality.musicInterests.slice(0, 20);
+    // Keep only top 50 interests to prevent bloat
+    musicPersonality.musicInterests = musicPersonality.musicInterests
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 50);
   }
 
   /**
-   * Update communication style with smoothing
+   * Update discovery behavior patterns
    */
-  updateCommunicationStyle(profile, newScores) {
-    const smoothingFactor = 0.3; // How much new data affects the score
-    
-    for (const [style, newScore] of Object.entries(newScores)) {
-      const currentScore = profile.communicationStyle[style] || 0;
-      profile.communicationStyle[style] = 
-        currentScore * (1 - smoothingFactor) + newScore * smoothingFactor;
+  updateDiscoveryBehavior(musicPersonality, newBehavior) {
+    if (!musicPersonality.discoveryBehavior) {
+      musicPersonality.discoveryBehavior = {
+        openToNew: 0.5,
+        preferredSources: [],
+        genreExploration: 0.5
+      };
+    }
+
+    // Smooth update of openness score
+    musicPersonality.discoveryBehavior.openToNew = 
+      (musicPersonality.discoveryBehavior.openToNew * 0.8) + (newBehavior.openToNew * 0.2);
+
+    // Add new sources without duplicates
+    for (const source of newBehavior.preferredSources) {
+      if (!musicPersonality.discoveryBehavior.preferredSources.includes(source)) {
+        musicPersonality.discoveryBehavior.preferredSources.push(source);
+      }
     }
   }
 
   /**
-   * Generate simple compatibility tags for matching
+   * Extract music data from AI synthesis
    */
-  generateCompatibilityTags(profile) {
+  extractMusicDataFromSynthesis(updates) {
+    const musicData = {
+      artists: [],
+      genres: [],
+      instruments: [],
+      preferences: {}
+    };
+
+    // Extract music-related updates (simplified)
+    if (updates.interests) {
+      for (const interest of updates.interests) {
+        if (this.isMusicRelated(interest.topic)) {
+          const type = this.classifyMusicInterest(interest.topic);
+          musicData[type + 's'] = musicData[type + 's'] || [];
+          musicData[type + 's'].push(interest);
+        }
+      }
+    }
+
+    return musicData;
+  }
+
+  /**
+   * Extract music data from basic entities
+   */
+  extractMusicDataFromEntities(entities) {
+    const musicData = {
+      artists: [],
+      genres: [],
+      instruments: [],
+      preferences: {}
+    };
+
+    // Basic extraction from entities
+    for (const entity of entities) {
+      if (this.isMusicRelated(entity.text)) {
+        const type = this.classifyMusicInterest(entity.text);
+        musicData[type + 's'] = musicData[type + 's'] || [];
+        musicData[type + 's'].push({
+          topic: entity.text,
+          confidence: 0.7,
+          type: type
+        });
+      }
+    }
+
+    return musicData;
+  }
+
+  /**
+   * Apply music updates to user personality
+   */
+  applyMusicUpdates(musicPersonality, musicData) {
+    // Combine all music interests
+    const allInterests = [
+      ...(musicData.artists || []),
+      ...(musicData.genres || []),
+      ...(musicData.instruments || [])
+    ];
+
+    this.updateMusicInterests(musicPersonality, allInterests);
+  }
+
+  /**
+   * Check if a topic is music-related
+   */
+  isMusicRelated(topic) {
+    const musicKeywords = [
+      'music', 'song', 'artist', 'band', 'album', 'concert', 'guitar', 'piano', 
+      'drums', 'violin', 'rock', 'pop', 'jazz', 'classical', 'hip hop', 'electronic',
+      'country', 'folk', 'blues', 'reggae', 'metal', 'punk', 'indie', 'alternative'
+    ];
+    
+    const lowerTopic = topic.toLowerCase();
+    return musicKeywords.some(keyword => lowerTopic.includes(keyword));
+  }
+
+  /**
+   * Classify music interest type
+   */
+  classifyMusicInterest(topic) {
+    const lowerTopic = topic.toLowerCase();
+    
+    if (/guitar|piano|drums|violin|bass|saxophone|trumpet|flute/.test(lowerTopic)) {
+      return 'instrument';
+    }
+    
+    if (/rock|pop|jazz|classical|hip hop|electronic|country|folk|blues|reggae|metal/.test(lowerTopic)) {
+      return 'genre';
+    }
+    
+    return 'artist'; // default assumption
+  }
+
+  /**
+   * Legacy method - now removed for music focus
+   */
+  analyzeCommunicationStyle(content) {
+    // Simplified for music platform - only return empty scores
+    return {
+      casual: 0,
+      energetic: 0,
+      analytical: 0,
+      social: 0,
+      humor: 0
+    };
+  }
+
+  // Duplicate method removed - using updateMusicInterests instead
+
+  /**
+   * Communication style removed - not needed for music platform
+   */
+  updateCommunicationStyle(profile, newScores) {
+    // Legacy method kept for compatibility but does nothing
+    return;
+  }
+
+  /**
+   * Generate music compatibility tags for matching
+   */
+  generateCompatibilityTags(musicProfile) {
     const tags = [];
     
-    // Top interests as tags
-    const topInterests = profile.interests
+    // Top music interests as tags
+    const topInterests = (musicProfile.musicInterests || [])
       .filter(i => i.confidence > 0.5)
       .slice(0, 5)
       .map(i => i.topic);
     tags.push(...topInterests);
 
-    // Communication style tags
-    const style = profile.communicationStyle;
-    if (style.casual > 0.6) tags.push('casual_chat');
-    if (style.energetic > 0.6) tags.push('high_energy');
-    if (style.analytical > 0.6) tags.push('deep_thinker');
-    if (style.social > 0.6) tags.push('socially_engaged');
-    if (style.humor > 0.6) tags.push('funny');
+    // Music discovery behavior tags
+    const discovery = musicProfile.discoveryBehavior;
+    if (discovery?.openToNew > 0.7) tags.push('music_explorer');
+    if (discovery?.genreExploration > 0.7) tags.push('genre_diverse');
+    if (discovery?.preferredSources?.includes('spotify')) tags.push('spotify_user');
+    if (discovery?.preferredSources?.includes('friends')) tags.push('social_discovery');
 
     // Remove duplicates and return
     return [...new Set(tags)];
@@ -356,22 +501,22 @@ class ProfileAnalyzer {
           return null;
         }
 
-        // Initialize social proxy personality if it doesn't exist
-        if (!user.socialProxy) {
-          user.socialProxy = { personality: {} };
-        }
-        if (!user.socialProxy.personality) {
-          user.socialProxy.personality = {
-            interests: [],
-            communicationStyle: {
-              casual: 0,
-              energetic: 0,
-              analytical: 0,
-              social: 0,
-              humor: 0
+        // Initialize music personality if it doesn't exist (enhanced method)
+        if (!user.musicPersonality) {
+          user.musicPersonality = {
+            musicInterests: [],
+            listeningPatterns: {
+              preferredTimes: [],
+              averageSessionLength: 0,
+              totalSessions: 0
+            },
+            discoveryBehavior: {
+              openToNew: 0.5,
+              preferredSources: [],
+              genreExploration: 0.5
             },
             totalMessages: 0,
-            analysisVersion: '3.0'
+            analysisVersion: '4.0'
           };
         }
 
@@ -397,25 +542,27 @@ class ProfileAnalyzer {
           context
         );
 
-        if (!synthesizedUpdates || !synthesizedUpdates.success) {
-          log.warn(`Synthesis failed for user ${userId}, using extracted data`);
-          // Apply extracted data directly
-          this.applyExtractedData(user.socialProxy.personality, extractedData.entities);
-        } else {
-          // Apply synthesized updates
-          this.applyValidatedUpdates(user.socialProxy.personality, synthesizedUpdates.updates);
+        // Apply updates to music personality (simplified for music focus)
+        if (synthesizedUpdates && synthesizedUpdates.success) {
+          // Extract music-related data from synthesized updates
+          const musicData = this.extractMusicDataFromSynthesis(synthesizedUpdates.updates);
+          this.applyMusicUpdates(user.musicPersonality, musicData);
+        } else if (extractedData && extractedData.entities) {
+          // Fallback to basic music extraction
+          const musicData = this.extractMusicDataFromEntities(extractedData.entities);
+          this.applyMusicUpdates(user.musicPersonality, musicData);
         }
 
         // Update metadata
-        user.socialProxy.personality.totalMessages += 1;
-        user.socialProxy.personality.lastAnalyzed = new Date();
+        user.musicPersonality.totalMessages += 1;
+        user.musicPersonality.lastAnalyzed = new Date();
 
         await user.save();
         
         const updatesApplied = {
-          interests: user.socialProxy.personality.interests.length,
-          totalMessages: user.socialProxy.personality.totalMessages,
-          communicationStyle: user.socialProxy.personality.communicationStyle
+          musicInterests: user.musicPersonality.musicInterests.length,
+          totalMessages: user.musicPersonality.totalMessages,
+          openToNew: user.musicPersonality.discoveryBehavior?.openToNew || 0.5
         };
 
         log.info(`Enhanced analysis completed for user ${userId}:`, updatesApplied);
