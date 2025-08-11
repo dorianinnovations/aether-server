@@ -33,6 +33,9 @@ import analyticsRoutes from './routes/analytics.js';
 import friendsRoutes from './routes/friends.js';
 import friendMessagingRoutes from './routes/friendMessaging.js';
 
+// Social proxy compatibility routes
+import socialProxyRoutes from './routes/social-proxy.js';
+
 // Initialize models
 import './models/User.js';
 import './models/Artist.js';
@@ -123,6 +126,9 @@ const initializeServer = async () => {
     app.use('/friends', friendsRoutes);
     app.use('/friend-messaging', friendMessagingRoutes);
     
+    // Social proxy compatibility routes
+    app.use('/social-proxy', socialProxyRoutes);
+    
     // Error handling
     app.use(errorLogger);
     app.use(globalErrorHandler);
@@ -148,6 +154,7 @@ const initializeServer = async () => {
       console.log(`🚀 Aether Artist Tracking Server running on port ${PORT}`);
       console.log(`🎵 API endpoints: /auth, /user, /artists, /feed, /analytics, /spotify, /chat`);
       console.log(`👥 Friends endpoints: /friends, /friend-messaging`);
+      console.log(`📱 Compatibility: /social-proxy (for front-end compatibility)`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
       console.log(`⚡ Socket.IO real-time messaging enabled`);
     });

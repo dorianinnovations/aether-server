@@ -524,4 +524,66 @@ router.get('/live-status/:username', protect, async (req, res) => {
   }
 });
 
+// Get user's top tracks from Spotify
+router.get('/top-tracks', protect, async (req, res) => {
+  try {
+    const { time_range = 'short_term', limit = 10 } = req.query;
+    
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.musicProfile?.spotify?.connected) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Spotify not connected',
+        message: 'Please connect your Spotify account first'
+      });
+    }
+
+    // Get top tracks using Spotify service
+    let topTracks = [];
+    try {
+      topTracks = await spotifyService.getTopTracks(user.musicProfile.spotify.accessToken, time_range, parseInt(limit));
+    } catch (error) {
+      if (error.message.includes('SPOTIFY_TOKEN_EXPIRED')) {
+        // Try to refresh the token
+        try {
+          const tokens = await spotifyService.refreshAccessToken(user.musicProfile.spotify.refreshToken);
+          user.musicProfile.spotify.accessToken = tokens.accessToken;
+          user.musicProfile.spotify.refreshToken = tokens.refreshToken;
+          await user.save();
+          
+          // Retry the request
+          topTracks = await spotifyService.getTopTracks(user.musicProfile.spotify.accessToken, time_range, parseInt(limit));
+        } catch (refreshError) {
+          return res.status(401).json({
+            success: false,
+            error: 'token_expired',
+            message: 'Spotify token expired and refresh failed'
+          });
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    res.json({
+      success: true,
+      tracks: topTracks,
+      timeRange: time_range,
+      limit: parseInt(limit)
+    });
+
+  } catch (error) {
+    log.error('Get top tracks error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to get top tracks',
+      message: error.message 
+    });
+  }
+});
+
 export default router;
