@@ -107,6 +107,11 @@ class SpotifyLiveService {
    */
   async updateUserSpotifyStatus(user) {
     try {
+      // Check if user has Spotify configuration
+      if (!user.socialProxy?.spotify) {
+        return;
+      }
+      
       // Store previous track for comparison
       const previousTrack = user.socialProxy.spotify.currentTrack;
       const previousTrackId = previousTrack ? 
