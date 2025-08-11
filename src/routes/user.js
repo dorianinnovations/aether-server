@@ -61,16 +61,12 @@ router.get("/:username/profile", protect, async (req, res) => {
       bannerImage = user.bannerImage.url;
     }
     
-    // Build social profile with limited info
+    // Build social profile with limited info (no Spotify connection status for privacy)
     const socialProfile = {
       currentStatus: user.musicProfile?.currentStatus || "",
       friendsCount: user.friends?.length || 0,
       followersCount: user.analytics?.listeningStats?.totalArtistsFollowed || 0,
-      grails: user.musicProfile?.spotify?.grails || { topTracks: [], topAlbums: [] },
-      spotify: {
-        connected: user.musicProfile?.spotify?.connected || false,
-        currentTrack: user.musicProfile?.spotify?.currentTrack || null
-      }
+      grails: user.musicProfile?.spotify?.grails || { topTracks: [], topAlbums: [] }
     };
     
     res.json({
