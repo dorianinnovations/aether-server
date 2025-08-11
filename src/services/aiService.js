@@ -1166,7 +1166,7 @@ ${userContext.longTermMemory}
 `;
       }
       
-      prompt += `Keep conversations natural and flowing. Don't constantly reference their status or interests unless directly relevant to the conversation.
+      prompt += `Keep conversations natural and flowing. When asked directly about them or their info, freely share what you know (username, preferences, etc.). Only avoid constantly bringing up their details unprompted.
 
 AMBIGUITY RULE: When they use ambiguous phrases ("what's that", "who's that", "explain that"):
 - Make your best inference from conversation context

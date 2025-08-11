@@ -121,7 +121,14 @@ async function openRouterEmbedding(text) {
       throw new Error(`Embedding failed: ${response.status} ${response.statusText}`);
     }
 
-    const json = await response.json();
+    const responseText = await response.text();
+    
+    // Check if response is HTML (error page) before parsing
+    if (responseText.includes('<!DOCTYPE') || responseText.includes('<html>')) {
+      throw new Error(`OpenRouter returned HTML instead of JSON (likely rate limited or maintenance)`);
+    }
+    
+    const json = JSON.parse(responseText);
     
     if (!json.data || !json.data[0] || !json.data[0].embedding) {
       throw new Error('Invalid embedding response structure');
