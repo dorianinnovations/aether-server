@@ -42,7 +42,9 @@ router.get("/:username/profile", protect, async (req, res) => {
       socialLinks: {
         instagram: user.socialLinks?.instagram || "",
         x: user.socialLinks?.x || "",
-        spotify: user.socialLinks?.spotify || ""
+        spotify: user.socialLinks?.spotify || "",
+        facebook: user.socialLinks?.facebook || "",
+        website: user.socialLinks?.website || ""
       },
       badges: badgeData.filter(badge => badge.isVisible)
     };
