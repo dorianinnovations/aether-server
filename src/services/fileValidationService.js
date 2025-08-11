@@ -5,8 +5,8 @@ class FileValidationService {
   constructor() {
     // Comprehensive security rules
     this.securityRules = {
-      maxFileSize: 10 * 1024 * 1024, // 10MB
-      maxTotalSize: 50 * 1024 * 1024, // 50MB total
+      maxFileSize: 100 * 1024 * 1024, // 100MB
+      maxTotalSize: 500 * 1024 * 1024, // 500MB total
       maxFiles: 5,
       
       // Allowed MIME types
