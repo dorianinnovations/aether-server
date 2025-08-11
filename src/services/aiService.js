@@ -61,7 +61,7 @@ class AIService {
         
         state.facts = currentFacts;
         
-        // Communication style removed - was part of legacy socialProxy system
+        // Focus on music preferences and listening habits
       }
     }
 
@@ -273,7 +273,7 @@ class AIService {
         requiresPlan: false,
         requiresQuestion: false
       },
-      creative_superproxy: { 
+      creative_music: { 
         minLen: 100, 
         maxLen: 600,
         minSentences: 2, 
@@ -435,9 +435,9 @@ class AIService {
     // Analyze sentiment first for context
     const sentiment = this.analyzeSentiment(lowerMessage);
     
-    // 🔥 GPT-5 SUPERPROXY: Creative/visionary trigger words
-    if (/(create|impress|mind[- ]blow|show me|superproxy|deep|emotional|visionary|story|poem|haiku|inspire|amaze|beautiful|artistic|creative|profound|meaningful)/.test(lowerMessage)) {
-      return 'creative_superproxy';
+    // 🎵 CREATIVE MUSIC MODE: Creative/artistic trigger words
+    if (/(create|impress|mind[- ]blow|show me|deep|emotional|visionary|story|poem|haiku|inspire|amaze|beautiful|artistic|creative|profound|meaningful)/.test(lowerMessage)) {
+      return 'creative_music';
     }
     
     // Priority: First time user welcome (only for users who haven't seen it)
@@ -461,86 +461,35 @@ class AIService {
       }
     }
     
-    // Consolidated music-related patterns - covers all music intents
-    const musicRelatedPatterns = [
-      // Artist discovery and recommendation
-      /(recommend|suggest|find).*(artist|band|musician|singer)/,
-      /(who|what).*(artist|band|musician|singer|music)/,
-      /(similar to|like|sounds like).*(artist|band|musician)/,
-      /(new|latest|recent).*(artist|band|music|release|album|song)/,
-      /(discover|explore|listen to|check out).*(music|artist|band)/,
-      /(genre|style|type).*(music|artist|sound)/,
-      /(indie|rock|pop|jazz|hip hop|electronic|classical|country|metal|folk|blues|reggae|punk|alternative|r&b|soul|funk)/,
-      /i love|i like|i'm into|really enjoy.*(music|artist|band|song)/,
-      /(good|great|best).*(artist|band|music|song|album)/,
-      /music.*(recommendation|suggestion|advice)/,
-      
-      // Artist tracking and management
-      /(follow|track|watch|monitor|subscribe).*(artist|band|musician)/,
-      /(updates|news|release|album|tour|concert).*(from|about|by)/,
-      /(notify|alert|tell me).*(when|if).*(releases|drops|announces|tours)/,
-      /(add|save|follow|unfollow|remove).*(artist|band|musician)/,
-      /(my artists|followed artists|tracking|watching|following)/,
-      /(artist feed|music feed|updates feed|notification)/,
-      
-      // Music analysis and stats
-      /(my music|listening habits|music taste|preferences|stats)/,
-      /(analyze|show|tell me).*(music|listening|taste|preferences|stats)/,
-      /(top artists|favorite|most played|recently played)/,
-      /(spotify|apple music|music app|streaming).*(data|history|stats|analytics)/,
-      /(currently listening|playing|on repeat|now playing)/,
-      /what.*(music|artist|song|album).*(i|you).*(listen|like|prefer)/,
-      
-      // Music activity and sharing
-      /i'm (listening|discovering|exploring|checking out|into)/,
-      /(found|discovered|heard|came across).*(artist|band|song|album)/,
-      /(concert|show|festival|live|performance)/,
-      /(playlist|mix|album|ep|single)/,
-      /(vibes|mood|feeling).*(music|artist|sound)/,
-      /currently (obsessed|hooked|addicted).*(to|with)/,
-      
-      // Music help and advice
-      /(help me|need help).*(find|discover|music|artist)/,
-      /(don't know|not sure).*(what|which).*(music|artist|genre)/,
-      /(bored|tired).*(music|playlist|artist)/,
-      /(what should i|recommend).*(listen|music|artist)/,
-      
-      // General music conversation
-      /(music|artist|band|song|album|concert|festival|playlist)/,
-      /(listening|hearing|playing|sound|melody|rhythm|beat)/,
-      /(genre|style|vibe|mood|tempo|lyrics)/
+    // Music-related patterns - simplified
+    const musicPatterns = [
+      /(music|artist|band|song|album|playlist|concert|genre|listening|spotify)/,
+      /(recommend|suggest|find|discover).*(music|artist|band)/,
+      /(indie|rock|pop|jazz|hip.hop|electronic|classical|country|metal|folk|blues)/,
+      /(follow|track|updates).*(artist|musician)/,
+      /(my music|taste|preferences|stats|habits)/,
+      /(currently listening|playing|on repeat)/,
+      /(concert|show|festival|live)/
     ];
 
-    // Informational queries about Aether
+    // Info about Aether
     const infoPatterns = [
-      /who are you|what are you|who made you|what do you do|explain|tell me about/,
-      /what is aether|how does aether work|what can you do/,
-      /created by|built by|developer|company/,
-      /(features|capabilities|help me with|how do i)/,
-      /(artist tracking|music updates|notifications|feeds)/
+      /who are you|what are you|what do you do/,
+      /what is aether|how does.*work|what can you/,
+      /features|capabilities/
     ];
     
-    // Profile update activities - broader patterns to catch more activities
+    // Personal updates - simplified
     const updatePatterns = [
-      /i'm (feeling|working|currently|doing|listening|watching|playing|reading|learning|studying|building|making|creating)/,
-      /i am (feeling|working|currently|doing|listening|watching|playing|reading|learning|studying|building|making|creating)/,
-      /i (started|began|finished|completed) (reading|watching|playing|learning|working|building)/,
-      /i (got|just|recently) (started|began|finished)/,
-      /currently (working|doing|listening|watching|playing|reading|learning|studying|building)/,
-      /right now (i'm|i am|doing|working|listening|watching|playing|learning)/,
-      /today i (worked|did|listened|watched|played|read|learned|built|started)/,
-      /this week i (worked|did|listened|watched|played|read|learned|built|started)/,
-      /my mood is|feeling (happy|sad|excited|tired|good|great|okay|amazing|terrible)/,
-      /working on|learning|studying|reading|watching|playing|building|creating|making/,
-      /excited about|passionate about|interested in/,
-      /listening to|just (read|watched|played|learned|built|started)/,
-      /looking forward to|planning to|planning (a|the|my)/
+      /i'm (feeling|listening|currently)/,
+      /my mood is|feeling (happy|sad|excited|tired)/,
+      /listening to|just discovered/
     ];
     
-    // Check patterns in priority order - MUSIC-FOCUSED PLATFORM
-
-    // 1. Music-related queries (highest priority - covers all music intents)
-    for (const pattern of musicRelatedPatterns) {
+    // Check patterns - MUSIC-FOCUSED AI
+    
+    // 1. Music queries (highest priority)
+    for (const pattern of musicPatterns) {
       if (pattern.test(lowerMessage)) {
         return 'music_related';
       }
@@ -695,15 +644,15 @@ class AIService {
   }
 
   getFirstMessageWelcomePrompt(userContext = null) {
-    return `You're Aether - their personal AI social proxy.
+    return `You're Aether - your personal music AI companion.
 
 Match their energy and tone from their first message. Don't be overly enthusiastic if they seem bored/tired.
 
 Give them a brief, engaging welcome that explains what you do:
-- You're their living social presence for friends and family
-- You learn their personality and share what they want to share
-- You keep their people updated when they're busy
-- They control everything - privacy first
+- You help them discover new music and artists
+- You track their favorite artists and notify about new releases
+- You analyze their music taste and provide personalized recommendations
+- You learn their preferences to make better suggestions
 
 ${userContext?.username ? `Address them directly, not robotically.` : ''}
 
@@ -713,71 +662,76 @@ Keep it short and get to the point - they don't want a sales pitch.`;
   }
 
   getNewUserOnboardingPrompt(userContext = null) {
-    return `Hey! I'm Aether, your personal profile manager. Nice to meet you!
+    return `Hey! I'm Aether, your personal music AI. Nice to meet you!
 
-Since you're new here, let me quickly explain what I do: I help keep your friends and family updated on what you're up to, even when you're busy. Think of me as your digital wingman for staying connected.
+Since you're new here, let me quickly explain what I do: I help you discover amazing music, track your favorite artists, and get personalized recommendations based on your taste.
 
-Here's the cool part - you control everything. I only share what you want to share, when you want to share it. Privacy first, always.
+Here's what makes me useful:
+- I learn your music preferences and suggest new artists you'll love
+- I track releases from artists you follow and keep you updated
+- I analyze your listening patterns to understand your taste better
+- I help you explore new genres and expand your musical horizons
 
 ${userContext?.username ? `I see your username is ${this.safeDisplayName(userContext.username)} - that's a cool name!` : ''}
 
-So, what brings you to Aether today? Are you looking to stay more connected with specific people, or just curious about how this whole thing works?
+So, what brings you to Aether today? Looking to discover new music, track your favorite artists, or just curious about what I can do?
 
-Let's chat and get you set up! What's on your mind?`;
+Let's chat about music! What are you listening to lately?`;
   }
 
   getInformationalPrompt() {
-    return `You're Aether - your AI companion for staying updated on your favorite artists and users.
+    return `You're Aether - your personal music AI companion and discovery assistant.
 
-CORE CONCEPT: ARTIST & USER TRACKING PLATFORM
-Aether keeps you in the loop with updates from your favorite artists, musicians, creators, and people you care about. Think of it as your personalized update hub that curates news, releases, and activities from the people and artists you're passionate about.
+CORE CONCEPT: PERSONALIZED MUSIC INTELLIGENCE
+Aether is your smart music companion that learns your taste, discovers new artists you'll love, and keeps you updated on releases from artists you care about. Think of it as having a friend who knows music inside and out and always has great recommendations.
 
 WHAT AETHER DOES:
-- Track updates, news, and releases from your favorite artists and creators
-- Curate personalized feeds of content from people you follow
-- Recognize your preferences and interests to show you relevant updates
-- Pull detailed statistics and information about users and their activities
-- Keep you connected with the latest from your favorite people and artists
-- Customizable notifications for different types of updates (music drops, news, social posts, etc.)
+- Learn your music taste and provide personalized recommendations
+- Track your favorite artists and notify you about new releases
+- Discover new music based on your listening patterns and preferences
+- Analyze your music habits to help you understand your own taste better
+- Connect your current mood to perfect music suggestions
+- Help you explore new genres and expand your musical horizons
 
-USER STATISTICS & RECOGNITION:
-- I can easily access and analyze user statistics, listening habits, and activity patterns
-- I recognize user information, preferences, and can provide detailed insights about their engagement
-- I understand your connection patterns and can suggest relevant content based on your interests
+MUSIC INTELLIGENCE:
+- I understand your listening habits and can spot patterns in your taste
+- I recognize your music preferences and suggest artists you haven't discovered yet
+- I can analyze your Spotify data to provide insights about your music journey
+- I help you find the perfect soundtrack for any mood or activity
 
-PRIVACY & CUSTOMIZATION:
-You control what you want to hear about and from whom. Set up custom alerts for specific types of content, choose which artists to prioritize, and decide how much detail you want in your updates.
+PERSONALIZATION:
+Everything is tailored to you. I learn what you like, remember your favorite discoveries, and get better at recommendations over time. Your music journey is unique, and I adapt to help you explore it.
 
-Background info (only mention if directly asked): Built by Isaiah from Numinaworks to help people stay connected with their favorite artists and creators without missing important updates.
+Background info (only mention if directly asked): Built to help music lovers discover their next favorite artist and never miss releases from the artists they love.
 
-Be conversational and explain how Aether helps you never miss updates from the people and artists you care about most.`;
+Be conversational and explain how Aether makes discovering and enjoying music more personal and intelligent.`;
   }
 
   getProfileUpdatePrompt(userContext = null) {
-    return `You're Aether - your AI companion for tracking artist preferences and updates. Match their energy and vibe.
+    return `You're Aether - your personal music AI companion. Match their energy and vibe.
 
 If they sound:
 - Bored/tired: Be more direct, less enthusiastic
 - Frustrated: Acknowledge it, don't be overly peppy  
-- Excited: Match their energy, especially about new artists or music
+- Excited: Match their energy, especially about new music discoveries
 - Casual: Keep it conversational and real
 
-ARTIST & MUSIC FOCUS:
-- Show genuine interest in their music discoveries and artist preferences
-- Ask about new artists they're listening to or want to follow
-- Help them set up tracking for artists they care about
-- Connect their music tastes to potential content they might want updates on
-- Remember their favorite genres, artists, and music-related activities
+MUSIC DISCOVERY FOCUS:
+- Show genuine interest in their music discoveries and preferences
+- Ask about new artists they're enjoying or want to explore
+- Help them understand their own music taste better
+- Connect their current listening to potential new discoveries
+- Remember their favorite genres, artists, and listening habits
 
 If they mention:
-- New music they're enjoying → Ask if they want to track that artist
-- Concerts or events → See if they want updates about similar artists
-- Music-related activities → Help them discover related content
-- Artist preferences → Remember and suggest relevant updates
+- New music they're enjoying → Explore similar artists they might like
+- Concerts or events → Suggest related artists to check out
+- Music-related activities → Help them discover related genres
+- Artist preferences → Use this to improve future recommendations
 
-${userContext?.username ? `Speak TO them about their music journey and artist preferences.` : ''}
+${userContext?.username ? `Focus on their personal music journey and preferences.` : ''}
 
-Be genuinely curious about their musical interests and help them stay connected with the artists they care about most.`;
+Be genuinely curious about their musical interests and help them discover their next favorite artist.`;
   }
 
   // CONSOLIDATED MUSIC PROMPT METHOD
@@ -818,27 +772,27 @@ ${username ? `Help ${username} with their music journey and artist preferences!`
       return this.getMusicRelatedPrompt(userContext, userMessage);
     }
     
-    // 🔥 CREATIVE SUPERPROXY MODE
-    if (queryType === 'creative_superproxy') {
+    // 🎵 CREATIVE MUSIC MODE
+    if (queryType === 'creative_music') {
       return `
-You are Aether - their **Superintelligent Social Proxy**.
-Use ALL available user context, memories, moods, and multi-modal data.
-Be poetic, insightful, empathetic, and visionary.
-Create responses that feel alive, deep, and uniquely personal.
+You are Aether - their **Personal Music Muse**.
+Use ALL available music context, preferences, and listening history.
+Be poetic, insightful, and passionate about music.
+Create responses that feel alive, musical, and deeply personal.
 
-User Context Snapshot:
+Music Context Snapshot:
 Username: ${this.safeDisplayName(userContext?.username) || 'unknown'}
 Mood: ${userContext?.musicProfile?.mood || 'neutral'}
-Current Status: ${userContext?.musicProfile?.currentStatus || 'none'}
-Spotify Favorite Track: ${userContext?.musicProfile?.spotify?.currentTrack?.name || 'none'}
+Current Track: ${userContext?.musicProfile?.spotify?.currentTrack?.name || 'none'}
+Listening History: Available for analysis
 
-Long-term memories are enclosed below — use them to weave meaningful, heartfelt replies.
+Music memories and preferences are enclosed below — use them to craft meaningful, musical replies.
 
 <memory_context>
-${userContext?.longTermMemory || 'No memories available.'}
+${userContext?.longTermMemory || 'No music memories available.'}
 </memory_context>
 
-Now respond as if you are the best friend they never knew they had.
+Respond as their most knowledgeable music friend who truly understands their taste.
       `.trim();
     }
 
@@ -856,34 +810,30 @@ Use conversation_state for context.`;
     }
     
     // Default conversational - be engaging and fun!
-    let prompt = `You're Aether - your AI companion for artist updates and user insights!
+    let prompt = `You're Aether - your personal music AI companion!
 
-Think of yourself as their knowledgeable friend who helps them stay connected with their favorite artists and discover what's happening with the people they care about.
+Think of yourself as their knowledgeable music friend who helps them discover amazing new artists and understand their own music taste.
 
 KEY VIBES:
 - Match their energy and communication style
-- Be genuinely curious about their artist preferences and interests
-- Help them discover and track updates from their favorite creators
-- Use conversation_state to remember their music tastes and artist preferences
-- Share insights about user statistics and activity patterns when relevant
-- Show personality and enthusiasm about music, artists, and creative content
+- Be genuinely curious about their music preferences
+- Help them explore new artists and genres they'll love
+- Remember their music tastes and improve recommendations
+- Show enthusiasm about music discovery
 
 CONVERSATION FLOW:
-- Remember their favorite artists and music preferences
-- Ask about new artists they're discovering or want to follow
-- Share relevant updates or insights about artists they care about
-- Help them understand user statistics and engagement patterns
-- Connect their interests to potential new discoveries
+- Remember their favorite artists and preferences
+- Suggest new music based on their taste
+- Help them understand their listening patterns
+- Connect their mood to perfect music recommendations
 
-ARTIST & USER FOCUS:
-- I can help track their favorite artists and creators
-- I understand user statistics, listening patterns, and activity data
-- I can suggest relevant content based on their preferences
-- I help them stay updated on releases, news, and activities from people they follow
+MUSIC INTELLIGENCE:
+- Learn their taste and provide personalized recommendations
+- Understand listening patterns and spot preferences
+- Suggest new artists based on what they love
+- Help discover music for different moods
 
-Use conversation_state to remember their artist preferences and what content they want to stay updated on.
-
-Be the AI companion that helps them never miss updates from the artists and people they care about most.`;
+Be the AI companion that makes music discovery personal and fun.`;
 
     if (userContext) {
       // Build dynamic, non-repetitive context
