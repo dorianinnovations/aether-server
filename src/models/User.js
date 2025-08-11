@@ -491,7 +491,27 @@ const UserSchema = new mongoose.Schema({
         imageUrl: String,
         spotifyUrl: String,
         timeRange: String // short_term, medium_term, long_term
-      }]
+      }],
+      
+      // User's all-time favorite songs and albums (Grails)
+      grails: {
+        topTracks: [{
+          id: String,
+          name: String,
+          artist: String,
+          album: String,
+          imageUrl: String,
+          spotifyUrl: String
+        }],
+        topAlbums: [{
+          id: String,
+          name: String,
+          artist: String,
+          imageUrl: String,
+          spotifyUrl: String,
+          releaseDate: String
+        }]
+      }
     },
     
     // Music-focused AI personality traits

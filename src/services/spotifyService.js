@@ -342,6 +342,34 @@ class SpotifyService {
       return false;
     }
   }
+
+  // Search for tracks, albums, artists, etc.
+  async search(accessToken, query, type = 'track', limit = 20) {
+    try {
+      const encodedQuery = encodeURIComponent(query);
+      const response = await fetch(`${this.baseUrl}/search?q=${encodedQuery}&type=${type}&limit=${limit}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+
+      if (response.status === 401) {
+        throw new Error('SPOTIFY_TOKEN_EXPIRED');
+      }
+      if (!response.ok) {
+        throw new Error(`Spotify API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      if (error.message === 'SPOTIFY_TOKEN_EXPIRED') {
+        throw error;
+      }
+      log.error('Failed to search Spotify:', error);
+      throw error;
+    }
+  }
 }
 
 export default new SpotifyService();

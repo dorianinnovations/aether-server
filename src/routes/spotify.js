@@ -586,4 +586,159 @@ router.get('/top-tracks', protect, async (req, res) => {
   }
 });
 
+// Search for tracks, albums, artists
+router.get('/search', protect, async (req, res) => {
+  try {
+    const { q: query, type = 'track', limit = 20 } = req.query;
+    
+    if (!query) {
+      return res.status(400).json({
+        success: false,
+        error: 'Query parameter is required'
+      });
+    }
+    
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.musicProfile?.spotify?.connected) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Spotify not connected',
+        message: 'Please connect your Spotify account first'
+      });
+    }
+
+    // Search using Spotify service
+    let searchResults = {};
+    try {
+      searchResults = await spotifyService.search(user.musicProfile.spotify.accessToken, query, type, parseInt(limit));
+    } catch (error) {
+      if (error.message.includes('SPOTIFY_TOKEN_EXPIRED')) {
+        // Try to refresh the token
+        try {
+          const tokens = await spotifyService.refreshAccessToken(user.musicProfile.spotify.refreshToken);
+          user.musicProfile.spotify.accessToken = tokens.accessToken;
+          user.musicProfile.spotify.refreshToken = tokens.refreshToken;
+          await user.save();
+          
+          // Retry the request
+          searchResults = await spotifyService.search(user.musicProfile.spotify.accessToken, query, type, parseInt(limit));
+        } catch (refreshError) {
+          return res.status(401).json({
+            success: false,
+            error: 'token_expired',
+            message: 'Spotify token expired and refresh failed'
+          });
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    res.json({
+      success: true,
+      ...searchResults,
+      query: query,
+      type: type,
+      limit: parseInt(limit)
+    });
+
+  } catch (error) {
+    log.error('Search error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to search',
+      message: error.message 
+    });
+  }
+});
+
+// Get user's grails (favorite songs and albums)
+router.get('/grails', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('musicProfile.spotify.grails');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const grails = user.musicProfile?.spotify?.grails || {
+      topTracks: [],
+      topAlbums: []
+    };
+
+    res.json({
+      success: true,
+      grails: grails
+    });
+
+  } catch (error) {
+    log.error('Get grails error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to get grails',
+      message: error.message 
+    });
+  }
+});
+
+// Save user's grails (favorite songs and albums)
+router.post('/grails', protect, async (req, res) => {
+  try {
+    const { topTracks = [], topAlbums = [] } = req.body;
+    
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Validate data structure
+    if (!Array.isArray(topTracks) || !Array.isArray(topAlbums)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid data format. topTracks and topAlbums must be arrays.'
+      });
+    }
+
+    // Limit to 3 items each
+    const limitedTracks = topTracks.slice(0, 3);
+    const limitedAlbums = topAlbums.slice(0, 3);
+
+    // Initialize musicProfile and spotify if needed
+    if (!user.musicProfile) user.musicProfile = {};
+    if (!user.musicProfile.spotify) user.musicProfile.spotify = {};
+    
+    // Save grails
+    user.musicProfile.spotify.grails = {
+      topTracks: limitedTracks,
+      topAlbums: limitedAlbums
+    };
+
+    await user.save();
+
+    log.info('User updated grails', { 
+      userId: user._id, 
+      tracksCount: limitedTracks.length,
+      albumsCount: limitedAlbums.length
+    });
+
+    res.json({
+      success: true,
+      message: 'Grails saved successfully',
+      grails: user.musicProfile.spotify.grails
+    });
+
+  } catch (error) {
+    log.error('Save grails error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to save grails',
+      message: error.message 
+    });
+  }
+});
+
 export default router;

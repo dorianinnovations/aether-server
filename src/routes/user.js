@@ -66,6 +66,7 @@ router.get("/:username/profile", protect, async (req, res) => {
       currentStatus: user.musicProfile?.currentStatus || "",
       friendsCount: user.friends?.length || 0,
       followersCount: user.analytics?.listeningStats?.totalArtistsFollowed || 0,
+      grails: user.musicProfile?.spotify?.grails || { topTracks: [], topAlbums: [] },
       spotify: {
         connected: user.musicProfile?.spotify?.connected || false,
         currentTrack: user.musicProfile?.spotify?.currentTrack || null
