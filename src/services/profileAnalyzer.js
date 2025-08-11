@@ -121,6 +121,10 @@ class ProfileAnalyzer {
    * Analyze a single message and update user profile
    */
   async analyzeMessage(userId, messageContent) {
+    // Temporarily disable profile analysis for artist platform
+    log.debug(`Skipping profile analysis for user ${userId} - artist platform mode`);
+    return { success: true, message: 'Profile analysis disabled for artist platform' };
+    
     const maxRetries = 3;
     let attempt = 0;
 
@@ -150,15 +154,22 @@ class ProfileAnalyzer {
 
         // Extract interests
         const detectedInterests = this.extractInterests(messageContent);
-        this.updateInterests(user.socialProxy.personality, detectedInterests);
+        if (!user.musicPersonality) {
+          user.musicPersonality = {};
+        }
+        this.updateInterests(user.musicPersonality, detectedInterests);
 
         // Analyze communication style
         const styleScores = this.analyzeCommunicationStyle(messageContent);
-        this.updateCommunicationStyle(user.socialProxy.personality, styleScores);
+        // Skip communication style update for music-focused platform
+        // this.updateCommunicationStyle(user.socialProxy.personality, styleScores);
 
         // Update metadata
-        user.socialProxy.personality.totalMessages += 1;
-        user.socialProxy.personality.lastAnalyzed = new Date();
+        if (!user.musicPersonality.totalMusicInteractions) {
+          user.musicPersonality.totalMusicInteractions = 0;
+        }
+        user.musicPersonality.totalMusicInteractions += 1;
+        user.musicPersonality.lastAnalyzed = new Date();
 
         await user.save();
         
@@ -244,38 +255,46 @@ class ProfileAnalyzer {
   /**
    * Update user interests with decay for old interests
    */
-  updateInterests(profile, newInterests) {
+  updateInterests(musicPersonality, newInterests) {
     const now = new Date();
     
+    // Initialize musicInterests if it doesn't exist
+    if (!musicPersonality.musicInterests) {
+      musicPersonality.musicInterests = [];
+    }
+    
     // Decay existing interests (older interests lose confidence)
-    for (const interest of profile.interests) {
-      const daysSinceLastMention = (now - interest.lastMentioned) / (1000 * 60 * 60 * 24);
-      interest.confidence *= Math.exp(-daysSinceLastMention * 0.1); // Decay factor
+    for (const interest of musicPersonality.musicInterests) {
+      if (interest.lastMentioned) {
+        const daysSinceLastMentioned = (now - interest.lastMentioned) / (1000 * 60 * 60 * 24);
+        interest.confidence = Math.max(interest.confidence * Math.exp(-daysSinceLastMentioned * 0.1), 0.1);
+      }
     }
 
     // Add/update new interests
     for (const newInterest of newInterests) {
-      const existing = profile.interests.find(i => i.topic === newInterest.topic);
+      const existing = musicPersonality.musicInterests.find(i => i.genre === newInterest.topic);
       
       if (existing) {
         // Boost confidence for repeated mentions
         existing.confidence = Math.min(existing.confidence + newInterest.confidence * 0.5, 1);
         existing.lastMentioned = now;
       } else {
-        profile.interests.push({
-          topic: newInterest.topic,
+        musicPersonality.musicInterests.push({
+          genre: newInterest.topic,
           confidence: newInterest.confidence,
-          lastMentioned: now
+          lastMentioned: now,
+          category: 'favorite'
         });
       }
     }
 
     // Remove very low-confidence interests (< 0.1)
-    profile.interests = profile.interests.filter(i => i.confidence >= 0.1);
+    musicPersonality.musicInterests = musicPersonality.musicInterests.filter(i => i.confidence >= 0.1);
     
     // Keep only top 20 interests
-    profile.interests.sort((a, b) => b.confidence - a.confidence);
-    profile.interests = profile.interests.slice(0, 20);
+    musicPersonality.musicInterests.sort((a, b) => b.confidence - a.confidence);
+    musicPersonality.musicInterests = musicPersonality.musicInterests.slice(0, 20);
   }
 
   /**
@@ -322,6 +341,10 @@ class ProfileAnalyzer {
    * Step 2: Contextual synthesis and validation
    */
   async analyzeMessageEnhanced(userId, messageContent, context = {}) {
+    // Temporarily disable profile analysis for artist platform
+    log.debug(`Skipping enhanced profile analysis for user ${userId} - artist platform mode`);
+    return { success: true, message: 'Enhanced profile analysis disabled for artist platform' };
+    
     const maxRetries = 3;
     let attempt = 0;
 
@@ -354,7 +377,7 @@ class ProfileAnalyzer {
 
         log.debug(`🔍 Enhanced analysis starting for user ${userId}`, {
           messageLength: messageContent.length,
-          currentInterests: user.socialProxy.personality.interests.length
+          currentMusicInterests: user.musicPersonality?.musicInterests?.length || 0
         });
 
         // STEP 1: Raw Entity Extraction
@@ -368,7 +391,7 @@ class ProfileAnalyzer {
 
         // STEP 2: Contextual Synthesis & Validation
         const synthesizedUpdates = await this.synthesizeAndValidate(
-          user.socialProxy.personality,
+          user.musicPersonality || {},
           extractedData.entities,
           messageContent,
           context

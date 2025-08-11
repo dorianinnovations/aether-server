@@ -7,7 +7,6 @@
 import User from '../models/User.js';
 import { v4 as uuidv4 } from 'uuid';
 import { log } from '../utils/logger.js';
-import realTimeMessagingService from './realTimeMessaging.js';
 
 class FriendMessagingService {
   
@@ -61,13 +60,6 @@ class FriendMessagingService {
       // Save both users
       await fromUser.save();
       await toUser.save();
-      
-      // Send real-time notification to friend
-      await realTimeMessagingService.notifyNewMessage(
-        fromUser.username, 
-        toUser.username, 
-        message
-      );
       
       log.info(`Message sent from ${fromUser.username} to ${toUser.username}`);
       
@@ -397,17 +389,6 @@ class FriendMessagingService {
       
       if (markedAsRead > 0) {
         await user.save();
-        
-        // Send read receipts via Socket.IO
-        messageIds.forEach(messageId => {
-          realTimeMessagingService.io?.to(
-            realTimeMessagingService.userSockets.get(friend._id.toString())
-          )?.emit('message:read_receipt', {
-            messageId,
-            readAt: now,
-            readBy: user.username
-          });
-        });
       }
       
       return { markedAsRead };

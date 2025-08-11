@@ -1,7 +1,6 @@
 import express from 'express';
 import { protect } from '../middleware/auth.js';
 import User from '../models/User.js';
-import Activity from '../models/Activity.js';
 import spotifyService from '../services/spotifyService.js';
 import { log } from '../utils/logger.js';
 
@@ -92,13 +91,8 @@ router.get('/callback', async (req, res) => {
     // Initial data fetch
     await spotifyService.updateUserSpotifyData(user);
 
-    // Create activity for connecting Spotify
-    await Activity.create({
-      user: user._id,
-      type: 'profile_update',
-      content: { text: 'Connected Spotify account' },
-      visibility: 'friends'
-    });
+    // Log Spotify connection for analytics
+    log.info('User connected Spotify', { userId: user._id, username: user.username });
 
     res.send(`
       <html>
@@ -212,13 +206,8 @@ router.post('/mobile-callback', async (req, res) => {
     // Initial data fetch
     await spotifyService.updateUserSpotifyData(user);
 
-    // Create activity for connecting Spotify
-    await Activity.create({
-      user: user._id,
-      type: 'profile_update',
-      content: { text: 'Connected Spotify account' },
-      visibility: 'friends'
-    });
+    // Log Spotify connection for analytics
+    log.info('User connected Spotify', { userId: user._id, username: user.username });
 
     res.json({
       success: true,
@@ -313,28 +302,37 @@ router.post('/refresh', protect, async (req, res) => {
     // Check if there's a new current track to share
     const currentTrack = user.socialProxy.spotify.currentTrack;
     if (currentTrack && currentTrack.name) {
-      // Create activity for current track (optional - could be too spammy)
-      const recentTrackActivity = await Activity.findOne({
-        user: user._id,
-        type: 'spotify_track',
-        'content.metadata.track.name': currentTrack.name,
-        'content.metadata.track.artist': currentTrack.artist,
-        createdAt: { $gte: new Date(Date.now() - 30 * 60 * 1000) } // Within last 30 minutes
-      });
+      // Check if we recently logged this track to avoid duplicates
+      const recentActivities = user.musicProfile?.musicPersonality?.recentMusicActivities || [];
+      const hasRecentTrack = recentActivities.some(activity => 
+        activity.activity.includes(currentTrack.name) && 
+        activity.activity.includes(currentTrack.artist) &&
+        (Date.now() - new Date(activity.detectedAt).getTime()) < 30 * 60 * 1000 // 30 minutes
+      );
 
-      // Only create activity if this track wasn't shared recently
-      if (!recentTrackActivity) {
-        await Activity.create({
-          user: user._id,
-          type: 'spotify_track',
-          content: {
-            text: `Currently listening to "${currentTrack.name}" by ${currentTrack.artist}`,
-            metadata: {
-              track: currentTrack
-            }
-          },
-          visibility: 'friends'
+      // Update music profile with current listening data for artist recommendations
+      if (!hasRecentTrack) {
+        // Initialize music profile if needed
+        if (!user.musicProfile) user.musicProfile = {};
+        if (!user.musicProfile.musicPersonality) user.musicProfile.musicPersonality = {};
+        if (!user.musicProfile.musicPersonality.recentMusicActivities) {
+          user.musicProfile.musicPersonality.recentMusicActivities = [];
+        }
+        
+        // Add listening activity for artist discovery
+        user.musicProfile.musicPersonality.recentMusicActivities.unshift({
+          activity: `Currently listening to "${currentTrack.name}" by ${currentTrack.artist}`,
+          type: 'listening',
+          confidence: 0.8,
+          detectedAt: new Date()
         });
+        
+        // Keep only last 20 activities
+        user.musicProfile.musicPersonality.recentMusicActivities = 
+          user.musicProfile.musicPersonality.recentMusicActivities.slice(0, 20);
+        
+        user.musicProfile.lastUpdated = new Date();
+        await user.save();
       }
     }
 
@@ -363,23 +361,12 @@ router.post('/share-track', protect, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Create activity for shared track
-    await Activity.create({
-      user: user._id,
-      type: 'spotify_discovery',
-      content: {
-        text: message || `Check out "${trackName}" by ${artist}`,
-        metadata: {
-          track: {
-            name: trackName,
-            artist,
-            album,
-            imageUrl,
-            spotifyUrl
-          }
-        }
-      },
-      visibility: 'friends'
+    // Log track sharing for analytics (no social timeline needed)
+    log.info('User shared track', { 
+      userId: user._id, 
+      trackName, 
+      artist, 
+      hasMessage: !!message 
     });
 
     res.json({

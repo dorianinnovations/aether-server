@@ -4,7 +4,6 @@
  */
 
 import UserMemory from '../models/UserMemory.js';
-import Activity from '../models/Activity.js';
 import { embed, scoreByCosine, mmr, summarize, formatMemoryBlock } from '../utils/vectorUtils.js';
 import { log } from '../utils/logger.js';
 
@@ -179,73 +178,120 @@ ${turnsText}`
   }
 
   /**
-   * Store episodic signals from Activity collection
+   * Store music preferences from user's Spotify and music profile data
    */
-  async distillFromActivities(userId, limit = 50) {
+  async distillFromMusicProfile(userId) {
     try {
-      const activities = await Activity.find({ user: userId })
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .lean();
+      const User = (await import('../models/User.js')).default;
+      const user = await User.findById(userId).lean();
       
-      if (activities.length === 0) return 0;
+      if (!user) return 0;
       
-      // Group by type and extract patterns
       const facts = [];
       
-      // Music preferences from Spotify activities
-      const musicActivities = activities.filter(a => a.type === 'spotify_track');
-      if (musicActivities.length > 3) {
-        const artists = [...new Set(musicActivities.map(a => a.data?.artist).filter(Boolean))];
-        const genres = [...new Set(musicActivities.flatMap(a => a.data?.genres || []))];
-        
-        if (artists.length > 0) {
-          facts.push({
-            kind: 'preference',
-            content: `Enjoys music from artists: ${artists.slice(0, 5).join(', ')}`,
-            tags: ['music', 'spotify'],
-            salience: 0.7,
-            source: { origin: 'activity_analysis', type: 'music' }
-          });
+      // Extract from Spotify data
+      const spotifyData = user.musicProfile?.spotify || user.socialProxy?.spotify;
+      if (spotifyData) {
+        // Recent tracks for artist preferences
+        if (spotifyData.recentTracks?.length > 0) {
+          const recentArtists = [...new Set(spotifyData.recentTracks.map(t => t.artist).filter(Boolean))];
+          if (recentArtists.length > 0) {
+            facts.push({
+              kind: 'preference',
+              content: `Recently listening to artists: ${recentArtists.slice(0, 5).join(', ')}`,
+              tags: ['music', 'spotify', 'artists'],
+              salience: 0.8,
+              source: { origin: 'spotify_analysis', type: 'music' }
+            });
+          }
         }
         
-        if (genres.length > 0) {
-          facts.push({
-            kind: 'preference', 
-            content: `Listens to genres: ${genres.slice(0, 3).join(', ')}`,
-            tags: ['music', 'genre'],
-            salience: 0.6,
-            source: { origin: 'activity_analysis', type: 'music' }
-          });
+        // Top tracks for music taste
+        if (spotifyData.topTracks?.length > 0) {
+          const topArtists = [...new Set(spotifyData.topTracks.map(t => t.artist).filter(Boolean))];
+          if (topArtists.length > 0) {
+            facts.push({
+              kind: 'preference',
+              content: `Favorite artists include: ${topArtists.slice(0, 3).join(', ')}`,
+              tags: ['music', 'favorites'],
+              salience: 0.9,
+              source: { origin: 'spotify_analysis', type: 'music' }
+            });
+          }
         }
       }
       
-      // Status patterns
-      const statusUpdates = activities.filter(a => a.type === 'status_update');
-      if (statusUpdates.length > 5) {
-        const moods = statusUpdates.map(s => s.data?.mood).filter(Boolean);
-        const commonMood = this.findMostCommon(moods);
+      // Extract from followed artists
+      if (user.artistPreferences?.followedArtists?.length > 0) {
+        const followedNames = user.artistPreferences.followedArtists.map(a => a.artistName);
+        facts.push({
+          kind: 'preference',
+          content: `Following artists: ${followedNames.slice(0, 5).join(', ')}`,
+          tags: ['music', 'following', 'artists'],
+          salience: 0.9,
+          source: { origin: 'artist_following', type: 'music' }
+        });
+      }
+      
+      // Extract from music taste genres
+      if (user.artistPreferences?.musicTaste?.favoriteGenres?.length > 0) {
+        const genres = user.artistPreferences.musicTaste.favoriteGenres.map(g => g.name);
+        facts.push({
+          kind: 'preference',
+          content: `Enjoys genres: ${genres.slice(0, 3).join(', ')}`,
+          tags: ['music', 'genres'],
+          salience: 0.7,
+          source: { origin: 'music_taste', type: 'music' }
+        });
+      }
+      
+      // Extract from recent music activities
+      if (user.musicProfile?.musicPersonality?.recentMusicActivities?.length > 0) {
+        const recentActivities = user.musicProfile.musicPersonality.recentMusicActivities.slice(0, 3);
+        const activityText = recentActivities.map(a => a.activity).join('; ');
+        facts.push({
+          kind: 'activity',
+          content: `Recent music activity: ${activityText}`,
+          tags: ['music', 'recent', 'listening'],
+          salience: 0.6,
+          source: { origin: 'music_activity', type: 'music' }
+        });
+      }
+      
+      // Extract discovery style preferences
+      if (user.musicProfile?.musicPersonality?.discoveryStyle) {
+        const style = user.musicProfile.musicPersonality.discoveryStyle;
+        const preferences = [];
         
-        if (commonMood) {
+        if (style.adventurous > 0.7) preferences.push('adventurous');
+        if (style.social > 0.7) preferences.push('social discovery');
+        if (style.algorithmic > 0.7) preferences.push('algorithm-based');
+        if (style.nostalgic > 0.7) preferences.push('nostalgic');
+        if (style.trendy > 0.7) preferences.push('trending music');
+        
+        if (preferences.length > 0) {
           facts.push({
-            kind: 'profile',
-            content: `Often has ${commonMood} mood in status updates`,
-            tags: ['mood', 'personality'],
-            salience: 0.5,
-            source: { origin: 'activity_analysis', type: 'mood' }
+            kind: 'preference',
+            content: `Music discovery style: ${preferences.join(', ')}`,
+            tags: ['music', 'discovery', 'personality'],
+            salience: 0.6,
+            source: { origin: 'music_personality', type: 'discovery' }
           });
         }
       }
       
       if (facts.length > 0) {
         const stored = await this.upsertFacts(userId, facts);
-        log.info('Distilled activity facts', { factCount: stored.length, activityCount: activities.length });
+        log.info('Distilled music profile facts', { 
+          factCount: stored.length, 
+          sourceTypes: [...new Set(facts.map(f => f.source.origin))]
+        });
         return stored.length;
       }
       
       return 0;
     } catch (error) {
-      log.error('Error distilling from activities:', error);
+      log.error('Error distilling from music profile:', error);
       return 0;
     }
   }

@@ -17,23 +17,31 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import healthRoutes from './routes/health.js';
 import conversationRoutes from './routes/conversation.js';
-// import matchingRoutes from './routes/matching.js'; // REMOVED - no more dating
-import friendsRoutes from './routes/friends.js';
 import previewRoutes from './routes/preview.js';
-import socialChatRoutes from './routes/socialChat.js';
-import socialProxyRoutes from './routes/socialProxy.js';
+import chatRoutes from './routes/chat.js';
 import spotifyRoutes from './routes/spotify.js';
 import notificationRoutes from './routes/notifications.js';
-import friendMessagingRoutes from './routes/friendMessaging.js';
 import badgeRoutes from './routes/badges.js';
 import memoryRoutes from './routes/memory.js';
 
+// New artist-focused routes
+import artistRoutes from './routes/artists.js';
+import feedRoutes from './routes/feed.js';
+import analyticsRoutes from './routes/analytics.js';
+
+// Friends functionality routes
+import friendsRoutes from './routes/friends.js';
+import friendMessagingRoutes from './routes/friendMessaging.js';
+
 // Initialize models
 import './models/User.js';
+import './models/Artist.js';
+import './models/ArtistUpdate.js';
+import './models/UserAnalytics.js';
 import './models/UserBadge.js';
 import './models/Conversation.js';
-import './models/Activity.js';
 import './models/UserMemory.js';
+import './models/Activity.js';
 
 // Initialize services
 import analysisQueue from './services/analysisQueue.js';
@@ -100,15 +108,20 @@ const initializeServer = async () => {
     app.use('/user', userRoutes);
     app.use('/badges', badgeRoutes);
     app.use('/conversation', conversationRoutes);
-    // app.use('/matching', matchingRoutes); // REMOVED - no more dating
-    app.use('/friends', friendsRoutes);
     app.use('/api', previewRoutes);
-    app.use('/social-proxy', socialProxyRoutes);
     app.use('/spotify', spotifyRoutes);
     app.use('/notifications', notificationRoutes);
-    app.use('/friend-messaging', friendMessagingRoutes);
     app.use('/memory', memoryRoutes);
-    app.use('/', socialChatRoutes);
+    app.use('/', chatRoutes);
+    
+    // Artist-focused routes
+    app.use('/artists', artistRoutes);
+    app.use('/feed', feedRoutes);
+    app.use('/analytics', analyticsRoutes);
+    
+    // Friends functionality routes
+    app.use('/friends', friendsRoutes);
+    app.use('/friend-messaging', friendMessagingRoutes);
     
     // Error handling
     app.use(errorLogger);
@@ -132,8 +145,9 @@ const initializeServer = async () => {
     initializeRealTimeMessaging(io);
     
     server.listen(PORT, () => {
-      console.log(`🚀 Aether Social Chat Server running on port ${PORT}`);
-      console.log(`📱 API endpoints: /auth, /user, /social-chat, /social-proxy, /spotify, /friend-messaging`);
+      console.log(`🚀 Aether Artist Tracking Server running on port ${PORT}`);
+      console.log(`🎵 API endpoints: /auth, /user, /artists, /feed, /analytics, /spotify, /chat`);
+      console.log(`👥 Friends endpoints: /friends, /friend-messaging`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
       console.log(`⚡ Socket.IO real-time messaging enabled`);
     });

@@ -4,7 +4,6 @@
  */
 
 import User from '../models/User.js';
-import Activity from '../models/Activity.js';
 import { log } from '../utils/logger.js';
 import spotifyService from './spotifyService.js';
 import notificationService from './notificationService.js';
@@ -63,11 +62,13 @@ class SpotifyLiveService {
    */
   async updateAllActiveUsers() {
     try {
-      // Find users with Spotify connected
+      // Find users with Spotify connected, populate friends
       const spotifyUsers = await User.find({
         'socialProxy.spotify.connected': true,
         'socialProxy.spotify.accessToken': { $exists: true, $ne: null }
-      }).select('_id username socialProxy.spotify');
+      })
+      .select('_id username socialProxy.spotify friends musicProfile')
+      .populate('friends.user', '_id');
 
       if (spotifyUsers.length === 0) {
         this.stats.activeUsers = 0;
@@ -127,32 +128,42 @@ class SpotifyLiveService {
       if (currentTrackId && currentTrackId !== previousTrackId) {
         // Only notify if the track is actually playing (not paused)
         if (currentTrack.isPlaying) {
-          // Create timeline activity for music update
+          // Update user's music profile for better artist recommendations
           try {
-            await Activity.create({
-              user: user._id,
-              type: 'spotify_track',
-              content: { 
-                text: `Now listening to ${currentTrack.name}`,
-                metadata: { 
-                  track: {
-                    name: currentTrack.name,
-                    artist: currentTrack.artist,
-                    album: currentTrack.album,
-                    imageUrl: currentTrack.imageUrl,
-                    spotifyUrl: currentTrack.spotifyUrl
-                  }
-                }
-              },
-              visibility: 'friends'
+            // Initialize music profile if needed
+            if (!user.musicProfile) user.musicProfile = {};
+            if (!user.musicProfile.musicPersonality) user.musicProfile.musicPersonality = {};
+            if (!user.musicProfile.musicPersonality.recentMusicActivities) {
+              user.musicProfile.musicPersonality.recentMusicActivities = [];
+            }
+            
+            // Add recent listening activity for artist discovery
+            user.musicProfile.musicPersonality.recentMusicActivities.unshift({
+              activity: `Listening to ${currentTrack.name} by ${currentTrack.artist}`,
+              type: 'listening',
+              confidence: 0.8,
+              detectedAt: new Date()
             });
             
-            log.debug(`🎵 Created music activity for ${user.username}: ${currentTrack.name} by ${currentTrack.artist}`);
-          } catch (activityError) {
-            log.error('Failed to create music activity:', activityError);
+            // Keep only last 20 activities for performance
+            user.musicProfile.musicPersonality.recentMusicActivities = 
+              user.musicProfile.musicPersonality.recentMusicActivities.slice(0, 20);
+            
+            // Update music interaction count
+            user.musicProfile.musicPersonality.totalMusicInteractions = 
+              (user.musicProfile.musicPersonality.totalMusicInteractions || 0) + 1;
+            
+            user.musicProfile.lastUpdated = new Date();
+            await user.save();
+            
+            log.debug(`🎵 Updated music profile for ${user.username}: ${currentTrack.name} by ${currentTrack.artist}`);
+          } catch (profileError) {
+            log.error('Failed to update music profile:', profileError);
           }
-          const sent = notificationService.notifySpotifyUpdate(user._id.toString(), {
+          // Send notification to user and their friends
+          const spotifyData = {
             type: 'track_change',
+            username: user.username,
             currentTrack: {
               name: currentTrack.name,
               artist: currentTrack.artist,
@@ -164,9 +175,28 @@ class SpotifyLiveService {
               name: previousTrack.name,
               artist: previousTrack.artist
             } : null
-          });
+          };
 
-          if (sent) {
+          // Notify the user themselves
+          const sentToUser = notificationService.notifySpotifyUpdate(user._id.toString(), spotifyData);
+          
+          // Notify their friends about the track change
+          if (user.friends && user.friends.length > 0) {
+            for (const friend of user.friends) {
+              if (friend.status === 'accepted') {
+                const sentToFriend = notificationService.notifyUser(friend.user.toString(), {
+                  type: 'spotify:track_change',
+                  data: {
+                    ...spotifyData,
+                    message: `${user.username} is now listening to "${currentTrack.name}" by ${currentTrack.artist}`,
+                    timestamp: new Date().toISOString()
+                  }
+                });
+              }
+            }
+          }
+
+          if (sentToUser) {
             log.debug(`🔔 Spotify track change notification sent to ${user.username}`);
           }
         }

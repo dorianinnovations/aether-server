@@ -53,6 +53,5 @@ venv/
 # Misc
 .claude/
 
-# Documentation files (keep out of repo)
-*.md
-!README.md
+# Keep all documentation files in repo
+!*.md

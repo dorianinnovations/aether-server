@@ -12,10 +12,10 @@ import analysisQueue from '../services/analysisQueue.js';
 
 const router = express.Router();
 
-// Unified chat endpoint - handles both text and files
-router.post('/social-chat', protect, uploadFiles, validateUploadedFiles, handleMulterError, async (req, res) => {
+// Artist-focused AI chat endpoint - handles both text and files
+router.post('/chat', protect, uploadFiles, validateUploadedFiles, handleMulterError, async (req, res) => {
   const startTime = Date.now();
-  const correlationId = log.info("POST /social-chat", { userId: req.user?.id });
+  const correlationId = log.info("POST /chat", { userId: req.user?.id });
   // Chat request timing - reduced logging
   
   try {
