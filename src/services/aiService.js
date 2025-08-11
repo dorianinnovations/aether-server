@@ -690,11 +690,33 @@ class AIService {
     const negativeWords = /\b(scared|worried|anxious|frustrated|stressed|sad|depressed|terrible|awful|horrible|hate|angry|upset|mad|furious)\b/;
     const positiveWords = /\b(happy|excited|great|awesome|amazing|fantastic|wonderful|love|thrilled|delighted|grateful)\b/;
     const distressWords = /\b(help|lost|confused|stuck|overwhelmed|crisis|emergency|desperate|panic)\b/;
+    const humorWords = /\b(lol|lmao|lmfao|lmfaoooo|lollll|hahah|haha|heehe|laughing|hahaa|rofl|lmfaooo|hahaha|hilarious|funny)\b/i;
     
     if (distressWords.test(message)) return 'distressed';
+    if (humorWords.test(message)) return 'humorous';
     if (negativeWords.test(message)) return 'negative';
     if (positiveWords.test(message)) return 'positive';
     return 'neutral';
+  }
+
+  /**
+   * Detect if user is in a humorous mood based on their message
+   */
+  detectHumorousMood(message) {
+    const humorPatterns = [
+      // Laughter expressions
+      /\b(lol|lmao|lmfao|lmfaoooo|lollll|hahah|haha|heehe|laughing|hahaa|rofl|lmfaooo|hahaha)\b/i,
+      // Multiple exclamation marks often indicate excitement/humor
+      /!!!+/,
+      // Repeated letters indicating emphasis/humor
+      /\b\w*([a-z])\1{2,}\w*\b/i,
+      // Caps lock words (often humorous emphasis)
+      /\b[A-Z]{3,}\b/,
+      // Emojis that indicate laughter/humor
+      /[😂😆😄😃🤣😹😂]/
+    ];
+    
+    return humorPatterns.some(pattern => pattern.test(message));
   }
 
   /**
@@ -971,7 +993,7 @@ Be conversational, knowledgeable, and passionate about music.
 ${username ? `Have a great music conversation with ${username}!` : 'Have a great music conversation!'}`;
   }
 
-  buildSystemPrompt(userContext = null, queryType = 'conversational') {
+  buildSystemPrompt(userContext = null, queryType = 'conversational', userMessage = '') {
     // 🔥 BASE PHILOSOPHY (removed unused variable for brevity)
     
     if (queryType === 'first_message_welcome') {
@@ -1153,6 +1175,19 @@ AMBIGUITY RULE: When they use ambiguous phrases ("what's that", "who's that", "e
 `;
     }
 
+    // Add humor instructions if user is in a humorous mood
+    if (userMessage && this.detectHumorousMood(userMessage)) {
+      prompt += `\n\n🎭 HUMOR MODE DETECTED:
+The user appears to be in a playful, humorous mood based on their laughing expressions or playful language. 
+- Feel free to include appropriate humor, wit, or playful responses when it fits naturally
+- Match their energy with light-hearted comments or funny observations  
+- Use casual, fun language that matches their vibe
+- Don't force humor - let it flow naturally in your response
+- Keep it tasteful and relevant to the music/artist context when possible
+
+Remember: Only add humor when it feels genuine and appropriate to the conversation flow.`;
+    }
+
     return prompt.trim();
   }
 
@@ -1268,7 +1303,7 @@ You specialize in:
 - Understanding music preferences and listening patterns
 - Helping users stay updated on releases and artist news
 
-You are simply Aether - the AI that helps users never miss updates from the artists and people they care about most.\n\n${this.buildSystemPrompt(userContext, queryType)}`
+You are simply Aether - the AI that helps users never miss updates from the artists and people they care about most.\n\n${this.buildSystemPrompt(userContext, queryType, message)}`
         }
       ];
 
@@ -1426,7 +1461,7 @@ You are simply Aether - the AI that helps users never miss updates from the arti
       console.log(`📁 Processing ${processedFiles.length} files for AI`);
       
       // Build system prompt with file context
-      let systemPrompt = this.buildSystemPrompt(userContext, queryType);
+      let systemPrompt = this.buildSystemPrompt(userContext, queryType, message);
       
       if (processedFiles.length > 0) {
         systemPrompt += `\n\n📁 FILE ANALYSIS CONTEXT:
