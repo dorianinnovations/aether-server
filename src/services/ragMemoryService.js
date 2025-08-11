@@ -178,6 +178,105 @@ ${turnsText}`
   }
 
   /**
+   * Auto-learn music preferences from conversation
+   */
+  async learnMusicPreferences(userId, userMessage, aiResponse) {
+    try {
+      // Extract music-related preferences from conversation
+      const musicMentions = this.extractMusicMentions(userMessage, aiResponse);
+      
+      if (musicMentions.length === 0) return 0;
+      
+      // Convert music mentions to preference facts
+      const preferenceFacts = musicMentions.map(mention => ({
+        kind: 'preference',
+        content: `Music preference: ${mention.content}`,
+        tags: ['music', mention.type, 'auto-learned'],
+        salience: mention.confidence,
+        source: {
+          origin: 'music_conversation',
+          extractedAt: new Date(),
+          type: mention.type,
+          confidence: mention.confidence
+        }
+      }));
+      
+      const stored = await this.upsertFacts(userId, preferenceFacts);
+      
+      if (stored.length > 0) {
+        log.info('Auto-learned music preferences', { 
+          userId, 
+          preferencesLearned: stored.length,
+          types: [...new Set(musicMentions.map(m => m.type))]
+        });
+      }
+      
+      return stored.length;
+    } catch (error) {
+      log.error('Error learning music preferences:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Extract music mentions from conversation
+   */
+  extractMusicMentions(userMessage, aiResponse) {
+    const mentions = [];
+    const combinedText = `${userMessage} ${aiResponse}`;
+    
+    // Artist mentions
+    const artistPattern = /\b(?:artist|band|musician|singer)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
+    let artistMatch;
+    while ((artistMatch = artistPattern.exec(combinedText)) !== null) {
+      const artist = artistMatch[1].trim();
+      if (artist.length > 2 && !this.isCommonWord(artist)) {
+        mentions.push({
+          type: 'artist',
+          content: `likes artist ${artist}`,
+          confidence: 0.7
+        });
+      }
+    }
+    
+    // Genre mentions
+    const genres = ['rock', 'pop', 'hip-hop', 'hip hop', 'electronic', 'jazz', 'country', 'classical', 'indie', 'folk', 'r&b', 'soul', 'funk', 'metal', 'punk', 'blues', 'reggae', 'alternative', 'experimental', 'ambient', 'house', 'techno', 'dubstep', 'trap'];
+    const genrePattern = new RegExp(`\\b(${genres.join('|')})\\b`, 'gi');
+    let genreMatch;
+    while ((genreMatch = genrePattern.exec(combinedText)) !== null) {
+      mentions.push({
+        type: 'genre',
+        content: `enjoys ${genreMatch[1].toLowerCase()} music`,
+        confidence: 0.8
+      });
+    }
+    
+    // Music activity mentions
+    const activityPattern = /\b(listening to|playing|discovering|exploring|into|love|like|enjoy|obsessed with|addicted to|vibing to)\s+([^.!?]+)/gi;
+    let activityMatch;
+    while ((activityMatch = activityPattern.exec(combinedText)) !== null) {
+      const activity = activityMatch[2].trim();
+      if (activity.length > 3 && activity.length < 50) {
+        mentions.push({
+          type: 'activity',
+          content: `currently ${activityMatch[1]} ${activity}`,
+          confidence: 0.6
+        });
+      }
+    }
+    
+    return mentions;
+  }
+
+  /**
+   * Check if a word is too common to be meaningful
+   */
+  isCommonWord(word) {
+    const commonWords = ['The', 'This', 'That', 'You', 'I', 'We', 'They', 'It', 'And', 'Or', 'But', 'So', 'Now', 'Here', 'There', 'When', 'Where', 'How', 'What', 'Who', 'Why', 'Music', 'Song', 'Album', 'Band', 'Artist'];
+    return commonWords.includes(word);
+  }
+
+  /**
    * Store music preferences from user's Spotify and music profile data
    */
   async distillFromMusicProfile(userId) {

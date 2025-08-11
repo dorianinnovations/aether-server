@@ -19,12 +19,19 @@ class LLMService {
         temperature = 0.9,
         n_predict = 4000,
         tools = [],
-        tool_choice = undefined
+        tool_choice = undefined,
+        musicDiscoveryContext = null
       } = options;
+
+      // Enhance messages with music discovery context
+      let enhancedMessages = messages;
+      if (musicDiscoveryContext) {
+        enhancedMessages = this.enhanceMessagesWithMusicContext(messages, musicDiscoveryContext);
+      }
 
       const requestBody = {
         model,
-        messages,
+        messages: enhancedMessages,
         max_tokens: n_predict,
         temperature,
         stream: false
@@ -193,6 +200,184 @@ class LLMService {
         error: error.message
       };
     }
+  }
+
+  /**
+   * Generate conversation title from first message
+   * Uses ultra-cheap Llama 3.1 8B for cost efficiency (~$0.18/1M tokens)
+   * @param {string} firstMessage - The first user message
+   * @returns {Object} Title generation result
+   */
+  async generateConversationTitle(firstMessage) {
+    try {
+      if (!firstMessage || firstMessage.trim().length < 10) {
+        return {
+          success: true,
+          title: this.createFallbackTitle(firstMessage || 'New Chat')
+        };
+      }
+
+      // Truncate very long messages to keep costs down
+      const truncatedMessage = firstMessage.length > 200 
+        ? firstMessage.substring(0, 200) + '...' 
+        : firstMessage;
+
+      const prompt = `Create a concise 2-5 word title for this conversation starter. No quotes, no punctuation at the end:
+
+"${truncatedMessage}"
+
+Title:`;
+
+      const response = await fetch(this.baseUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'X-Title': 'Aether Title Generation'
+        },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-3.1-8b-instruct', // Ultra cheap at ~$0.18/1M tokens
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 20,
+          temperature: 0.3,
+          stop: ['\n', '.', '!', '?'] // Stop at natural ending points
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.warn('Title generation API error, using fallback:', data.error?.message);
+        return {
+          success: true,
+          title: this.createFallbackTitle(firstMessage),
+          fallback: true
+        };
+      }
+
+      const generatedTitle = data.choices[0]?.message?.content?.trim();
+      
+      if (!generatedTitle) {
+        return {
+          success: true,
+          title: this.createFallbackTitle(firstMessage),
+          fallback: true
+        };
+      }
+
+      // Clean up the generated title
+      const cleanTitle = this.cleanGeneratedTitle(generatedTitle);
+      
+      // Log cost for monitoring (ultra cheap - basically free)
+      if (data.usage) {
+        const costEstimate = (data.usage.total_tokens * 0.00000018).toFixed(6);
+        console.log(`💰 Title generation: ${data.usage.total_tokens} tokens (~$${costEstimate})`);
+      }
+
+      return {
+        success: true,
+        title: cleanTitle,
+        model: data.model,
+        usage: data.usage
+      };
+
+    } catch (error) {
+      console.error('Title generation error:', error);
+      return {
+        success: true,
+        title: this.createFallbackTitle(firstMessage),
+        fallback: true,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Clean and validate generated titles
+   */
+  cleanGeneratedTitle(title) {
+    // Remove quotes, extra punctuation, and normalize
+    let cleaned = title
+      .replace(/^["']|["']$/g, '') // Remove surrounding quotes
+      .replace(/[.!?]+$/, '') // Remove trailing punctuation
+      .trim();
+
+    // Ensure reasonable length (2-40 characters)
+    if (cleaned.length < 2) {
+      return 'New Chat';
+    }
+    
+    if (cleaned.length > 40) {
+      cleaned = cleaned.substring(0, 37) + '...';
+    }
+
+    // Capitalize first letter
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+
+  /**
+   * Create fallback title from the original message
+   */
+  createFallbackTitle(message) {
+    if (message.length <= 40) {
+      return message.charAt(0).toUpperCase() + message.slice(1);
+    }
+    
+    // Take first few words up to 40 characters
+    const words = message.split(' ');
+    let title = '';
+    
+    for (const word of words) {
+      if ((title + ' ' + word).length > 37) break;
+      title += (title ? ' ' : '') + word;
+    }
+    
+    return title + '...';
+  }
+
+  /**
+   * Enhance messages with music discovery context
+   */
+  enhanceMessagesWithMusicContext(messages, musicContext) {
+    if (!musicContext || messages.length === 0) return messages;
+
+    const lastUserMessage = messages[messages.length - 1];
+    if (lastUserMessage.role !== 'user') return messages;
+
+    let contextPrompt = '';
+    
+    if (musicContext.recommendationType === 'main_genres') {
+      contextPrompt = `MUSIC DISCOVERY CONTEXT: User is new to our platform or has limited music preferences. 
+Present them with a choice between exploring main music genres (Rock, Pop, Hip-Hop, Electronic, Jazz, Country, Classical, Indie, Folk, R&B) or answer their question first and then suggest they can build a custom preference list over time as you learn their taste.
+
+Response should offer:
+1. Direct answer to their question
+2. Choice: "Would you like me to show you music by main genres, or would you prefer I learn your taste over time for personalized recommendations?"
+3. Briefly explain that the platform learns preferences to provide better recommendations`;
+
+    } else if (musicContext.recommendationType === 'custom_list') {
+      contextPrompt = `MUSIC DISCOVERY CONTEXT: User has established music preferences on the platform.
+User's current preferences: ${musicContext.userContext}
+
+Response should:
+1. Use their established preferences to give personalized recommendations
+2. Reference their known tastes: "${musicContext.userContext}"
+3. Suggest new music that builds on their existing preferences
+4. Mention how their preference data helps provide better recommendations`;
+    }
+
+    // Create enhanced messages array
+    const enhancedMessages = [...messages];
+    
+    // Add context to the last user message
+    enhancedMessages[enhancedMessages.length - 1] = {
+      ...lastUserMessage,
+      content: `${contextPrompt}
+
+USER MESSAGE: ${lastUserMessage.content}`
+    };
+
+    return enhancedMessages;
   }
 }
 

@@ -1,6 +1,7 @@
 import Conversation from '../models/Conversation.js';
 import { log } from '../utils/logger.js';
 import mongoose from 'mongoose';
+import llmService from './llmService.js';
 
 class ConversationService {
   async getConversationHistory(userId, limit = 10) {
@@ -297,6 +298,14 @@ class ConversationService {
         }
       };
 
+      // Auto-generate title for first user message
+      await this.autoGenerateTitleIfNeeded(
+        conversationId, 
+        role, 
+        content, 
+        conversation.messageCount
+      );
+
       // Event broadcasting removed
 
       log.debug('Added message to conversation');
@@ -388,6 +397,95 @@ class ConversationService {
   }
 
   /**
+   * Detect music discovery context from message
+   */
+  detectMusicDiscoveryContext(message) {
+    const musicDiscoveryPatterns = [
+      /what.*new music/i,
+      /new.*music.*out/i,
+      /latest.*releases/i,
+      /recommend.*music/i,
+      /discover.*music/i,
+      /music.*recommendations/i,
+      /new.*songs/i,
+      /new.*albums/i,
+      /what.*should.*listen/i,
+      /music.*discover/i,
+      /find.*new.*artists/i,
+      /music.*suggestions/i
+    ];
+
+    return musicDiscoveryPatterns.some(pattern => pattern.test(message));
+  }
+
+  /**
+   * Build context-aware prompt for music discovery
+   */
+  async buildMusicDiscoveryContext(userId, message) {
+    try {
+      const User = (await import('../models/User.js')).default;
+      const user = await User.findById(userId).select('artistPreferences musicProfile').lean();
+      
+      if (!user) return null;
+
+      const context = {
+        hasPreferences: false,
+        preferenceMaturity: 'new',
+        recommendationType: 'main_genres',
+        userContext: ''
+      };
+
+      // Check for existing music preferences
+      const followedArtists = user.artistPreferences?.followedArtists || [];
+      const favoriteGenres = user.artistPreferences?.musicTaste?.favoriteGenres || [];
+      const spotifyData = user.musicProfile?.spotify;
+      const musicInterests = user.musicProfile?.musicPersonality?.musicInterests || [];
+
+      // Determine preference maturity
+      const totalPreferences = followedArtists.length + favoriteGenres.length + musicInterests.length;
+      const spotifyConnected = spotifyData?.connected && (spotifyData.recentTracks?.length > 0 || spotifyData.topTracks?.length > 0);
+
+      if (totalPreferences >= 5 || spotifyConnected) {
+        context.hasPreferences = true;
+        context.preferenceMaturity = totalPreferences >= 10 ? 'mature' : 'developing';
+        context.recommendationType = 'custom_list';
+      }
+
+      // Build user context string
+      const contextParts = [];
+      
+      if (followedArtists.length > 0) {
+        const artistNames = followedArtists.slice(0, 5).map(a => a.artistName);
+        contextParts.push(`Following artists: ${artistNames.join(', ')}`);
+      }
+
+      if (favoriteGenres.length > 0) {
+        const genreNames = favoriteGenres.slice(0, 3).map(g => g.name);
+        contextParts.push(`Favorite genres: ${genreNames.join(', ')}`);
+      }
+
+      if (spotifyData?.recentTracks?.length > 0) {
+        const recentArtists = [...new Set(spotifyData.recentTracks.slice(0, 3).map(t => t.artist))];
+        contextParts.push(`Recently listening to: ${recentArtists.join(', ')}`);
+      }
+
+      if (musicInterests.length > 0) {
+        const interests = musicInterests.filter(i => i.confidence > 0.6).slice(0, 3).map(i => i.genre);
+        if (interests.length > 0) {
+          contextParts.push(`Music interests: ${interests.join(', ')}`);
+        }
+      }
+
+      context.userContext = contextParts.join(' | ');
+
+      return context;
+    } catch (error) {
+      log.error('Error building music discovery context:', error);
+      return null;
+    }
+  }
+
+  /**
    * Update conversation state
    */
   async updateConversationState(userId, conversationId, stateUpdate) {
@@ -451,6 +549,89 @@ class ConversationService {
     } catch (error) {
       log.error('Error merging conversation state:', error);
       return false;
+    }
+  }
+
+  /**
+   * Generate AI-powered conversation title from first user message
+   * @param {string} conversationId - The conversation ID
+   * @param {string} firstMessage - The first user message
+   * @returns {Object} Generated title result
+   */
+  async generateConversationTitle(conversationId, firstMessage) {
+    try {
+      if (!firstMessage || firstMessage.trim().length < 5) {
+        return {
+          success: false,
+          error: 'Message too short for title generation'
+        };
+      }
+
+      log.info(`🎯 Generating title for conversation ${conversationId.slice(-8)}`);
+      
+      // Generate title using LLM service (ultra cheap Llama 3.1 8B)
+      const titleResult = await llmService.generateConversationTitle(firstMessage);
+      
+      if (titleResult.success && titleResult.title) {
+        // Update the conversation title in database
+        const conversation = await Conversation.findByIdAndUpdate(
+          conversationId,
+          { title: titleResult.title },
+          { new: true }
+        ).select('title');
+
+        if (conversation) {
+          log.info(`✨ Generated title: "${titleResult.title}" ${titleResult.fallback ? '(fallback)' : ''}`, {
+            conversationId: conversationId.slice(-8),
+            cost: titleResult.usage ? `~$${(titleResult.usage.total_tokens * 0.00000018).toFixed(6)}` : 'fallback'
+          });
+
+          return {
+            success: true,
+            title: titleResult.title,
+            conversationId,
+            fallback: titleResult.fallback || false,
+            model: titleResult.model,
+            usage: titleResult.usage
+          };
+        }
+      }
+
+      return {
+        success: false,
+        error: 'Failed to generate or save title'
+      };
+    } catch (error) {
+      log.error('Error generating conversation title:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Auto-generate title for conversation when first message is added
+   * Called automatically after adding the first user message
+   */
+  async autoGenerateTitleIfNeeded(conversationId, messageRole, messageContent, messageCount) {
+    try {
+      // Only generate title for first user message
+      if (messageRole === 'user' && messageCount === 1) {
+        // Run title generation in background (don't block the response)
+        setImmediate(async () => {
+          try {
+            await this.generateConversationTitle(conversationId, messageContent);
+          } catch (error) {
+            log.error('Background title generation failed:', error);
+          }
+        });
+        
+        log.debug('Queued background title generation for new conversation');
+      }
+    } catch (error) {
+      log.error('Error in auto title generation:', error);
+      // Don't throw - this is a background operation
     }
   }
 }

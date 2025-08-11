@@ -1212,7 +1212,7 @@ AMBIGUITY RULE: When they use ambiguous phrases ("what's that", "who's that", "e
     return await this.chat(message, model);
   }
 
-  async chat(message, model = 'openai/gpt-4o', userContext = null, attachments = null) {
+  async chat(message, model = 'openai/gpt-4o', userContext = null, attachments = null, options = {}) {
     try {
       // Get conversation history first for context enhancement
       const conversationHistory = userContext?.conversationId
@@ -1378,7 +1378,8 @@ You are simply Aether - the AI that helps users never miss updates from the arti
         temperature: replyPolicy.temperature,
         top_p: replyPolicy.top_p,
         frequency_penalty: 0.2, // Reduce repetition
-        presence_penalty: 0.1 // Encourage topic diversity
+        presence_penalty: 0.1, // Encourage topic diversity
+        musicDiscoveryContext: options.musicDiscoveryContext // Pass music context to LLM service
       };
 
       // Return success flag and let route handle the actual call
@@ -1389,7 +1390,8 @@ You are simply Aether - the AI that helps users never miss updates from the arti
         requestBody,
         modelSelection, // Include tier/usage info for route
         queryType, // Include for quality checking
-        needsRetryCheck: true // Flag that this should be quality checked
+        needsRetryCheck: true, // Flag that this should be quality checked
+        musicDiscoveryContext: options.musicDiscoveryContext // Include for route processing
       };
     } catch (error) {
       console.error('AI Service Error:', error);

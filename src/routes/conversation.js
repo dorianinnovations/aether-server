@@ -306,4 +306,51 @@ router.put('/conversations/:id/title', protect, async (req, res) => {
   }
 });
 
+/**
+ * POST /conversations/:id/generate-title
+ * Generate AI-powered conversation title from first message
+ */
+router.post('/conversations/:id/generate-title', protect, async (req, res) => {
+  try {
+    const conversationId = req.params.id;
+    const { firstMessage } = req.body;
+
+    if (!firstMessage) {
+      return res.status(400).json({
+        success: false,
+        error: 'First message is required for title generation'
+      });
+    }
+
+    log.info(`🎯 Title generation requested for conversation ${conversationId.slice(-8)}`);
+
+    const result = await conversationService.generateConversationTitle(conversationId, firstMessage);
+
+    if (result.success) {
+      res.json({
+        success: true,
+        data: {
+          title: result.title,
+          conversationId: result.conversationId,
+          fallback: result.fallback,
+          model: result.model,
+          usage: result.usage
+        },
+        message: `Title generated successfully ${result.fallback ? '(using fallback)' : ''}`
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error || 'Failed to generate title'
+      });
+    }
+  } catch (error) {
+    log.error('Error in title generation endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error during title generation'
+    });
+  }
+});
+
 export default router;

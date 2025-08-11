@@ -96,8 +96,9 @@ Just give me your honest thoughts on what I've sent.`;
     
     // Get user context for AI personalization
     let userContext = null;
+    let musicDiscoveryContext = null;
     if (userId) {
-      const user = await User.findById(userId).select('username musicProfile profile onboarding');
+      const user = await User.findById(userId).select('username musicProfile profile onboarding artistPreferences');
       if (user) {
         // Use conversation message count for prompt classification
         const messageCount = conversation.messageCount || 0;
@@ -107,10 +108,21 @@ Just give me your honest thoughts on what I've sent.`;
           musicProfile: user.musicProfile,
           profile: user.profile,
           onboarding: user.onboarding,
+          artistPreferences: user.artistPreferences,
           messageCount: messageCount,
           conversationId: conversation._id,
           userId: userId
         };
+
+        // Check for music discovery context
+        if (conversationService.detectMusicDiscoveryContext(processedMessage)) {
+          musicDiscoveryContext = await conversationService.buildMusicDiscoveryContext(userId, processedMessage);
+          log.info('Music discovery context detected', { 
+            userId, 
+            hasPreferences: musicDiscoveryContext?.hasPreferences,
+            recommendationType: musicDiscoveryContext?.recommendationType
+          });
+        }
       }
       
       // Add user message to conversation
@@ -127,65 +139,102 @@ Just give me your honest thoughts on what I've sent.`;
     });
     
     try {
-      // Check if web search should be triggered
+      // Check if web search should be triggered or music news is needed
       let webSearchResults = null;
+      let musicNewsContext = null;
       let enhancedMessage = processedMessage;
       
-      // Smart search triggers - ONLY for external information
-      const searchTriggers = [
-        /(?:search|find|look up|google|web search)\s+(?:for\s+)?(.+)/i,
-        /(?:what'?s|what is)\s+(the\s+)?(latest|recent|current|news about|happening with)\s+(.+)/i,
-        /(?:when did|where is|what happened|current price|stock price|weather in)/i,
-        /(?:latest news|recent developments|current events)/i
-      ];
-      
-      const noSearchPatterns = [
-        /^(?:hello|hi|hey|thanks|thank you|ok|okay|yes|no|maybe|what\?)$/i,
-        /^(?:how are you|good morning|good afternoon|good evening)$/i,
-        /(?:who are you|what are you|tell me about yourself|introduce yourself)/i,
-        /(?:who's this|whos this|what is this|whats this)/i,
-        /^(?:what\?|huh\?|why\?|how\?)$/i,
-        /^(?:yo|sup|whats up|wassup|hey there|whats happening)$/i,
-        /^(?:yo whats good|whats good|all good|im good|you good|doing good)$/i,
-        /^(?:yo|sup|hey)\s+(?:whats good|whats up|wassup)$/i
-      ];
-      
-      // Check if should trigger search
-      let shouldSearch = false;
-      const cleanMessage = processedMessage.trim();
-      
-      // Skip search for simple conversational messages
-      const isConversational = noSearchPatterns.some(pattern => pattern.test(cleanMessage));
-      if (!isConversational) {
-        // Check for search triggers
-        shouldSearch = searchTriggers.some(pattern => pattern.test(cleanMessage));
-        
-        // Only check for EXPLICIT search keywords, not generic ones
-        if (!shouldSearch) {
-          const explicitSearchKeywords = ['web search', 'google', 'search for', 'look up'];
-          shouldSearch = explicitSearchKeywords.some(keyword => cleanMessage.toLowerCase().includes(keyword));
+      // Music news integration for exceptional results on music discovery
+      if (musicDiscoveryContext && musicDiscoveryContext.recommendationType === 'custom_list') {
+        try {
+          log.info('Fetching latest music news for enhanced discovery context');
+          const musicNewsQueries = [
+            'latest music releases this week',
+            'new album releases 2025',
+            'trending artists music news',
+            'new music discoveries this month'
+          ];
+          
+          const newsQuery = musicNewsQueries[Math.floor(Math.random() * musicNewsQueries.length)];
+          const searchResult = await webSearchTool({ query: newsQuery }, { userId });
+          
+          if (searchResult.success && searchResult.structure.results.length > 0) {
+            musicNewsContext = searchResult.structure.results.slice(0, 4).map(r => ({
+              title: r.title,
+              snippet: r.snippet,
+              source: r.url
+            }));
+            
+            const newsContext = `🎵 LATEST MUSIC NEWS CONTEXT:
+${musicNewsContext.map(news => `• ${news.title}: ${news.snippet}`).join('\n')}
+
+Use this current music information to provide up-to-date recommendations and discoveries alongside their personal preferences.`;
+            
+            enhancedMessage = `${processedMessage}\n\n${newsContext}`;
+            log.info('Enhanced message with latest music news', { newsCount: musicNewsContext.length });
+          }
+        } catch (error) {
+          log.error('Music news fetch failed', error, { correlationId });
         }
       }
       
-      // Perform web search if needed
-      if (shouldSearch) {
-        // // log step removed
-        try {
-          const searchResult = await webSearchTool({ query: cleanMessage }, { userId });
-          if (searchResult.success && searchResult.structure.results.length > 0) {
-            webSearchResults = searchResult;
-            
-            // Add search results to message context
-            const searchContext = `Web search results for "${cleanMessage}":
+      // Smart search triggers - ONLY for external information (not music discovery)
+      if (!musicNewsContext) {
+        const searchTriggers = [
+          /(?:search|find|look up|google|web search)\s+(?:for\s+)?(.+)/i,
+          /(?:what'?s|what is)\s+(the\s+)?(latest|recent|current|news about|happening with)\s+(.+)/i,
+          /(?:when did|where is|what happened|current price|stock price|weather in)/i,
+          /(?:latest news|recent developments|current events)/i
+        ];
+        
+        const noSearchPatterns = [
+          /^(?:hello|hi|hey|thanks|thank you|ok|okay|yes|no|maybe|what\?)$/i,
+          /^(?:how are you|good morning|good afternoon|good evening)$/i,
+          /(?:who are you|what are you|tell me about yourself|introduce yourself)/i,
+          /(?:who's this|whos this|what is this|whats this)/i,
+          /^(?:what\?|huh\?|why\?|how\?)$/i,
+          /^(?:yo|sup|whats up|wassup|hey there|whats happening)$/i,
+          /^(?:yo whats good|whats good|all good|im good|you good|doing good)$/i,
+          /^(?:yo|sup|hey)\s+(?:whats good|whats up|wassup)$/i,
+          // Skip search for music discovery queries since we have specialized handling
+          /(?:what.*new music|new.*music.*out|recommend.*music|discover.*music)/i
+        ];
+        
+        // Check if should trigger search
+        let shouldSearch = false;
+        const cleanMessage = processedMessage.trim();
+        
+        // Skip search for simple conversational messages
+        const isConversational = noSearchPatterns.some(pattern => pattern.test(cleanMessage));
+        if (!isConversational) {
+          // Check for search triggers
+          shouldSearch = searchTriggers.some(pattern => pattern.test(cleanMessage));
+          
+          // Only check for EXPLICIT search keywords, not generic ones
+          if (!shouldSearch) {
+            const explicitSearchKeywords = ['web search', 'google', 'search for', 'look up'];
+            shouldSearch = explicitSearchKeywords.some(keyword => cleanMessage.toLowerCase().includes(keyword));
+          }
+        }
+        
+        // Perform web search if needed
+        if (shouldSearch) {
+          try {
+            const searchResult = await webSearchTool({ query: cleanMessage }, { userId });
+            if (searchResult.success && searchResult.structure.results.length > 0) {
+              webSearchResults = searchResult;
+              
+              // Add search results to message context
+              const searchContext = `Web search results for "${cleanMessage}":
 ${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
 
 Use this current information to provide an accurate, up-to-date response. Do not include the raw search results or JSON data in your response - just use the information naturally in your answer.`;
-            
-            enhancedMessage = `${processedMessage}\n\n${searchContext}`;
-            // // log step removed
+              
+              enhancedMessage = `${processedMessage}\n\n${searchContext}`;
+            }
+          } catch (error) {
+            log.error('Web search failed', error, { correlationId });
           }
-        } catch (error) {
-          log.error('Web search failed', error, { correlationId });
         }
       }
 
@@ -203,7 +252,10 @@ Use this current information to provide an accurate, up-to-date response. Do not
         aiResponse = await aiService.chatWithFiles(enhancedMessage, 'openai/gpt-4o', userContext, processedFiles);
       } else {
         // Use regular chat with attachments (model will be selected by tierService)
-        aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-4o', userContext, attachments);
+        // Pass music discovery context to LLM service
+        aiResponse = await aiService.chat(enhancedMessage, 'openai/gpt-4o', userContext, attachments, {
+          musicDiscoveryContext
+        });
       }
       const aiCallTime = Date.now() - aiCallStartTime;
       log.debug('AI service call completed', { correlationId, aiCallTime });
@@ -222,6 +274,22 @@ Use this current information to provide an accurate, up-to-date response. Do not
             toolsUsed: 1
           };
           res.write(`data: ${JSON.stringify({metadata: toolResultData})}\n\n`);
+        }
+        
+        // Send music discovery context metadata if available
+        if (musicDiscoveryContext || musicNewsContext) {
+          const musicMetadata = {
+            musicDiscovery: {
+              contextDetected: !!musicDiscoveryContext,
+              hasPreferences: musicDiscoveryContext?.hasPreferences || false,
+              recommendationType: musicDiscoveryContext?.recommendationType || 'none',
+              preferenceMaturity: musicDiscoveryContext?.preferenceMaturity || 'none',
+              newsEnhanced: !!musicNewsContext,
+              newsCount: musicNewsContext?.length || 0
+            },
+            hasMusicContext: true
+          };
+          res.write(`data: ${JSON.stringify({metadata: musicMetadata})}\n\n`);
         }
         
         // SIMPLIFIED STREAMING - back to working approach but faster
@@ -342,9 +410,32 @@ Use this current information to provide an accurate, up-to-date response. Do not
             null, 
             { 
               model: aiResponse.model,
-              responseTime: Date.now() - startTime
+              responseTime: Date.now() - startTime,
+              musicDiscoveryContext: aiResponse.musicDiscoveryContext ? 'enhanced' : 'none'
             }
           );
+
+          // Auto-learn music preferences from conversation
+          if (musicDiscoveryContext) {
+            try {
+              const ragMemoryService = (await import('../services/ragMemoryService.js')).default;
+              const preferencesLearned = await ragMemoryService.learnMusicPreferences(
+                userId, 
+                processedMessage, 
+                fullResponse
+              );
+              
+              if (preferencesLearned > 0) {
+                log.info('Music preferences auto-learned from conversation', {
+                  userId,
+                  conversationId: conversation._id,
+                  preferencesLearned
+                });
+              }
+            } catch (error) {
+              log.error('Failed to auto-learn music preferences:', error);
+            }
+          }
 
           // Update conversation state after assistant response
           if (aiResponse.queryType) {
