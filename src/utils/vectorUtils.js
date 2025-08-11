@@ -183,7 +183,8 @@ async function openAIEmbedding(text) {
  */
 function cheapHashEmbedding(text, dims = 512) {
   const v = new Array(dims).fill(0);
-  const tokens = (text || '').toLowerCase().split(/\W+/).filter(Boolean);
+  const textStr = String(text || '');
+  const tokens = textStr.toLowerCase().split(/\W+/).filter(Boolean);
   
   for (const token of tokens) {
     let hash = 2166136261; // FNV offset basis
