@@ -4,9 +4,9 @@ class TierService {
   constructor() {
     // Monthly GPT-5 limits by tier
     this.limits = {
-      free: 10,     // 10 GPT-5 calls per month
-      pro: 50,      // 5x more (50 calls per month)
-      elite: -1     // Unlimited (represented as -1)
+      Standard: 10,     // 10 GPT-5 calls per month
+      Legend: 50,       // 5x more (50 calls per month)
+      VIP: -1           // Unlimited (represented as -1)
     };
   }
 
@@ -47,11 +47,11 @@ class TierService {
       };
     } catch (error) {
       console.error('Error getting user tier info:', error);
-      // Default to free tier with no GPT-5 access on error
+      // Default to Standard tier with no GPT-5 access on error
       return {
-        tier: 'free',
-        limit: this.limits.free,
-        used: this.limits.free, // Assume limit reached on error
+        tier: 'Standard',
+        limit: this.limits.Standard,
+        used: this.limits.Standard, // Assume limit reached on error
         remaining: 0,
         isUnlimited: false,
         canUseGpt5: false,
@@ -73,7 +73,7 @@ class TierService {
         return {
           success: false,
           reason: 'monthly_limit_reached',
-          message: `GPT-5 monthly limit reached. Upgrade to Pro (50/month) or Elite (unlimited) for more advanced AI.`,
+          message: `GPT-5 monthly limit reached. Upgrade to Legend (50/month) or VIP (unlimited) for more advanced AI.`,
           tierInfo
         };
       }
@@ -176,22 +176,22 @@ class TierService {
    * @param {string} currentTier - Current user tier
    * @returns {Object} Upgrade info
    */
-  getTierUpgradeInfo(currentTier = 'free') {
+  getTierUpgradeInfo(currentTier = 'Standard') {
     const tiers = {
-      free: {
-        name: 'Free',
-        gpt5Limit: this.limits.free,
+      Standard: {
+        name: 'Standard',
+        gpt5Limit: this.limits.Standard,
         features: [
           '10 GPT-5 calls/month',
           'Unlimited GPT-4o (fast AI)',
           'Basic social proxy features',
           'Spotify integration'
         ],
-        upgradePrompt: 'Upgrade to Pro for 5x more GPT-5 calls!'
+        upgradePrompt: 'Upgrade to Legend for 5x more GPT-5 calls!'
       },
-      pro: {
-        name: 'Pro',
-        gpt5Limit: this.limits.pro,
+      Legend: {
+        name: 'Legend',
+        gpt5Limit: this.limits.Legend,
         features: [
           '50 GPT-5 calls/month (5x more)',
           'Unlimited GPT-4o',
@@ -199,10 +199,10 @@ class TierService {
           'Enhanced personality analysis',
           'Advanced social features'
         ],
-        upgradePrompt: 'Upgrade to Elite for unlimited GPT-5!'
+        upgradePrompt: 'Upgrade to VIP for unlimited GPT-5!'
       },
-      elite: {
-        name: 'Elite',
+      VIP: {
+        name: 'VIP',
         gpt5Limit: 'Unlimited',
         features: [
           'Unlimited GPT-5 calls',
@@ -216,7 +216,7 @@ class TierService {
       }
     };
 
-    return tiers[currentTier] || tiers.free;
+    return tiers[currentTier] || tiers.Standard;
   }
 
   /**
@@ -227,7 +227,7 @@ class TierService {
    */
   async upgradeTier(userId, newTier) {
     try {
-      if (!['free', 'pro', 'elite'].includes(newTier)) {
+      if (!['Standard', 'Legend', 'VIP'].includes(newTier)) {
         throw new Error('Invalid tier');
       }
 
