@@ -328,9 +328,9 @@ router.get('/taste-profile', protect, async (req, res) => {
       discoveryPreferences: user.artistPreferences?.musicTaste?.discoveryPreferences || {},
       listeningPatterns: user.artistPreferences?.musicTaste?.listeningPatterns || {},
       spotifyData: {
-        topTracks: user.socialProxy?.spotify?.topTracks?.slice(0, 10) || [],
-        recentTracks: user.socialProxy?.spotify?.recentTracks?.slice(0, 10) || [],
-        currentTrack: user.socialProxy?.spotify?.currentTrack || null
+        topTracks: user.musicProfile?.spotify?.topTracks?.slice(0, 10) || [],
+        recentTracks: user.musicProfile?.spotify?.recentTracks?.slice(0, 10) || [],
+        currentTrack: user.musicProfile?.spotify?.currentTrack || null
       }
     };
 

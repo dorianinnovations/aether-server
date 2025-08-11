@@ -268,7 +268,7 @@ class UserAnalyticsService {
         metadata: {
           calculatedAt: new Date(),
           dataSources: {
-            spotify: !!user.socialProxy?.spotify?.connected,
+            spotify: !!user.musicProfile?.spotify?.connected,
             inAppBehavior: true,
             friendData: false,
             externalSources: false
@@ -515,7 +515,7 @@ class UserAnalyticsService {
     const User = (await import('../models/User.js')).default;
     const user = await User.findById(userId);
     
-    const spotifyData = user?.socialProxy?.spotify;
+    const spotifyData = user?.musicProfile?.spotify;
     
     return {
       sessions: {
@@ -691,7 +691,7 @@ class UserAnalyticsService {
   calculateDataCompleteness(user) {
     let completeness = 0.5; // Base score
     
-    if (user.socialProxy?.spotify?.connected) completeness += 0.3;
+    if (user.musicProfile?.spotify?.connected) completeness += 0.3;
     if (user.artistPreferences?.followedArtists?.length > 0) completeness += 0.2;
     
     return Math.min(completeness, 1.0);

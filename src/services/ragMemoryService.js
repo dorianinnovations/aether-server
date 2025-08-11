@@ -190,7 +190,7 @@ ${turnsText}`
       const facts = [];
       
       // Extract from Spotify data
-      const spotifyData = user.musicProfile?.spotify || user.socialProxy?.spotify;
+      const spotifyData = user.musicProfile?.spotify;
       if (spotifyData) {
         // Recent tracks for artist preferences
         if (spotifyData.recentTracks?.length > 0) {

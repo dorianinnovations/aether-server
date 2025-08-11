@@ -1036,7 +1036,7 @@ User Context Snapshot:
 Username: ${this.safeDisplayName(userContext?.username) || 'unknown'}
 Mood: ${userContext?.socialProxy?.mood || 'neutral'}
 Current Status: ${userContext?.socialProxy?.currentStatus || 'none'}
-Spotify Favorite Track: ${userContext?.socialProxy?.spotify?.currentTrack?.name || 'none'}
+Spotify Favorite Track: ${userContext?.musicProfile?.spotify?.currentTrack?.name || 'none'}
 
 Long-term memories are enclosed below — use them to weave meaningful, heartfelt replies.
 
@@ -1140,7 +1140,7 @@ Be the AI companion that helps them never miss updates from the artists and peop
       }
       
       // Music context - be more selective
-      const currentTrack = userContext.socialProxy?.spotify?.currentTrack;
+      const currentTrack = userContext.musicProfile?.spotify?.currentTrack;
       if (currentTrack?.name && Math.random() > 0.3) { // 70% chance to include
         contextParts.push(`- Recently listening to: ${currentTrack.name}`);
       }

@@ -297,7 +297,7 @@ router.get('/status', protect, async (req, res) => {
 
     res.json({
       success: true,
-      spotify: user.socialProxy?.spotify || { connected: false }
+      spotify: user.musicProfile?.spotify || { connected: false }
     });
   } catch (error) {
     log.error('Get Spotify status error:', error);
@@ -438,7 +438,7 @@ router.get('/live-status/:username', protect, async (req, res) => {
     }
 
     // Check if target user has Spotify connected
-    if (!targetUser.socialProxy?.spotify?.connected) {
+    if (!targetUser.musicProfile?.spotify?.connected) {
       return res.json({
         success: true,
         connected: false,
