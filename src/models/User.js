@@ -537,7 +537,7 @@ const UserSchema = new mongoose.Schema({
   // User tier system with GPT-5 usage tracking
   tier: {
     type: String,
-    enum: ['Standard', 'Legend', 'VIP'],
+    enum: ['free', 'Standard', 'Legend', 'VIP'],
     default: 'Standard'
   },
   
