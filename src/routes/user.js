@@ -8,6 +8,83 @@ import logger from "../utils/logger.js";
 
 const router = express.Router();
 
+// Get other user's public profile
+router.get("/:username/profile", protect, async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    // Find user by username
+    const user = await User.findOne({ username: username.toLowerCase() })
+      .select("-password -__v -musicProfile.spotify.accessToken -musicProfile.spotify.refreshToken");
+    
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        status: MESSAGES.ERROR,
+        error: `User '${username}' not found`
+      });
+    }
+    
+    // Get user badges
+    const badges = await UserBadge.getUserBadges(user._id);
+    const badgeData = badges.map(badge => badge.toAPIResponse());
+    
+    // Build public profile response
+    const publicProfile = {
+      email: user.email,
+      username: user.username,
+      displayName: user.displayName || user.name || user.username,
+      bio: user.bio || "",
+      location: user.location || "",
+      website: user.website || "",
+      socialLinks: {
+        instagram: user.socialLinks?.instagram || "",
+        x: user.socialLinks?.x || "",
+        spotify: user.socialLinks?.spotify || ""
+      },
+      badges: badgeData.filter(badge => badge.isVisible)
+    };
+    
+    // Add profile images if they exist
+    let profilePicture = null;
+    let bannerImage = null;
+    
+    if (user.profilePhoto?.url) {
+      profilePicture = user.profilePhoto.url;
+    }
+    
+    if (user.bannerImage?.url) {
+      bannerImage = user.bannerImage.url;
+    }
+    
+    // Build social profile with limited info
+    const socialProfile = {
+      currentStatus: user.musicProfile?.currentStatus || "",
+      friendsCount: user.friends?.length || 0,
+      followersCount: user.analytics?.listeningStats?.totalArtistsFollowed || 0,
+      spotify: {
+        connected: user.musicProfile?.spotify?.connected || false,
+        currentTrack: user.musicProfile?.spotify?.currentTrack || null
+      }
+    };
+    
+    res.json({
+      status: MESSAGES.SUCCESS,
+      data: {
+        user: publicProfile,
+        profilePicture,
+        bannerImage,
+        socialProfile
+      }
+    });
+    
+  } catch (err) {
+    logger.error("Error fetching public user profile:", err);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      status: MESSAGES.ERROR,
+      message: "Failed to fetch user profile"
+    });
+  }
+});
 
 // Get user profile
 router.get("/profile", protect, async (req, res) => {
