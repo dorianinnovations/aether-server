@@ -80,12 +80,20 @@ router.get('/callback', async (req, res) => {
       return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3000'}/profile?spotify_error=user_not_found`);
     }
 
+    log.info('Spotify callback - User before update:', {
+      userId: user._id,
+      hasMusicProfile: !!user.musicProfile,
+      musicProfileType: typeof user.musicProfile
+    });
+
     // Initialize musicProfile if it doesn't exist
     if (!user.musicProfile) {
       user.musicProfile = {};
+      log.info('Initialized empty musicProfile');
     }
     if (!user.musicProfile.spotify) {
       user.musicProfile.spotify = {};
+      log.info('Initialized empty spotify object');
     }
 
     user.musicProfile.spotify.connected = true;
