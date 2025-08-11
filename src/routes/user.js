@@ -13,14 +13,17 @@ router.get("/:username/profile", protect, async (req, res) => {
   try {
     const { username } = req.params;
     
-    // Find user by username
-    const user = await User.findOne({ username: username.toLowerCase() })
-      .select("-password -__v -musicProfile.spotify.accessToken -musicProfile.spotify.refreshToken");
+    // Find user by username - search with case insensitive username
+    const user = await User.findOne({ 
+      username: { $regex: new RegExp(`^${username}$`, 'i') }
+    }).select("-password -__v -musicProfile.spotify.accessToken -musicProfile.spotify.refreshToken");
     
     if (!user) {
+      logger.warn(`Profile request failed for username: ${username}`);
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         status: MESSAGES.ERROR,
-        error: `User '${username}' not found`
+        error: `User '${username}' not found`,
+        message: "The requested user profile does not exist"
       });
     }
     

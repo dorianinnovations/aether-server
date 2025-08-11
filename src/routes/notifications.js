@@ -15,7 +15,8 @@ const router = express.Router();
  */
 router.get('/stream', protect, (req, res) => {
   const userId = req.user?.id;
-  const correlationId = log.info("Request started");
+  const correlationId = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  log.info("Request started", { correlationId });
 
   if (!userId) {
     log.warn('Unauthorized notification stream request', { correlationId });
