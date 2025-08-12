@@ -103,13 +103,18 @@ class FreeNewsAggregator {
         ];
       }
 
-      // Add specific artist searches (top artists only to avoid hitting rate limits)
-      const topArtists = artistNames.slice(0, 3); // Limit to top 3 artists
+      // Add specific artist searches - FOCUS HEAVILY on user's actual artists
+      const topArtists = artistNames.slice(0, 5); // Increased to top 5 artists
       topArtists.forEach(artist => {
         if (artist && artist.length > 2) {
+          // Multiple variations to catch more content about user's artists
           searchQueries.push(`"${artist}"`);
+          searchQueries.push(`${artist} AND (music OR rap OR hip-hop)`);
         }
       });
+      
+      // Reduce generic searches to focus more on user's artists
+      searchQueries = searchQueries.slice(0, 8); // Limit total queries but prioritize artist-specific ones
 
       console.log(`[DEBUG] NewsAPI - Running ${searchQueries.length} queries`);
 
@@ -143,11 +148,11 @@ class FreeNewsAggregator {
                   this.matchesArtist(content, name.toLowerCase())
                 );
 
-                if (hasMusicContent || mentionedArtist) {
-                  const relevanceScore = this.calculateRelevance(content, mentionedArtist || 'music');
-                  
-                  // Boost NewsAPI content (it's premium!)
-                  const boostedScore = relevanceScore + 0.3;
+                // STRICT FILTERING: Prioritize user's actual artists heavily
+                if (mentionedArtist) {
+                  // User's artist mentioned - definitely include
+                  const relevanceScore = this.calculateRelevance(content, mentionedArtist);
+                  const boostedScore = relevanceScore + 0.5; // Higher boost for user's artists
 
                   allArticles.push({
                     id: `newsapi_${article.publishedAt}_${Math.random()}`,
@@ -159,8 +164,26 @@ class FreeNewsAggregator {
                     url: article.url,
                     imageUrl: article.urlToImage,
                     relevanceScore: boostedScore,
-                    artistName: mentionedArtist || 'Music',
+                    artistName: mentionedArtist,
                     isPremium: true // Mark as premium content
+                  });
+                } else if (hasMusicContent && contentBonus >= 0.4) {
+                  // Only include generic music content if it's VERY relevant to feed type
+                  const relevanceScore = this.calculateRelevance(content, 'music');
+                  const boostedScore = Math.min(relevanceScore + 0.2, 0.6); // Lower boost, capped score
+                  
+                  allArticles.push({
+                    id: `newsapi_${article.publishedAt}_${Math.random()}`,
+                    type: feedType,
+                    title: article.title,
+                    description: article.description || '',
+                    source: article.source?.name || 'NewsAPI',
+                    publishedAt: article.publishedAt,
+                    url: article.url,
+                    imageUrl: article.urlToImage,
+                    relevanceScore: boostedScore,
+                    artistName: 'Music',
+                    isPremium: true
                   });
                 }
               });
@@ -323,16 +346,22 @@ class FreeNewsAggregator {
           contentTypeMatch = this.containsMusicKeywords(content);
         }
         
-        // Include if artist match OR content type match
-        if (mentionedArtist || contentTypeMatch) {
+        // STRICT FILTERING: Require artist match for most content
+        // Only allow generic music content if it's VERY relevant to feed type
+        const shouldInclude = mentionedArtist || (contentTypeMatch && contentBonus >= 0.4);
+        
+        if (shouldInclude) {
           let relevanceScore = this.calculateRelevance(content, mentionedArtist || 'music');
           
-          // Boost score for exact artist matches
+          // MAJOR boost for exact artist matches (user's actual artists)
           if (mentionedArtist) {
-            relevanceScore += 0.5;
+            relevanceScore += 0.8; // Increased from 0.5
+          } else if (contentTypeMatch) {
+            // Generic content gets lower base score
+            relevanceScore = Math.max(0.3, relevanceScore);
           }
           
-          // Boost score for content type match
+          // Content type bonus
           relevanceScore += contentBonus;
           
           relevantArticles.push({
@@ -692,10 +721,12 @@ class FreeNewsAggregator {
         allContent.push(...redditContent);
       }
       
-      // LAST RESORT: General music content from RSS
+      // LAST RESORT: Only if absolutely no content found, use VERY targeted general content
       if (allContent.length === 0) {
-        console.log(`[DEBUG] Feed - No content found, getting general music RSS for ${feedType}`);
-        const generalContent = await this.getMusicNewsFromRSS(['hip-hop', 'rap', 'music', 'album', 'single'], feedType, limit);
+        console.log(`[DEBUG] Feed - No content found, getting targeted hip-hop RSS for ${feedType}`);
+        // Focus on hip-hop/rap only since user listens to rap
+        const genreTerms = ['hip-hop', 'rap', 'trap', 'drill']; // Removed generic 'music', 'album', 'single'
+        const generalContent = await this.getMusicNewsFromRSS(genreTerms, feedType, Math.min(limit, 5));
         allContent.push(...generalContent);
       }
       
