@@ -97,17 +97,21 @@ Just give me your honest thoughts on what I've sent.`;
     let userContext = null;
     let musicDiscoveryContext = null;
     if (userId) {
-      const user = await User.findById(userId).select('username musicProfile profile onboarding artistPreferences');
+      const user = await User.findById(userId).select('username displayName bio location musicProfile onboarding artistPreferences analytics tier friends');
       if (user) {
         // Use conversation message count for prompt classification
         const messageCount = conversation.messageCount || 0;
         
         userContext = {
           username: user.username,
+          displayName: user.displayName,
+          bio: user.bio,
+          location: user.location,
           musicProfile: user.musicProfile,
-          profile: user.profile,
           onboarding: user.onboarding,
-          artistPreferences: user.artistPreferences,
+          musicTaste: user.artistPreferences?.musicTaste,
+          analytics: user.analytics,
+          tier: user.tier,
           messageCount: messageCount,
           conversationId: conversation._id,
           userId: userId

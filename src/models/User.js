@@ -262,46 +262,6 @@ const UserSchema = new mongoose.Schema({
 
   // Artist Preferences & Music Profile - Core user music identity
   artistPreferences: {
-    // Followed artists with notification preferences
-    followedArtists: [{
-      artistId: {
-        type: String,
-        required: true
-      },
-      artistName: {
-        type: String,
-        required: true
-      },
-      artistSpotifyId: String,
-      followedAt: {
-        type: Date,
-        default: Date.now
-      },
-      notificationSettings: {
-        releases: {
-          type: Boolean,
-          default: true
-        },
-        news: {
-          type: Boolean,
-          default: true
-        },
-        tours: {
-          type: Boolean,
-          default: true
-        },
-        social: {
-          type: Boolean,
-          default: false
-        }
-      },
-      priority: {
-        type: String,
-        enum: ['low', 'medium', 'high'],
-        default: 'medium'
-      }
-    }],
-    
     // Music taste profile
     musicTaste: {
       favoriteGenres: [{
@@ -377,10 +337,6 @@ const UserSchema = new mongoose.Schema({
   analytics: {
     // Listening statistics
     listeningStats: {
-      totalArtistsFollowed: {
-        type: Number,
-        default: 0
-      },
       totalUpdatesReceived: {
         type: Number,
         default: 0

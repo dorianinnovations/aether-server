@@ -120,8 +120,6 @@ NODE_ENV=production
 
 ### Artists & Music
 - `GET /artists/search` - Search artists
-- `POST /artists/follow` - Follow artist
-- `GET /artists/following` - Get followed artists
 
 ### Analytics
 - `GET /analytics/overview` - User statistics
