@@ -17,14 +17,16 @@ class FreeNewsAggregator {
         url: 'https://hiphopdx.com/news',
         titleSelector: 'h3 a',
         linkSelector: 'h3 a',
-        dateSelector: '.date'
+        dateSelector: '.date',
+        contentSelector: '.post-content, .entry-content, article, .content-area'
       },
       {
         name: 'AllHipHop',
         url: 'https://allhiphop.com/news/',
         titleSelector: '.post-title a',
         linkSelector: '.post-title a', 
-        dateSelector: '.post-date'
+        dateSelector: '.post-date',
+        contentSelector: '.post-content, .entry-content, article, .content-area'
       }
     ];
 
@@ -34,6 +36,88 @@ class FreeNewsAggregator {
       'https://www.reddit.com/r/music/new.json?limit=25',
       'https://www.reddit.com/r/rap/new.json?limit=25'
     ];
+  }
+
+  /**
+   * Scrape full article content from a URL
+   */
+  async scrapeFullArticle(url, source) {
+    try {
+      log.info(`📄 Scraping full article from: ${url}`);
+      
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        timeout: 15000
+      });
+      
+      if (!response.ok) {
+        log.warn(`Failed to fetch article: ${response.status}`);
+        return null;
+      }
+      
+      const html = await response.text();
+      const $ = cheerio.load(html);
+      
+      // Try different content selectors
+      let content = '';
+      const selectors = [
+        source.contentSelector,
+        '.post-content p',
+        '.entry-content p', 
+        'article p',
+        '.content-area p',
+        '.main-content p',
+        'p'
+      ];
+      
+      for (const selector of selectors) {
+        const paragraphs = $(selector);
+        if (paragraphs.length > 2) { // Need substantial content
+          content = paragraphs.map((i, el) => $(el).text().trim())
+            .get()
+            .filter(text => text.length > 50) // Filter out short paragraphs
+            .slice(0, 8) // Take first 8 substantial paragraphs
+            .join('\n\n');
+          
+          if (content.length > 300) break; // Good enough content found
+        }
+      }
+      
+      // Clean up the content
+      content = content
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .replace(/\n\s*\n/g, '\n\n') // Clean up line breaks
+        .trim();
+      
+      // Extract image if available
+      let imageUrl = null;
+      const imgSelectors = [
+        'meta[property="og:image"]',
+        '.featured-image img',
+        '.post-image img',
+        'article img',
+        '.content img'
+      ];
+      
+      for (const imgSelector of imgSelectors) {
+        const imgSrc = $(imgSelector).first().attr('content') || $(imgSelector).first().attr('src');
+        if (imgSrc) {
+          imageUrl = imgSrc.startsWith('http') ? imgSrc : `${new URL(url).origin}${imgSrc}`;
+          break;
+        }
+      }
+      
+      return {
+        content: content.length > 100 ? content : null,
+        imageUrl
+      };
+      
+    } catch (error) {
+      log.error(`Error scraping article ${url}:`, error.message);
+      return null;
+    }
   }
 
   /**
@@ -60,38 +144,54 @@ class FreeNewsAggregator {
           const html = await response.text();
           const $ = cheerio.load(html);
           
+          // Collect article URLs first
+          const articleUrls = [];
           $(source.titleSelector).each((i, element) => {
-            if (i >= 20) return; // Limit per source
+            if (i >= 5) return; // Limit to 5 per source for full content scraping
             
             const $element = $(element);
             const title = $element.text().trim();
             const link = $element.attr('href');
             
             // Check if article mentions the artist
-            const content = title.toLowerCase();
-            if (content.includes(artistName.toLowerCase())) {
-              
+            const titleContent = title.toLowerCase();
+            if (titleContent.includes(artistName.toLowerCase())) {
               // Build full URL if relative
               const fullUrl = link?.startsWith('http') 
                 ? link 
                 : `${new URL(source.url).origin}${link}`;
               
-              allArticles.push({
-                id: `scrape_${Date.now()}_${Math.random()}`,
-                type: 'news',
-                title: title,
-                description: `Latest news about ${artistName} from ${source.name}`,
-                source: source.name,
-                publishedAt: new Date().toISOString(), // Use current time since date scraping is complex
-                url: fullUrl,
-                imageUrl: null,
-                relevanceScore: this.calculateRelevance(content, artistName),
-                isFresh: true, // Assume scraped content is fresh
-                artistName,
-                cost: 0 // FREE!
+              articleUrls.push({
+                title,
+                fullUrl,
+                relevanceScore: this.calculateRelevance(titleContent, artistName)
               });
             }
           });
+          
+          // Scrape full content for each article
+          for (const article of articleUrls) {
+            try {
+              const articleData = await this.scrapeFullArticle(article.fullUrl, source);
+              
+              allArticles.push({
+                id: `scrape_${Date.now()}_${Math.random()}`,
+                type: 'news',
+                title: article.title,
+                description: articleData?.content || `Latest news about ${artistName} from ${source.name}`,
+                source: source.name,
+                publishedAt: new Date().toISOString(),
+                url: article.fullUrl,
+                imageUrl: articleData?.imageUrl || null,
+                relevanceScore: article.relevanceScore,
+                isFresh: true,
+                artistName,
+                cost: 0 // FREE!
+              });
+            } catch (error) {
+              log.error(`Error processing article ${article.fullUrl}:`, error.message);
+            }
+          }
           
         } catch (error) {
           log.warn(`Scraping failed for ${source.name}:`, error.message);

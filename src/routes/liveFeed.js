@@ -12,12 +12,12 @@ import { log } from '../utils/logger.js';
 
 const router = express.Router();
 
-// Get live personalized feed
+// Get live personalized feed - LATEST: Recent activity + current favorites
 router.get('/timeline', protect, async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
-    log.info('🎯 Live feed request', { userId: req.user.id, limit });
+    log.info('🎯 Live feed request (LATEST)', { userId: req.user.id, limit });
 
     // Get user's music profile data
     const User = (await import('../models/User.js')).default;
@@ -32,28 +32,23 @@ router.get('/timeline', protect, async (req, res) => {
       });
     }
 
-    // Extract artists from musicProfile.spotify data
+    // LATEST strategy: Focus on recent listening + current top tracks
     const artistSet = new Set();
     const spotify = user.musicProfile.spotify;
     
-    // Add artists from recent tracks
-    spotify.recentTracks?.forEach(track => {
+    // Prioritize recent tracks (last 20 from up to 50 stored)
+    spotify.recentTracks?.slice(0, 20).forEach(track => {
       if (track.artist) artistSet.add(track.artist);
     });
     
-    // Add artists from top tracks
-    spotify.topTracks?.forEach(track => {
+    // Add current top tracks for context
+    spotify.topTracks?.slice(0, 15).forEach(track => {
       if (track.artist) artistSet.add(track.artist);
     });
     
-    // Add artists from grails (top tracks)
-    spotify.grails?.topTracks?.forEach(track => {
+    // Include some grails for breadth
+    spotify.grails?.topTracks?.slice(0, 10).forEach(track => {
       if (track.artist) artistSet.add(track.artist);
-    });
-    
-    // Add artists from grails (top albums)
-    spotify.grails?.topAlbums?.forEach(album => {
-      if (album.artist) artistSet.add(album.artist);
     });
     
     const followedArtists = Array.from(artistSet).map(artistName => ({
@@ -129,12 +124,12 @@ router.get('/timeline', protect, async (req, res) => {
   }
 });
 
-// Get live releases feed
+// Get live releases feed - RELEASES: Focus on grails and top artists
 router.get('/releases', protect, async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
-    log.info('🎵 Live releases request', { userId: req.user.id, limit });
+    log.info('🎵 Live releases request (GRAILS + TOP)', { userId: req.user.id, limit });
 
     // Get user's music profile data
     const User = (await import('../models/User.js')).default;
@@ -148,28 +143,27 @@ router.get('/releases', protect, async (req, res) => {
       });
     }
 
-    // Extract artists from musicProfile.spotify data
+    // RELEASES strategy: Prioritize grails and top tracks for new music
     const artistSet = new Set();
     const spotify = user.musicProfile.spotify;
     
-    // Add artists from recent tracks
-    spotify.recentTracks?.forEach(track => {
-      if (track.artist) artistSet.add(track.artist);
-    });
-    
-    // Add artists from top tracks
-    spotify.topTracks?.forEach(track => {
-      if (track.artist) artistSet.add(track.artist);
-    });
-    
-    // Add artists from grails (top tracks)
+    // Prioritize grails - your all-time favorites likely to drop new stuff you'll love
     spotify.grails?.topTracks?.forEach(track => {
       if (track.artist) artistSet.add(track.artist);
     });
     
-    // Add artists from grails (top albums)
     spotify.grails?.topAlbums?.forEach(album => {
       if (album.artist) artistSet.add(album.artist);
+    });
+    
+    // Add current top tracks
+    spotify.topTracks?.slice(0, 20).forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Include some recent tracks for breadth
+    spotify.recentTracks?.slice(0, 10).forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
     });
     
     const followedArtists = Array.from(artistSet).map(artistName => ({
@@ -229,12 +223,12 @@ router.get('/releases', protect, async (req, res) => {
   }
 });
 
-// Get live news feed
+// Get live news feed - DEEP CUTS: Focus on deeper listening history
 router.get('/news', protect, async (req, res) => {
   try {
     const { limit = 20 } = req.query;
 
-    log.info('📰 Live news request', { userId: req.user.id, limit });
+    log.info('📰 Live news request (DEEP CUTS)', { userId: req.user.id, limit });
 
     // Get user's music profile data
     const User = (await import('../models/User.js')).default;
@@ -248,28 +242,27 @@ router.get('/news', protect, async (req, res) => {
       });
     }
 
-    // Extract artists from musicProfile.spotify data
+    // DEEP CUTS strategy: Focus on older/deeper listening history and broader catalog
     const artistSet = new Set();
     const spotify = user.musicProfile.spotify;
     
-    // Add artists from recent tracks
-    spotify.recentTracks?.forEach(track => {
-      if (track.artist) artistSet.add(track.artist);
-    });
-    
-    // Add artists from top tracks
-    spotify.topTracks?.forEach(track => {
-      if (track.artist) artistSet.add(track.artist);
-    });
-    
-    // Add artists from grails (top tracks)
+    // Start with grails for depth
     spotify.grails?.topTracks?.forEach(track => {
       if (track.artist) artistSet.add(track.artist);
     });
     
-    // Add artists from grails (top albums)
     spotify.grails?.topAlbums?.forEach(album => {
       if (album.artist) artistSet.add(album.artist);
+    });
+    
+    // Add older recent tracks (skip recent 10, get tracks 10-40 for deeper cuts)
+    spotify.recentTracks?.slice(10, 40).forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add some top tracks for context
+    spotify.topTracks?.slice(10, 30).forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
     });
     
     const followedArtists = Array.from(artistSet).map(artistName => ({
@@ -328,7 +321,96 @@ router.get('/news', protect, async (req, res) => {
   }
 });
 
-// Get trending content
+// Add tours endpoint for comprehensive coverage
+router.get('/tours', protect, async (req, res) => {
+  try {
+    const { limit = 20 } = req.query;
+
+    log.info('🎤 Live tours request (CURRENT ROTATION)', { userId: req.user.id, limit });
+
+    // Get user's music profile data
+    const User = (await import('../models/User.js')).default;
+    const user = await User.findById(req.user.id);
+    
+    if (!user?.musicProfile?.spotify) {
+      return res.json({
+        success: true,
+        data: [],
+        message: 'Connect Spotify to see tours from your music'
+      });
+    }
+
+    // TOURS strategy: Current rotation + top tracks (artists you're actively listening to)
+    const artistSet = new Set();
+    const spotify = user.musicProfile.spotify;
+    
+    // Focus on very recent activity (last 15 tracks)
+    spotify.recentTracks?.slice(0, 15).forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add current top tracks
+    spotify.topTracks?.slice(0, 25).forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    const followedArtists = Array.from(artistSet).map(artistName => ({
+      name: artistName,
+      id: artistName.toLowerCase().replace(/\s+/g, '_')
+    }));
+    
+    if (followedArtists.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        message: 'No artists found in your Spotify data. Play some music to see tours'
+      });
+    }
+
+    // Choose aggregator based on cost settings
+    const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
+    
+    // Get live tours/events
+    const feedItems = useFreeMode 
+      ? await freeNewsAggregator.getPersonalizedFeedFree(followedArtists, 'tours', parseInt(limit))
+      : await liveNewsAggregator.getPersonalizedFeed(followedArtists, 'tours', parseInt(limit));
+
+    const transformedItems = feedItems.map(item => ({
+      id: item.id,
+      artistId: item.artistName,
+      artist: {
+        name: item.artistName,
+        image: item.imageUrl
+      },
+      type: 'tour',
+      title: item.title,
+      content: item.description,
+      url: item.url,
+      imageUrl: item.imageUrl,
+      publishedAt: item.publishedAt,
+      source: item.source
+    }));
+
+    res.json({
+      success: true,
+      data: transformedItems,
+      meta: {
+        isLive: true,
+        contentType: 'tours',
+        lastUpdated: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    log.error('Live tours error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to load live tours' 
+    });
+  }
+});
+
+// Get trending content - TRENDING: What's hot with your taste right now
 router.get('/trending', protect, async (req, res) => {
   try {
     const { limit = 15 } = req.query;
