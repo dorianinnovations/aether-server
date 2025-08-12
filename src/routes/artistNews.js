@@ -1,11 +1,11 @@
 /**
- * Simple Artist News - Clean implementation
- * Gets news for YOUR recently played artists only
+ * Multi-Source Artist News - Underground + Mainstream Coverage
+ * Gets news for YOUR recently played artists from multiple sources
  */
 
 import express from 'express';
 import { protect } from '../middleware/auth.js';
-import fetch from 'node-fetch';
+import multiSourceNews from '../services/multiSourceNews.js';
 import { log } from '../utils/logger.js';
 
 const router = express.Router();
@@ -45,68 +45,8 @@ router.get('/', protect, async (req, res) => {
       });
     }
 
-    // Search NewsAPI for each artist
-    const allNews = [];
-    
-    if (process.env.NEWSAPI_KEY) {
-      for (const artist of recentArtists.slice(0, 5)) { // Limit to 5 artists to avoid rate limits
-        try {
-          // STRICT search query - require artist name AND music context
-          const searchQuery = `"${artist}" AND (album OR song OR track OR rapper OR "new music" OR released OR dropped)`;
-          const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(searchQuery)}&sortBy=publishedAt&pageSize=2&domains=pitchfork.com,rollingstone.com,complex.com,xxlmag.com,hotnewhiphop.com,rap-up.com&apiKey=${process.env.NEWSAPI_KEY}`;
-          
-          const response = await fetch(url);
-          const data = await response.json();
-          
-          console.log(`[ARTIST-NEWS] Raw NewsAPI response for "${artist}":`, JSON.stringify(data, null, 2));
-          
-          // Store debug info for response
-          if (!req.debugInfo) req.debugInfo = [];
-          req.debugInfo.push({
-            artist: artist,
-            searchQuery: searchQuery,
-            articlesFound: data.articles?.length || 0,
-            articles: data.articles?.map(a => ({ title: a.title, description: a.description?.substring(0, 100) + '...' })) || []
-          });
-          
-          if (data.articles) {
-            // STRICT filtering - verify artist name is actually in title or description
-            const relevantArticles = data.articles.filter(article => {
-              const content = `${article.title} ${article.description}`.toLowerCase();
-              const artistLower = artist.toLowerCase();
-              
-              // Must contain the exact artist name (not just partial matches)
-              const hasArtistName = content.includes(artistLower);
-              
-              console.log(`[ARTIST-NEWS] Article "${article.title}" - Contains "${artist}": ${hasArtistName}`);
-              return hasArtistName;
-            });
-            
-            relevantArticles.forEach(article => {
-              allNews.push({
-                id: `news_${Date.now()}_${Math.random()}`,
-                artist: artist,
-                title: article.title,
-                description: article.description,
-                url: article.url,
-                imageUrl: article.urlToImage,
-                publishedAt: article.publishedAt,
-                source: article.source?.name
-              });
-            });
-          }
-          
-          console.log(`[ARTIST-NEWS] Found ${data.articles?.length || 0} articles for ${artist}`);
-        } catch (error) {
-          console.log(`[ARTIST-NEWS] Error searching for ${artist}:`, error.message);
-        }
-      }
-    }
-
-    // Sort by date and limit
-    const sortedNews = allNews
-      .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
-      .slice(0, parseInt(limit));
+    // Use multi-source news system
+    const sortedNews = await multiSourceNews.getArtistNews(recentArtists, parseInt(limit));
 
     console.log(`[ARTIST-NEWS] Returning ${sortedNews.length} articles for ${recentArtists.length} artists`);
 
@@ -118,7 +58,7 @@ router.get('/', protect, async (req, res) => {
         totalArticles: sortedNews.length,
         lastUpdated: new Date().toISOString()
       },
-      debug: req.debugInfo || []
+      sourcesUsed: ['Genius', 'Last.fm', 'HotNewHipHop', 'Reddit']
     });
 
   } catch (error) {
