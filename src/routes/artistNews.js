@@ -51,14 +51,29 @@ router.get('/', protect, async (req, res) => {
     if (process.env.NEWSAPI_KEY) {
       for (const artist of recentArtists.slice(0, 5)) { // Limit to 5 artists to avoid rate limits
         try {
-          const searchQuery = `"${artist}" AND music`;
-          const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(searchQuery)}&sortBy=publishedAt&pageSize=3&apiKey=${process.env.NEWSAPI_KEY}`;
+          // STRICT search query - require artist name AND music context
+          const searchQuery = `"${artist}" AND (album OR song OR track OR rapper OR "new music" OR released OR dropped)`;
+          const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(searchQuery)}&sortBy=publishedAt&pageSize=2&domains=pitchfork.com,rollingstone.com,complex.com,xxlmag.com,hotnewhiphop.com,rap-up.com&apiKey=${process.env.NEWSAPI_KEY}`;
           
           const response = await fetch(url);
           const data = await response.json();
           
+          console.log(`[ARTIST-NEWS] Raw NewsAPI response for "${artist}":`, JSON.stringify(data, null, 2));
+          
           if (data.articles) {
-            data.articles.forEach(article => {
+            // STRICT filtering - verify artist name is actually in title or description
+            const relevantArticles = data.articles.filter(article => {
+              const content = `${article.title} ${article.description}`.toLowerCase();
+              const artistLower = artist.toLowerCase();
+              
+              // Must contain the exact artist name (not just partial matches)
+              const hasArtistName = content.includes(artistLower);
+              
+              console.log(`[ARTIST-NEWS] Article "${article.title}" - Contains "${artist}": ${hasArtistName}`);
+              return hasArtistName;
+            });
+            
+            relevantArticles.forEach(article => {
               allNews.push({
                 id: `news_${Date.now()}_${Math.random()}`,
                 artist: artist,
