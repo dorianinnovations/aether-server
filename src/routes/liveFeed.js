@@ -23,6 +23,15 @@ router.get('/timeline', protect, async (req, res) => {
     const User = (await import('../models/User.js')).default;
     const user = await User.findById(req.user.id);
     
+    console.log('[DEBUG] User music profile check:', {
+      userId: req.user.id,
+      hasMusicProfile: !!user?.musicProfile,
+      hasSpotify: !!user?.musicProfile?.spotify,
+      spotifyKeys: user?.musicProfile?.spotify ? Object.keys(user.musicProfile.spotify) : [],
+      recentTracksCount: user?.musicProfile?.spotify?.recentTracks?.length || 0,
+      topTracksCount: user?.musicProfile?.spotify?.topTracks?.length || 0
+    });
+    
     if (!user?.musicProfile?.spotify) {
       return res.json({
         success: true,
@@ -56,6 +65,12 @@ router.get('/timeline', protect, async (req, res) => {
       id: artistName.toLowerCase().replace(/\s+/g, '_')
     }));
     
+    console.log('[DEBUG] Artist extraction result:', {
+      artistSetSize: artistSet.size,
+      followedArtistsCount: followedArtists.length,
+      sampleArtists: followedArtists.slice(0, 5).map(a => a.name)
+    });
+    
     if (followedArtists.length === 0) {
       return res.json({
         success: true,
@@ -73,6 +88,12 @@ router.get('/timeline', protect, async (req, res) => {
     const feedItems = useFreeMode 
       ? await freeNewsAggregator.getPersonalizedFeedFree(followedArtists, 'timeline', parseInt(limit))
       : await liveNewsAggregator.getPersonalizedFeed(followedArtists, 'timeline', parseInt(limit));
+
+    console.log('[DEBUG] News aggregator result:', {
+      feedItemsLength: feedItems?.length || 0,
+      feedItemsType: typeof feedItems,
+      firstItemKeys: feedItems?.[0] ? Object.keys(feedItems[0]) : []
+    });
 
     // Transform to match frontend expectations
     const transformedItems = feedItems.map(item => ({

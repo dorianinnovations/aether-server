@@ -216,11 +216,13 @@ class FreeNewsAggregator {
   async getTrendingFromReddit(artistNames, limit = 15) {
     try {
       log.info(`🆓 Fetching FREE Reddit trending for ${artistNames.length} artists`);
+      console.log(`[DEBUG] Reddit - Artist names:`, artistNames.slice(0, 5)); // Show first 5
       
       const allPosts = [];
       
       for (const redditUrl of this.redditSources) {
         try {
+          console.log(`[DEBUG] Reddit - Fetching from: ${redditUrl}`);
           const response = await fetch(redditUrl, {
             headers: {
               'User-Agent': 'Aether Music News Bot 1.0'
@@ -228,11 +230,17 @@ class FreeNewsAggregator {
             timeout: 10000
           });
           
-          if (!response.ok) continue;
+          console.log(`[DEBUG] Reddit - Response status: ${response.status}`);
+          if (!response.ok) {
+            console.log(`[DEBUG] Reddit - Failed response: ${response.statusText}`);
+            continue;
+          }
           
           const data = await response.json();
           const posts = data.data?.children || [];
+          console.log(`[DEBUG] Reddit - Found ${posts.length} posts from ${redditUrl}`);
           
+          let matchedPosts = 0;
           posts.forEach(post => {
             const postData = post.data;
             const title = postData.title;
@@ -245,6 +253,7 @@ class FreeNewsAggregator {
             );
             
             if (mentionedArtist || this.containsMusicKeywords(content)) {
+              matchedPosts++;
               allPosts.push({
                 id: `reddit_${postData.id}`,
                 type: 'trending',
@@ -262,15 +271,25 @@ class FreeNewsAggregator {
             }
           });
           
+          console.log(`[DEBUG] Reddit - Matched ${matchedPosts} posts from ${redditUrl}`);
+          
         } catch (error) {
+          console.log(`[DEBUG] Reddit - Error for ${redditUrl}:`, error.message);
           log.warn(`Reddit fetch failed for ${redditUrl}:`, error.message);
         }
       }
       
-      return allPosts
-        .filter(post => post.relevanceScore > 0.4)
+      console.log(`[DEBUG] Reddit - Total posts before filtering: ${allPosts.length}`);
+      
+      const filteredPosts = allPosts.filter(post => post.relevanceScore > 0.2); // Lowered from 0.4 to 0.2
+      console.log(`[DEBUG] Reddit - Posts after relevance filter (>0.2): ${filteredPosts.length}`);
+      
+      const finalPosts = filteredPosts
         .sort((a, b) => b.relevanceScore - a.relevanceScore)
         .slice(0, limit);
+        
+      console.log(`[DEBUG] Reddit - Final posts returned: ${finalPosts.length}`);
+      return finalPosts;
         
     } catch (error) {
       log.error('Free Reddit trending fetch failed:', error);
