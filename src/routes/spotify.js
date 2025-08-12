@@ -707,17 +707,15 @@ router.post('/grails', protect, async (req, res) => {
     const limitedTracks = topTracks.slice(0, 3);
     const limitedAlbums = topAlbums.slice(0, 3);
 
-    // Initialize musicProfile and spotify if needed
-    if (!user.musicProfile) user.musicProfile = {};
-    if (!user.musicProfile.spotify) user.musicProfile.spotify = {};
-    
-    // Save grails
-    user.musicProfile.spotify.grails = {
-      topTracks: limitedTracks,
-      topAlbums: limitedAlbums
-    };
-
-    await user.save();
+    // Update grails without triggering badge validation
+    await User.findByIdAndUpdate(req.user.id, {
+      $set: {
+        'musicProfile.spotify.grails': {
+          topTracks: limitedTracks,
+          topAlbums: limitedAlbums
+        }
+      }
+    }, { runValidators: false });
 
     log.info('User updated grails', { 
       userId: user._id, 
@@ -728,7 +726,10 @@ router.post('/grails', protect, async (req, res) => {
     res.json({
       success: true,
       message: 'Grails saved successfully',
-      grails: user.musicProfile.spotify.grails
+      grails: {
+        topTracks: limitedTracks,
+        topAlbums: limitedAlbums
+      }
     });
 
   } catch (error) {
