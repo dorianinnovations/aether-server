@@ -9,7 +9,7 @@ const router = express.Router();
 // Root route for basic server info
 router.get("/", (req, res) => {
   res.json({
-    service: "Aether AI Social Proxy Server",
+    service: "Aether",
     version: "1.0.0",
     status: "running",
     endpoints: {
@@ -187,5 +187,75 @@ function generateRecommendations(auditResults) {
   
   return recommendations;
 }
+
+// Admin endpoint to remove mock data
+router.delete("/admin/mock-data", async (req, res) => {
+  try {
+    const User = mongoose.model('User');
+    
+    // Find users with mock quick_ artists
+    const usersWithMockArtists = await User.find({
+      'artistPreferences.followedArtists.artistId': { $regex: /^quick_/ }
+    });
+
+    let totalRemoved = 0;
+
+    for (const user of usersWithMockArtists) {
+      const originalCount = user.artistPreferences.followedArtists.length;
+      
+      // Remove all quick_ prefixed artists
+      user.artistPreferences.followedArtists = user.artistPreferences.followedArtists.filter(
+        artist => !artist.artistId.startsWith('quick_')
+      );
+
+      const removedCount = originalCount - user.artistPreferences.followedArtists.length;
+      totalRemoved += removedCount;
+
+      // Reset analytics counts
+      if (user.analytics?.listeningStats) {
+        user.analytics.listeningStats.totalArtistsFollowed = user.artistPreferences.followedArtists.length;
+        user.analytics.listeningStats.totalUpdatesReceived = 0;
+        user.analytics.listeningStats.totalReleasesDiscovered = 0;
+        user.analytics.listeningStats.averageUpdatesPerDay = 0;
+      }
+
+      // Clear engagement data related to mock artists
+      if (user.analytics?.engagement) {
+        user.analytics.engagement.feedInteractions = [];
+        user.analytics.engagement.mostEngagedArtists = [];
+        user.analytics.engagement.discoveryPatterns = {
+          discoveriesThisMonth: 0,
+          discoveryStreak: 0
+        };
+      }
+
+      await user.save();
+    }
+
+    // Also remove any mock artists from the Artist collection
+    const Artist = mongoose.model('Artist');
+    const mockArtists = await Artist.deleteMany({
+      artistId: { $regex: /^quick_/ }
+    });
+
+    res.json({
+      success: true,
+      message: 'Mock data removed successfully',
+      data: {
+        usersUpdated: usersWithMockArtists.length,
+        mockArtistsRemoved: totalRemoved,
+        mockArtistDocumentsDeleted: mockArtists.deletedCount
+      }
+    });
+
+  } catch (error) {
+    log.error('Error removing mock data:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove mock data',
+      message: error.message
+    });
+  }
+});
 
 export default router; 
