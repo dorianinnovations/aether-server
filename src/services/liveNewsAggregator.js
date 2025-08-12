@@ -90,19 +90,37 @@ class LiveNewsAggregator {
         throw new Error(`SerpAPI failed: ${data.error}`);
       }
 
-      const articles = (data.news_results || []).map(article => ({
-        id: `news_${Date.now()}_${Math.random()}`,
-        type: 'news',
-        title: article.title,
-        description: article.snippet,
-        source: typeof article.source === 'object' ? article.source.name : article.source,
-        publishedAt: new Date(article.date).toISOString(),
-        url: article.link,
-        imageUrl: article.thumbnail,
-        relevanceScore: this.calculateRelevance(article, artistName),
-        isFresh: this.isRecent(article.date),
-        artistName
-      }));
+      // Debug logging to see what SerpAPI returns
+      if (data.news_results && data.news_results.length > 0) {
+        log.info('=== SERPAPI DEBUG ===');
+        log.info('First article structure:', JSON.stringify(data.news_results[0], null, 2));
+        log.info('Article keys:', Object.keys(data.news_results[0]));
+        log.info('====================');
+      }
+
+      const articles = (data.news_results || []).map(article => {
+        // Try multiple possible field names for description/content
+        const description = article.snippet || 
+                          article.summary || 
+                          article.description || 
+                          article.content ||
+                          article.excerpt ||
+                          (article.title ? `Read more about ${article.title} on ${typeof article.source === 'object' ? article.source.name : article.source}` : '');
+
+        return {
+          id: `news_${Date.now()}_${Math.random()}`,
+          type: 'news',
+          title: article.title,
+          description: description,
+          source: typeof article.source === 'object' ? article.source.name : article.source,
+          publishedAt: new Date(article.date).toISOString(),
+          url: article.link,
+          imageUrl: article.thumbnail,
+          relevanceScore: this.calculateRelevance(article, artistName),
+          isFresh: this.isRecent(article.date),
+          artistName
+        };
+      });
 
       // Sort by relevance and freshness
       return articles
@@ -196,19 +214,29 @@ class LiveNewsAggregator {
       const response = await fetch(`https://serpapi.com/search?${params.toString()}`);
       const data = await response.json();
 
-      const trendingArticles = (data.news_results || []).map(article => ({
-        id: `trending_${Date.now()}_${Math.random()}`,
-        type: 'trending',
-        title: article.title,
-        description: article.snippet,
-        source: typeof article.source === 'object' ? article.source.name : article.source,
-        publishedAt: new Date(article.date).toISOString(),
-        url: article.link,
-        imageUrl: article.thumbnail,
-        relevanceScore: this.calculateTrendingRelevance(article, artistNames),
-        isFresh: true,
-        artistName: this.extractArtistFromContent(article, artistNames)
-      }));
+      const trendingArticles = (data.news_results || []).map(article => {
+        // Try multiple possible field names for description/content
+        const description = article.snippet || 
+                          article.summary || 
+                          article.description || 
+                          article.content ||
+                          article.excerpt ||
+                          (article.title ? `Trending: ${article.title}` : '');
+
+        return {
+          id: `trending_${Date.now()}_${Math.random()}`,
+          type: 'trending',
+          title: article.title,
+          description: description,
+          source: typeof article.source === 'object' ? article.source.name : article.source,
+          publishedAt: new Date(article.date).toISOString(),
+          url: article.link,
+          imageUrl: article.thumbnail,
+          relevanceScore: this.calculateTrendingRelevance(article, artistNames),
+          isFresh: true,
+          artistName: this.extractArtistFromContent(article, artistNames)
+        };
+      });
 
       return trendingArticles
         .filter(article => article.relevanceScore > 0.4)

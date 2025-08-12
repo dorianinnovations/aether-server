@@ -6,6 +6,8 @@
 import express from 'express';
 import { protect } from '../middleware/auth.js';
 import liveNewsAggregator from '../services/liveNewsAggregator.js';
+import freeNewsAggregator from '../services/freeNewsAggregator.js';
+import { env } from '../config/environment.js';
 import { log } from '../utils/logger.js';
 
 const router = express.Router();
@@ -36,12 +38,14 @@ router.get('/timeline', protect, async (req, res) => {
       id: follow.artistId
     }));
 
-    // Get live aggregated content
-    const feedItems = await liveNewsAggregator.getPersonalizedFeed(
-      followedArtists, 
-      'timeline', 
-      parseInt(limit)
-    );
+    // Choose aggregator based on cost settings
+    const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
+    
+    log.info(`📰 Using ${useFreeMode ? 'FREE' : 'PAID'} news aggregator`);
+    
+    const feedItems = useFreeMode 
+      ? await freeNewsAggregator.getPersonalizedFeedFree(followedArtists, 'timeline', parseInt(limit))
+      : await liveNewsAggregator.getPersonalizedFeed(followedArtists, 'timeline', parseInt(limit));
 
     // Transform to match frontend expectations
     const transformedItems = feedItems.map(item => ({
@@ -117,12 +121,13 @@ router.get('/releases', protect, async (req, res) => {
       id: follow.artistId
     }));
 
+    // Choose aggregator based on cost settings
+    const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
+    
     // Get live releases
-    const feedItems = await liveNewsAggregator.getPersonalizedFeed(
-      followedArtists, 
-      'releases', 
-      parseInt(limit)
-    );
+    const feedItems = useFreeMode 
+      ? await freeNewsAggregator.getPersonalizedFeedFree(followedArtists, 'releases', parseInt(limit))
+      : await liveNewsAggregator.getPersonalizedFeed(followedArtists, 'releases', parseInt(limit));
 
     const transformedItems = feedItems.map(item => ({
       id: item.id,
@@ -184,12 +189,13 @@ router.get('/news', protect, async (req, res) => {
       id: follow.artistId
     }));
 
+    // Choose aggregator based on cost settings
+    const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
+    
     // Get live news
-    const feedItems = await liveNewsAggregator.getPersonalizedFeed(
-      followedArtists, 
-      'news', 
-      parseInt(limit)
-    );
+    const feedItems = useFreeMode 
+      ? await freeNewsAggregator.getPersonalizedFeedFree(followedArtists, 'news', parseInt(limit))
+      : await liveNewsAggregator.getPersonalizedFeed(followedArtists, 'news', parseInt(limit));
 
     const transformedItems = feedItems.map(item => ({
       id: item.id,
@@ -298,10 +304,12 @@ router.get('/trending', protect, async (req, res) => {
       }
     }
 
-    const trendingItems = await liveNewsAggregator.getTrendingContent(
-      artistNames, 
-      parseInt(limit)
-    );
+    // Choose aggregator based on cost settings
+    const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
+    
+    const trendingItems = useFreeMode 
+      ? await freeNewsAggregator.getTrendingFromReddit(artistNames, parseInt(limit))
+      : await liveNewsAggregator.getTrendingContent(artistNames, parseInt(limit));
 
     const transformedItems = trendingItems.map(item => ({
       id: item.id,
