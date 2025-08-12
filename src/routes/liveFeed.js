@@ -521,6 +521,64 @@ router.get('/trending', protect, async (req, res) => {
   }
 });
 
-// Follow artist endpoint removed - feed uses musicProfile.spotify data only
+// Get full article content for reading
+router.get('/article/:articleId', protect, async (req, res) => {
+  try {
+    const { articleId } = req.params;
+    const { url } = req.query;
+    
+    if (!url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Article URL is required'
+      });
+    }
+
+    log.info('📖 Full article content request', { 
+      userId: req.user.id, 
+      articleId,
+      url: url.substring(0, 100) + '...'
+    });
+
+    // Import the aggregator to use its scraping method
+    const freeNewsAggregator = (await import('../services/freeNewsAggregator.js')).default;
+    
+    // Scrape full article content
+    const fullContent = await freeNewsAggregator.scrapeFullArticleContent(url);
+    
+    if (fullContent && fullContent.content) {
+      res.json({
+        success: true,
+        data: {
+          articleId,
+          url,
+          content: fullContent.content,
+          imageUrl: fullContent.imageUrl,
+          scrapedAt: new Date().toISOString(),
+          wordCount: fullContent.content.split(' ').length
+        }
+      });
+    } else {
+      res.json({
+        success: true,
+        data: {
+          articleId,
+          url,
+          content: 'Full article content could not be extracted from this source.',
+          imageUrl: null,
+          scrapedAt: new Date().toISOString(),
+          wordCount: 0
+        }
+      });
+    }
+
+  } catch (error) {
+    log.error('Full article content error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load full article content'
+    });
+  }
+});
 
 export default router;

@@ -165,7 +165,8 @@ class FreeNewsAggregator {
                     imageUrl: article.urlToImage,
                     relevanceScore: boostedScore,
                     artistName: mentionedArtist,
-                    isPremium: true // Mark as premium content
+                    isPremium: true, // Mark as premium content
+                    needsFullContent: true // Flag for full content scraping
                   });
                 } else if (hasMusicContent && contentBonus >= 0.4) {
                   // Only include generic music content if it's VERY relevant to feed type
@@ -397,6 +398,115 @@ class FreeNewsAggregator {
     } catch (error) {
       console.log(`[DEBUG] RSS - Error in RSS news fetch:`, error.message);
       return [];
+    }
+  }
+
+  /**
+   * Enhanced full article content scraper for detailed reading
+   */
+  async scrapeFullArticleContent(url) {
+    try {
+      console.log(`[DEBUG] Full Article - Scraping: ${url}`);
+      
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+        },
+        timeout: 20000
+      });
+      
+      if (!response.ok) {
+        console.log(`[DEBUG] Full Article - Failed: ${response.status}`);
+        return null;
+      }
+      
+      const html = await response.text();
+      const $ = cheerio.load(html);
+      
+      // Remove unwanted elements
+      $('script, style, nav, header, footer, .advertisement, .ad, .social-share, .comments').remove();
+      
+      // Try multiple content selectors for different news sites
+      let fullContent = '';
+      const contentSelectors = [
+        // Common article selectors
+        'article .content, article .post-content, article .entry-content',
+        '.article-content, .story-content, .main-content',
+        '[class*="article-body"], [class*="story-body"]',
+        '.post-body, .entry-body, .content-body',
+        // Music site specific selectors
+        '.review-content, .news-content, .article-text',
+        // Fallback selectors
+        'main p, article p, .content p',
+        'p' // Last resort
+      ];
+      
+      for (const selector of contentSelectors) {
+        const elements = $(selector);
+        if (elements.length > 3) { // Need substantial content
+          fullContent = elements.map((i, el) => {
+            const text = $(el).text().trim();
+            return text.length > 30 ? text : null; // Filter short paragraphs
+          }).get().filter(Boolean).join('\n\n');
+          
+          if (fullContent.length > 500) { // Good amount of content found
+            break;
+          }
+        }
+      }
+      
+      // Clean up the content
+      fullContent = fullContent
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .replace(/\n\s*\n/g, '\n\n') // Clean up line breaks
+        .replace(/Advertisement\s*/gi, '') // Remove ad text
+        .replace(/Continue reading.*/gi, '') // Remove continue reading
+        .replace(/Sign up for.*/gi, '') // Remove signup prompts
+        .trim();
+      
+      // Extract better images
+      let imageUrl = null;
+      const imageSelectors = [
+        'meta[property="og:image"]',
+        'article img[src*="wp-content"]',
+        'article img[src*="upload"]',
+        '.featured-image img, .article-image img',
+        'img[alt*="' + url.split('/').pop() + '"]',
+        'article img'
+      ];
+      
+      for (const imgSelector of imageSelectors) {
+        const imgElement = $(imgSelector).first();
+        if (imgElement.length > 0) {
+          const src = imgElement.attr('content') || imgElement.attr('src');
+          if (src && (src.startsWith('http') || src.startsWith('//'))) {
+            imageUrl = src.startsWith('//') ? `https:${src}` : src;
+            if (src.startsWith('/')) {
+              const urlObj = new URL(url);
+              imageUrl = `${urlObj.origin}${src}`;
+            }
+            break;
+          }
+        }
+      }
+      
+      console.log(`[DEBUG] Full Article - Extracted ${fullContent.length} chars`);
+      
+      return {
+        content: fullContent.length > 200 ? fullContent : null,
+        imageUrl,
+        wordCount: fullContent.split(' ').length,
+        extractedAt: new Date().toISOString()
+      };
+      
+    } catch (error) {
+      console.log(`[DEBUG] Full Article - Error:`, error.message);
+      return null;
     }
   }
 
