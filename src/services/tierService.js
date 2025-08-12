@@ -29,6 +29,14 @@ class TierService {
         user.gpt5Usage.currentMonth = currentMonth;
         user.gpt5Usage.monthlyCount = 0;
         user.gpt5Usage.lastReset = new Date();
+        
+        // Clean up invalid badges before saving
+        if (user.badges && Array.isArray(user.badges)) {
+          user.badges = user.badges.filter(badge => 
+            badge && typeof badge === 'object' && badge.id && badge.badgeType
+          );
+        }
+        
         await user.save();
       }
 
@@ -82,6 +90,14 @@ class TierService {
       const user = await User.findById(userId);
       user.gpt5Usage.monthlyCount += 1;
       user.gpt5Usage.totalUsage += 1;
+      
+      // Clean up invalid badges before saving
+      if (user.badges && Array.isArray(user.badges)) {
+        user.badges = user.badges.filter(badge => 
+          badge && typeof badge === 'object' && badge.id && badge.badgeType
+        );
+      }
+      
       await user.save();
 
       const updatedTierInfo = await this.getUserTierInfo(userId);
@@ -238,6 +254,14 @@ class TierService {
 
       const oldTier = user.tier;
       user.tier = newTier;
+      
+      // Clean up invalid badges before saving
+      if (user.badges && Array.isArray(user.badges)) {
+        user.badges = user.badges.filter(badge => 
+          badge && typeof badge === 'object' && badge.id && badge.badgeType
+        );
+      }
+      
       await user.save();
 
       return {
