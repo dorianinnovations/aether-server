@@ -60,6 +60,15 @@ router.get('/', protect, async (req, res) => {
           
           console.log(`[ARTIST-NEWS] Raw NewsAPI response for "${artist}":`, JSON.stringify(data, null, 2));
           
+          // Store debug info for response
+          if (!req.debugInfo) req.debugInfo = [];
+          req.debugInfo.push({
+            artist: artist,
+            searchQuery: searchQuery,
+            articlesFound: data.articles?.length || 0,
+            articles: data.articles?.map(a => ({ title: a.title, description: a.description?.substring(0, 100) + '...' })) || []
+          });
+          
           if (data.articles) {
             // STRICT filtering - verify artist name is actually in title or description
             const relevantArticles = data.articles.filter(article => {
@@ -108,7 +117,8 @@ router.get('/', protect, async (req, res) => {
         artistsSearched: recentArtists,
         totalArticles: sortedNews.length,
         lastUpdated: new Date().toISOString()
-      }
+      },
+      debug: req.debugInfo || []
     });
 
   } catch (error) {
