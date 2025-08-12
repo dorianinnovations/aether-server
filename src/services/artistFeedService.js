@@ -69,7 +69,6 @@ class ArtistFeedService {
       const [updates, totalCount] = await Promise.all([
         ArtistUpdate.find(query)
           .sort({ 
-            'targeting.priority': this.getPrioritySort(),
             'targeting.relevanceScore': -1,
             'distribution.originalPublishDate': -1 
           })
