@@ -65,8 +65,8 @@ router.get('/timeline', protect, async (req, res) => {
       });
     }
 
-    // Choose aggregator based on cost settings
-    const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
+    // Force free mode to get full article content via scraping
+    const useFreeMode = true; // Always use free mode for full content scraping
     
     log.info(`📰 Using ${useFreeMode ? 'FREE' : 'PAID'} news aggregator`);
     
@@ -143,11 +143,16 @@ router.get('/releases', protect, async (req, res) => {
       });
     }
 
-    // RELEASES strategy: Prioritize grails and top tracks for new music
+    // RELEASES strategy: Focus heavily on top artists and grails
     const artistSet = new Set();
     const spotify = user.musicProfile.spotify;
     
-    // Prioritize grails - your all-time favorites likely to drop new stuff you'll love
+    // Prioritize top tracks first (your current heavy rotation)
+    spotify.topTracks?.forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add ALL grails - your all-time favorites
     spotify.grails?.topTracks?.forEach(track => {
       if (track.artist) artistSet.add(track.artist);
     });
@@ -156,13 +161,8 @@ router.get('/releases', protect, async (req, res) => {
       if (album.artist) artistSet.add(album.artist);
     });
     
-    // Add current top tracks
-    spotify.topTracks?.slice(0, 20).forEach(track => {
-      if (track.artist) artistSet.add(track.artist);
-    });
-    
-    // Include some recent tracks for breadth
-    spotify.recentTracks?.slice(0, 10).forEach(track => {
+    // Add recent tracks for current activity context
+    spotify.recentTracks?.forEach(track => {
       if (track.artist) artistSet.add(track.artist);
     });
     
@@ -179,8 +179,8 @@ router.get('/releases', protect, async (req, res) => {
       });
     }
 
-    // Choose aggregator based on cost settings
-    const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
+    // Force free mode to get full article content via scraping
+    const useFreeMode = true; // Always use free mode for full content scraping
     
     // Get live releases
     const feedItems = useFreeMode 
@@ -242,11 +242,11 @@ router.get('/news', protect, async (req, res) => {
       });
     }
 
-    // DEEP CUTS strategy: Focus on older/deeper listening history and broader catalog
+    // DEEP CUTS strategy: Broader catalog, older listening history
     const artistSet = new Set();
     const spotify = user.musicProfile.spotify;
     
-    // Start with grails for depth
+    // Start with ALL grails for maximum depth
     spotify.grails?.topTracks?.forEach(track => {
       if (track.artist) artistSet.add(track.artist);
     });
@@ -255,13 +255,13 @@ router.get('/news', protect, async (req, res) => {
       if (album.artist) artistSet.add(album.artist);
     });
     
-    // Add older recent tracks (skip recent 10, get tracks 10-40 for deeper cuts)
-    spotify.recentTracks?.slice(10, 40).forEach(track => {
+    // Add ALL recent tracks for full breadth
+    spotify.recentTracks?.forEach(track => {
       if (track.artist) artistSet.add(track.artist);
     });
     
-    // Add some top tracks for context
-    spotify.topTracks?.slice(10, 30).forEach(track => {
+    // Add ALL top tracks
+    spotify.topTracks?.forEach(track => {
       if (track.artist) artistSet.add(track.artist);
     });
     
@@ -278,8 +278,8 @@ router.get('/news', protect, async (req, res) => {
       });
     }
 
-    // Choose aggregator based on cost settings
-    const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
+    // Force free mode to get full article content via scraping
+    const useFreeMode = true; // Always use free mode for full content scraping
     
     // Get live news
     const feedItems = useFreeMode 
@@ -367,8 +367,8 @@ router.get('/tours', protect, async (req, res) => {
       });
     }
 
-    // Choose aggregator based on cost settings
-    const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
+    // Force free mode to get full article content via scraping
+    const useFreeMode = true; // Always use free mode for full content scraping
     
     // Get live tours/events
     const feedItems = useFreeMode 
@@ -456,8 +456,8 @@ router.get('/trending', protect, async (req, res) => {
       artistNames = ['hip-hop', 'rap', 'music']; // Use genre terms instead of specific artists
     }
 
-    // Choose aggregator based on cost settings
-    const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
+    // Force free mode to get full article content via scraping
+    const useFreeMode = true; // Always use free mode for full content scraping
     
     const trendingItems = useFreeMode 
       ? await freeNewsAggregator.getTrendingFromReddit(artistNames, parseInt(limit))
