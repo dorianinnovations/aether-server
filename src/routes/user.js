@@ -61,12 +61,49 @@ router.get("/:username/profile", protect, async (req, res) => {
       bannerImage = user.bannerImage.url;
     }
     
-    // Build social profile with limited info (no Spotify connection status for privacy)
+    // Get live Spotify data if user has Spotify connected
+    let spotifyData = {
+      connected: user.musicProfile?.spotify?.connected || false,
+      currentTrack: user.musicProfile?.spotify?.currentTrack || null
+    };
+
+    // If user has Spotify connected, try to get fresh live status
+    if (user.musicProfile?.spotify?.connected) {
+      try {
+        // Import spotify service to get live data
+        const spotifyService = await import('../services/spotifyService.js').then(m => m.default);
+        const updateSuccess = await spotifyService.updateUserSpotifyData(user);
+        
+        if (updateSuccess && user.musicProfile?.spotify?.currentTrack) {
+          const currentTrack = user.musicProfile.spotify.currentTrack;
+          spotifyData = {
+            connected: true,
+            currentTrack: {
+              name: currentTrack.name,
+              artist: currentTrack.artist,
+              album: currentTrack.album,
+              imageUrl: currentTrack.imageUrl,
+              spotifyUrl: currentTrack.spotifyUrl,
+              isPlaying: currentTrack.isPlaying,
+              progressMs: currentTrack.progressMs,
+              durationMs: currentTrack.durationMs,
+              lastPlayed: currentTrack.lastPlayed
+            }
+          };
+        }
+      } catch (error) {
+        logger.warn(`Failed to get live Spotify data for ${username}:`, error.message);
+        // Fall back to cached data
+      }
+    }
+
+    // Build social profile with live Spotify data
     const socialProfile = {
       currentStatus: user.musicProfile?.currentStatus || "",
       friendsCount: user.friends?.length || 0,
       followersCount: user.analytics?.listeningStats?.totalArtistsFollowed || 0,
-      grails: user.musicProfile?.spotify?.grails || { topTracks: [], topAlbums: [] }
+      grails: user.musicProfile?.spotify?.grails || { topTracks: [], topAlbums: [] },
+      spotify: spotifyData
     };
     
     res.json({
@@ -75,7 +112,8 @@ router.get("/:username/profile", protect, async (req, res) => {
         user: publicProfile,
         profilePicture,
         bannerImage,
-        socialProfile
+        socialProfile,
+        badges: badgeData.filter(badge => badge.isVisible)
       }
     });
     
