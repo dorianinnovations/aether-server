@@ -114,7 +114,17 @@ Just give me your honest thoughts on what I've sent.`;
           tier: user.tier,
           messageCount: messageCount,
           conversationId: conversation._id,
-          userId: userId
+          userId: userId,
+          
+          // Enhanced music context
+          currentTrack: user.musicProfile?.spotify?.currentTrack || null,
+          recentTracks: user.musicProfile?.spotify?.recentTracks || [],
+          topTracks: user.musicProfile?.spotify?.topTracks || [],
+          grails: user.musicProfile?.spotify?.grails || null,
+          musicPersonality: user.musicProfile?.musicPersonality || null,
+          discoveryStyle: user.musicProfile?.musicPersonality?.discoveryStyle || null,
+          recentMusicActivities: user.musicProfile?.musicPersonality?.recentMusicActivities || [],
+          musicInterests: user.musicProfile?.musicPersonality?.musicInterests || []
         };
 
         // Check for music discovery context
