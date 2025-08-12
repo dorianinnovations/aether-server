@@ -238,14 +238,28 @@ class MultiSourceNews {
       
       for (const sub of subreddits) {
         try {
-          const searchUrl = `https://www.reddit.com/r/${sub}/search.json?q=${encodeURIComponent(artistName)}&restrict_sr=1&sort=new&limit=3`;
+          const searchUrl = `https://old.reddit.com/r/${sub}/search.json?q=${encodeURIComponent(artistName)}&restrict_sr=1&sort=new&limit=3`;
           
           const response = await fetch(searchUrl, { 
             signal: controller.signal,
-            headers: { 'User-Agent': 'MusicBot/1.0' }
+            headers: { 
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+              'Accept': 'application/json, text/plain, */*',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
           });
           
-          const data = await response.json();
+          const responseText = await response.text();
+          
+          // Check if Reddit returned HTML instead of JSON (blocked)
+          if (responseText.startsWith('<')) {
+            console.log(`[MULTI-NEWS] Reddit r/${sub} returned HTML - likely blocked`);
+            continue;
+          }
+          
+          const data = JSON.parse(responseText);
           
           if (data.data?.children) {
             data.data.children.forEach(child => {
