@@ -480,9 +480,8 @@ router.get('/trending', protect, async (req, res) => {
     // Force free mode to get full article content via scraping
     const useFreeMode = true; // Always use free mode for full content scraping
     
-    const trendingItems = useFreeMode 
-      ? await freeNewsAggregator.getTrendingFromReddit(artistNames, parseInt(limit))
-      : await liveNewsAggregator.getTrendingContent(artistNames, parseInt(limit));
+    // REDDIT DISABLED - Only using NewsAPI for targeted content
+    const trendingItems = [];
 
     const transformedItems = trendingItems.map(item => ({
       id: item.id,

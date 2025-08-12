@@ -38,11 +38,11 @@ class FreeNewsAggregator {
         console.log(`[DEBUG] Feed - NewsAPI returned ${newsAPIContent.length} STRICT matches`);
       }
       
-      // PRIMARY: RSS feeds (most reliable free source) - STRICT filtering
-      console.log(`[DEBUG] Feed - Starting STRICT RSS aggregation for ${feedType}`);
-      const rssContent = await rssAggregator.getMusicNewsFromRSS(artistNames, feedType, Math.ceil(limit * 0.8));
-      allContent.push(...rssContent);
-      console.log(`[DEBUG] Feed - RSS returned ${rssContent.length} STRICT matches`);
+      // RSS DISABLED - Using NewsAPI only for truly relevant content
+      console.log(`[DEBUG] Feed - RSS DISABLED - Using NewsAPI only`);
+      // const rssContent = await rssAggregator.getMusicNewsFromRSS(artistNames, feedType, Math.ceil(limit * 0.8));
+      // allContent.push(...rssContent);
+      console.log(`[DEBUG] Feed - RSS skipped - 0 articles`);
       
       console.log(`[DEBUG] Feed - Total STRICT content: ${allContent.length}`);
       
