@@ -9,7 +9,7 @@ const UserBadgeSchema = new mongoose.Schema({
   },
   badgeType: {
     type: String,
-    enum: ['founder', 'og'],
+    enum: ['founder', 'og', 'vip', 'legendary', 'elite', 'premium', 'creator', 'innovator'],
     required: true
   },
   isVisible: {

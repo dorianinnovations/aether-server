@@ -73,7 +73,7 @@ router.post('/user/:userId/award', protect, async (req, res) => {
       });
     }
 
-    if (!['founder', 'og'].includes(badgeType)) {
+    if (!['founder', 'og', 'vip', 'legendary', 'elite', 'premium', 'creator', 'innovator'].includes(badgeType)) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         message: 'Invalid badge type'
@@ -257,7 +257,7 @@ router.post('/admin/bulk-award', protect, async (req, res) => {
       });
     }
 
-    if (!['founder', 'og'].includes(badgeType)) {
+    if (!['founder', 'og', 'vip', 'legendary', 'elite', 'premium', 'creator', 'innovator'].includes(badgeType)) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         message: 'Invalid badge type'

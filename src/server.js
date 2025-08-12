@@ -118,10 +118,10 @@ const initializeServer = async () => {
     app.use('/', chatRoutes);
     
     // Artist-focused routes
-    app.use('/artists', artistRoutes);
-    app.use('/feed', feedRoutes);
-    app.use('/live-feed', liveFeedRoutes);
-    app.use('/analytics', analyticsRoutes);
+    app.use('/api/artists', artistRoutes);
+    app.use('/api/feed', feedRoutes);
+    app.use('/api/live-feed', liveFeedRoutes);
+    app.use('/api/analytics', analyticsRoutes);
     
     // Friends functionality routes
     app.use('/friends', friendsRoutes);
