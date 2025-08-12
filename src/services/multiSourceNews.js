@@ -22,7 +22,7 @@ class MultiSourceNews {
    * MAIN ENTRY POINT - Get news for user's artists
    */
   async getArtistNews(artistNames, limit = 10) {
-    console.log(`[MULTI-NEWS] Starting search for ${artistNames.length} artists:`, artistNames);
+    console.log(`[MULTI-NEWS] Searching ${artistNames.length} artists:`, artistNames.slice(0, 3).join(', ') + (artistNames.length > 3 ? '...' : ''));
     
     const allNews = [];
     const startTime = Date.now();
@@ -49,7 +49,7 @@ class MultiSourceNews {
       .slice(0, limit);
     
     const duration = Date.now() - startTime;
-    console.log(`[MULTI-NEWS] Completed in ${duration}ms - ${sortedNews.length} articles from ${allNews.length} total`);
+    console.log(`[MULTI-NEWS] ✅ ${sortedNews.length} articles in ${duration}ms`);
     
     return sortedNews;
   }
@@ -61,7 +61,7 @@ class MultiSourceNews {
     const artistNews = [];
     const timeout = 3000; // 3 second timeout per source
     
-    console.log(`[MULTI-NEWS] Searching for: ${artistName}`);
+    // Reduced logging for cleaner output
     
     // TIER 1: Guaranteed API sources (parallel)
     const tier1Promises = [
@@ -76,22 +76,16 @@ class MultiSourceNews {
       const sourceName = ['Genius', 'Last.fm', 'HotNewHipHop'][index];
       if (result.status === 'fulfilled') {
         artistNews.push(...result.value);
-        console.log(`[MULTI-NEWS] ${sourceName}: ${result.value.length} articles for ${artistName}`);
+        if (result.value.length > 0) {
+          console.log(`[MULTI-NEWS] ${sourceName}: ${result.value.length} for ${artistName}`);
+        }
       } else {
-        console.log(`[MULTI-NEWS] ${sourceName} failed for ${artistName}:`, result.reason?.message);
+        console.log(`[MULTI-NEWS] ${sourceName} failed: ${result.reason?.message?.substring(0, 50)}`);
       }
     });
     
-    // TIER 2: Smart scraping (only if we found the artist in Tier 1)
-    if (artistNews.length > 0) {
-      try {
-        const redditNews = await this.searchReddit(artistName, 2000);
-        artistNews.push(...redditNews);
-        console.log(`[MULTI-NEWS] Reddit: ${redditNews.length} posts for ${artistName}`);
-      } catch (error) {
-        console.log(`[MULTI-NEWS] Reddit failed for ${artistName}:`, error.message);
-      }
-    }
+    // TIER 2: Reddit scraping disabled (rate limited/blocked)
+    // Can be re-enabled with official Reddit API ($0.24/1k calls)
     
     return artistNews;
   }
@@ -225,72 +219,7 @@ class MultiSourceNews {
     }
   }
 
-  /**
-   * TIER 2: Reddit scraping - Community buzz
-   */
-  async searchReddit(artistName, timeout = 2000) {
-    try {
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(), timeout);
-      
-      const subreddits = ['hiphopheads', 'Music', 'rap'];
-      const posts = [];
-      
-      for (const sub of subreddits) {
-        try {
-          const searchUrl = `https://old.reddit.com/r/${sub}/search.json?q=${encodeURIComponent(artistName)}&restrict_sr=1&sort=new&limit=3`;
-          
-          const response = await fetch(searchUrl, { 
-            signal: controller.signal,
-            headers: { 
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-              'Accept': 'application/json, text/plain, */*',
-              'Accept-Language': 'en-US,en;q=0.9',
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache'
-            }
-          });
-          
-          const responseText = await response.text();
-          
-          // Check if Reddit returned HTML instead of JSON (blocked)
-          if (responseText.startsWith('<')) {
-            console.log(`[MULTI-NEWS] Reddit r/${sub} returned HTML - likely blocked`);
-            continue;
-          }
-          
-          const data = JSON.parse(responseText);
-          
-          if (data.data?.children) {
-            data.data.children.forEach(child => {
-              const post = child.data;
-              const content = `${post.title} ${post.selftext}`.toLowerCase();
-              
-              if (content.includes(artistName.toLowerCase())) {
-                posts.push({
-                  id: `reddit_${post.id}`,
-                  artist: artistName,
-                  title: post.title,
-                  description: post.selftext?.substring(0, 150) + '...' || `Discussion about ${artistName}`,
-                  url: `https://reddit.com${post.permalink}`,
-                  imageUrl: post.thumbnail?.startsWith('http') ? post.thumbnail : null,
-                  publishedAt: new Date(post.created_utc * 1000).toISOString(),
-                  source: `r/${sub}`,
-                  type: 'discussion'
-                });
-              }
-            });
-          }
-        } catch (error) {
-          console.log(`[MULTI-NEWS] Reddit r/${sub} failed:`, error.message);
-        }
-      }
-      
-      return posts.slice(0, 2);
-    } catch (error) {
-      return [];
-    }
-  }
+  // Reddit scraping removed - can be re-enabled with official API
 
   /**
    * Remove duplicate articles based on title similarity

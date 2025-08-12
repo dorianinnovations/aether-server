@@ -58,7 +58,7 @@ router.get('/', protect, async (req, res) => {
         totalArticles: sortedNews.length,
         lastUpdated: new Date().toISOString()
       },
-      sourcesUsed: ['Genius', 'Last.fm', 'HotNewHipHop', 'Reddit']
+      sourcesUsed: ['Genius', 'Last.fm', 'HotNewHipHop']
     });
 
   } catch (error) {
