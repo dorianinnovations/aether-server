@@ -10,6 +10,10 @@ import { log } from '../utils/logger.js';
 
 class FreeNewsAggregator {
   constructor() {
+    // NewsAPI configuration
+    this.newsAPIKey = process.env.NEWSAPI_KEY; // Add to your .env file
+    this.newsAPIBaseUrl = 'https://newsapi.org/v2';
+    
     // RSS feeds - most reliable source
     this.rssSources = [
       {
@@ -60,6 +64,136 @@ class FreeNewsAggregator {
       'https://www.reddit.com/r/music/new.json?limit=25',
       'https://www.reddit.com/r/rap/new.json?limit=25'
     ];
+  }
+
+  /**
+   * Get music news from NewsAPI (PREMIUM SOURCE)
+   */
+  async getMusicNewsFromNewsAPI(artistNames, feedType = 'timeline', limit = 20) {
+    if (!this.newsAPIKey) {
+      console.log('[DEBUG] NewsAPI - No API key configured');
+      return [];
+    }
+
+    try {
+      console.log(`[DEBUG] NewsAPI - Fetching ${feedType} content for ${artistNames.length} artists`);
+      
+      const allArticles = [];
+      
+      // Build search queries for different content types
+      let searchQueries = [];
+      
+      if (feedType === 'releases') {
+        // Focus on release-related searches
+        searchQueries = [
+          '"new album" OR "new single" OR "just dropped" OR "released"',
+          '"album release" OR "music release" OR "debut album"'
+        ];
+      } else if (feedType === 'tours') {
+        // Focus on tour/concert searches
+        searchQueries = [
+          '"tour dates" OR "concert" OR "live show" OR "tour announcement"',
+          '"world tour" OR "festival" OR "tickets on sale"'
+        ];
+      } else {
+        // General music news
+        searchQueries = [
+          'music AND (hip-hop OR rap OR album OR single)',
+          '"music news" OR "music industry" OR "rapper" OR "artist"'
+        ];
+      }
+
+      // Add specific artist searches (top artists only to avoid hitting rate limits)
+      const topArtists = artistNames.slice(0, 3); // Limit to top 3 artists
+      topArtists.forEach(artist => {
+        if (artist && artist.length > 2) {
+          searchQueries.push(`"${artist}"`);
+        }
+      });
+
+      console.log(`[DEBUG] NewsAPI - Running ${searchQueries.length} queries`);
+
+      // Execute searches in parallel (but limit concurrent requests)
+      for (const query of searchQueries.slice(0, 5)) { // Max 5 queries to stay within limits
+        try {
+          const url = `${this.newsAPIBaseUrl}/everything?` + new URLSearchParams({
+            q: query,
+            language: 'en',
+            sortBy: 'publishedAt',
+            pageSize: Math.min(20, limit),
+            apiKey: this.newsAPIKey
+          });
+
+          const response = await fetch(url, {
+            headers: {
+              'User-Agent': 'Aether Music News Bot 1.0'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log(`[DEBUG] NewsAPI - Query "${query}" returned ${data.articles?.length || 0} articles`);
+            
+            if (data.articles) {
+              data.articles.forEach(article => {
+                // Filter for music relevance
+                const content = `${article.title} ${article.description}`.toLowerCase();
+                const hasMusicContent = this.containsMusicKeywords(content);
+                const mentionedArtist = artistNames.find(name => 
+                  this.matchesArtist(content, name.toLowerCase())
+                );
+
+                if (hasMusicContent || mentionedArtist) {
+                  const relevanceScore = this.calculateRelevance(content, mentionedArtist || 'music');
+                  
+                  // Boost NewsAPI content (it's premium!)
+                  const boostedScore = relevanceScore + 0.3;
+
+                  allArticles.push({
+                    id: `newsapi_${article.publishedAt}_${Math.random()}`,
+                    type: feedType,
+                    title: article.title,
+                    description: article.description || '',
+                    source: article.source?.name || 'NewsAPI',
+                    publishedAt: article.publishedAt,
+                    url: article.url,
+                    imageUrl: article.urlToImage,
+                    relevanceScore: boostedScore,
+                    artistName: mentionedArtist || 'Music',
+                    isPremium: true // Mark as premium content
+                  });
+                }
+              });
+            }
+          } else {
+            console.log(`[DEBUG] NewsAPI - Query failed: ${response.status} ${response.statusText}`);
+          }
+
+        } catch (queryError) {
+          console.log(`[DEBUG] NewsAPI - Query error:`, queryError.message);
+        }
+
+        // Small delay between requests to be respectful
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      // Remove duplicates and sort
+      const uniqueArticles = this.removeDuplicateArticles(allArticles);
+      const sortedArticles = uniqueArticles
+        .sort((a, b) => {
+          const scoreA = b.relevanceScore + this.getRecencyScore(b.publishedAt);
+          const scoreB = a.relevanceScore + this.getRecencyScore(a.publishedAt);
+          return scoreA - scoreB;
+        })
+        .slice(0, limit);
+
+      console.log(`[DEBUG] NewsAPI - Final articles returned: ${sortedArticles.length}`);
+      return sortedArticles;
+
+    } catch (error) {
+      console.log(`[DEBUG] NewsAPI - Error:`, error.message);
+      return [];
+    }
   }
 
   /**
@@ -523,9 +657,17 @@ class FreeNewsAggregator {
       const artistNames = followedArtists.map(artist => artist.name || artist.artistName);
       const allContent = [];
       
-      // PRIMARY: RSS feeds (most reliable)
+      // PREMIUM: NewsAPI (if available)
+      if (this.newsAPIKey) {
+        console.log(`[DEBUG] Feed - Starting NewsAPI premium aggregation for ${feedType}`);
+        const newsAPIContent = await this.getMusicNewsFromNewsAPI(artistNames, feedType, Math.ceil(limit * 0.5));
+        allContent.push(...newsAPIContent);
+        console.log(`[DEBUG] Feed - NewsAPI returned ${newsAPIContent.length} premium articles for ${feedType}`);
+      }
+      
+      // PRIMARY: RSS feeds (most reliable free source)
       console.log(`[DEBUG] Feed - Starting RSS news aggregation for ${feedType}`);
-      const rssContent = await this.getMusicNewsFromRSS(artistNames, feedType, Math.ceil(limit * 0.7));
+      const rssContent = await this.getMusicNewsFromRSS(artistNames, feedType, Math.ceil(limit * 0.4));
       allContent.push(...rssContent);
       console.log(`[DEBUG] Feed - RSS returned ${rssContent.length} articles for ${feedType}`);
       
