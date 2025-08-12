@@ -27,11 +27,34 @@ router.get("/:username/profile", protect, async (req, res) => {
       });
     }
     
-    // Get user badges
-    const badges = await UserBadge.getUserBadges(user._id);
-    const badgeData = badges.map(badge => badge.toAPIResponse());
+    // Get user badges from both systems (new UserBadge model and legacy User.badges)
+    const userBadges = await UserBadge.getUserBadges(user._id);
+    const userBadgeData = userBadges.map(badge => badge.toAPIResponse());
+    
+    // Also get legacy badges from User model
+    const legacyBadges = user.badges || [];
+    const legacyBadgeData = legacyBadges
+      .filter(badge => badge.isVisible !== false) // Include if isVisible is true or undefined
+      .map(badge => ({
+        id: badge.id || badge._id,
+        badgeType: badge.badgeType,
+        isVisible: badge.isVisible !== false
+      }));
+    
+    // Combine both badge systems
+    const badgeData = [...userBadgeData, ...legacyBadgeData];
+    
+    // Debug logging
+    logger.info(`Badge debug for ${username}:`, {
+      userBadgesCount: userBadgeData.length,
+      legacyBadgesCount: legacyBadgeData.length,
+      totalBadges: badgeData.length,
+      userBadges: userBadgeData,
+      legacyBadges: legacyBadgeData
+    });
     
     // Build public profile response
+    const visibleBadges = badgeData.filter(badge => badge.isVisible);
     const publicProfile = {
       email: user.email,
       username: user.username,
@@ -46,7 +69,7 @@ router.get("/:username/profile", protect, async (req, res) => {
         facebook: user.socialLinks?.facebook || "",
         website: user.socialLinks?.website || ""
       },
-      badges: badgeData.filter(badge => badge.isVisible)
+      badges: visibleBadges
     };
     
     // Add profile images if they exist
@@ -113,7 +136,7 @@ router.get("/:username/profile", protect, async (req, res) => {
         profilePicture,
         bannerImage,
         socialProfile,
-        badges: badgeData.filter(badge => badge.isVisible)
+        badges: visibleBadges
       }
     });
     
