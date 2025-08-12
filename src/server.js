@@ -27,6 +27,7 @@ import memoryRoutes from './routes/memory.js';
 // New artist-focused routes
 import artistRoutes from './routes/artists.js';
 import feedRoutes from './routes/feed.js';
+import liveFeedRoutes from './routes/liveFeed.js';
 import analyticsRoutes from './routes/analytics.js';
 
 // Friends functionality routes
@@ -119,6 +120,7 @@ const initializeServer = async () => {
     // Artist-focused routes
     app.use('/artists', artistRoutes);
     app.use('/feed', feedRoutes);
+    app.use('/live-feed', liveFeedRoutes);
     app.use('/analytics', analyticsRoutes);
     
     // Friends functionality routes
