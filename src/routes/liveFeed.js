@@ -243,9 +243,60 @@ router.get('/trending', protect, async (req, res) => {
     })) || [];
 
     // Get trending content (works even without followed artists)
-    const artistNames = followedArtists.length > 0 
-      ? followedArtists.map(a => a.name)
-      : ['Drake', 'Kendrick Lamar', 'J. Cole', 'Travis Scott', 'Future']; // Fallback popular artists
+    let artistNames = [];
+    
+    if (followedArtists.length > 0) {
+      artistNames = followedArtists.map(a => a.name);
+    } else {
+      // Try to get artists from user memories instead of hardcoded ones
+      try {
+        const UserMemory = (await import('../models/UserMemory.js')).default;
+        const artistMemories = await UserMemory.find({
+          user: req.user.id,
+          $or: [
+            { content: { $regex: /artist|musician|rapper|singer/, $options: 'i' } },
+            { content: { $regex: /Drake|Cole|Kendrick|Travis|Future|Eminem|Jay-Z|Kanye|Tyler|Mac Miller|Kid Cudi|Post Malone|Lil Wayne|Nas|Biggie|Tupac|Weeknd|Frank Ocean|Childish Gambino|Chance|Logic|Joyner|Big Sean|Pusha|Meek Mill|21 Savage|Lil Baby|DaBaby|Roddy|Polo G|Lil Durk|Pop Smoke|Juice WRLD|XXXTentacion|Ski Mask|Denzel Curry|JID|Earthgang|Ari Lennox|SZA|Summer Walker|Doja Cat|Megan Thee Stallion|Cardi B|City Girls|Saweetie|Bia|Rico Nasty|Rapsody|Noname|Smino|Saba|Vince Staples|Isaiah Rashad|Ab-Soul|ScHoolboy Q|Jay Rock|Danny Brown|Earl Sweatshirt|Action Bronson|Joey Badass|Capital Steez|Beast Coast|Flatbush Zombies|Underachievers|Pro Era/, $options: 'i' } }
+          ],
+          $and: [
+            { decayAt: { $exists: false } },
+            { decayAt: { $gt: new Date() } }
+          ]
+        }).limit(20).lean();
+        
+        // Extract artist names from memory content using simple parsing
+        const extractedArtists = [];
+        artistMemories.forEach(memory => {
+          const content = memory.content.toLowerCase();
+          // Look for common patterns like "I love Drake" or "listening to J. Cole"
+          const artistPatterns = [
+            /(?:love|like|listen to|fan of|favorite|enjoy)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*)/gi,
+            /([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*)\s+(?:is|was|makes|dropped|released)/gi
+          ];
+          
+          artistPatterns.forEach(pattern => {
+            const matches = content.match(pattern);
+            if (matches) {
+              matches.forEach(match => {
+                const artistName = match.replace(/(?:love|like|listen to|fan of|favorite|enjoy|is|was|makes|dropped|released)/gi, '').trim();
+                if (artistName.length > 2 && artistName.length < 50) {
+                  extractedArtists.push(artistName);
+                }
+              });
+            }
+          });
+        });
+        
+        artistNames = [...new Set(extractedArtists)].slice(0, 5); // Dedupe and limit
+        
+        if (artistNames.length === 0) {
+          log.info('No artists found in user memories or followed list - using general trending content');
+          artistNames = ['hip-hop', 'rap', 'music']; // Use genre terms instead of specific artists
+        }
+      } catch (error) {
+        log.error('Error extracting artists from memories:', error);
+        artistNames = ['hip-hop', 'rap', 'music']; // Safe fallback to genre terms
+      }
+    }
 
     const trendingItems = await liveNewsAggregator.getTrendingContent(
       artistNames, 
