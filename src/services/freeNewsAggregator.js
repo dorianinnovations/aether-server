@@ -168,7 +168,10 @@ class FreeNewsAggregator {
                     isPremium: true, // Mark as premium content
                     needsFullContent: true // Flag for full content scraping
                   });
-                } else if (hasMusicContent && contentBonus >= 0.4) {
+                } else if (hasMusicContent) {
+                  // Check if this meets the minimum relevance threshold
+                  const baseScore = this.calculateRelevance(content, 'music');
+                  if (baseScore < 0.4) return; // Skip low relevance content
                   // Only include generic music content if it's VERY relevant to feed type
                   const relevanceScore = this.calculateRelevance(content, 'music');
                   const boostedScore = Math.min(relevanceScore + 0.2, 0.6); // Lower boost, capped score
