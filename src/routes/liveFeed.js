@@ -19,24 +19,56 @@ router.get('/timeline', protect, async (req, res) => {
 
     log.info('🎯 Live feed request', { userId: req.user.id, limit });
 
-    // Get user's followed artists
+    // Get user's music profile data
     const User = (await import('../models/User.js')).default;
     const user = await User.findById(req.user.id);
     
-    if (!user?.artistPreferences?.followedArtists?.length) {
+    if (!user?.musicProfile?.spotify) {
       return res.json({
         success: true,
         data: [],
-        message: 'Follow some artists to see personalized content',
+        message: 'Connect Spotify to see personalized content',
         pagination: { currentPage: 1, totalPages: 0, totalItems: 0, hasNextPage: false }
       });
     }
 
-    // Extract artist names from user's follows
-    const followedArtists = user.artistPreferences.followedArtists.map(follow => ({
-      name: follow.artistName || follow.name,
-      id: follow.artistId
+    // Extract artists from musicProfile.spotify data
+    const artistSet = new Set();
+    const spotify = user.musicProfile.spotify;
+    
+    // Add artists from recent tracks
+    spotify.recentTracks?.forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add artists from top tracks
+    spotify.topTracks?.forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add artists from grails (top tracks)
+    spotify.grails?.topTracks?.forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add artists from grails (top albums)
+    spotify.grails?.topAlbums?.forEach(album => {
+      if (album.artist) artistSet.add(album.artist);
+    });
+    
+    const followedArtists = Array.from(artistSet).map(artistName => ({
+      name: artistName,
+      id: artistName.toLowerCase().replace(/\s+/g, '_')
     }));
+    
+    if (followedArtists.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        message: 'No artists found in your Spotify data. Play some music to see personalized content',
+        pagination: { currentPage: 1, totalPages: 0, totalItems: 0, hasNextPage: false }
+      });
+    }
 
     // Choose aggregator based on cost settings
     const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
@@ -104,22 +136,54 @@ router.get('/releases', protect, async (req, res) => {
 
     log.info('🎵 Live releases request', { userId: req.user.id, limit });
 
-    // Get user's followed artists
+    // Get user's music profile data
     const User = (await import('../models/User.js')).default;
     const user = await User.findById(req.user.id);
     
-    if (!user?.artistPreferences?.followedArtists?.length) {
+    if (!user?.musicProfile?.spotify) {
       return res.json({
         success: true,
         data: [],
-        message: 'Follow some artists to see their latest releases'
+        message: 'Connect Spotify to see releases from your music'
       });
     }
 
-    const followedArtists = user.artistPreferences.followedArtists.map(follow => ({
-      name: follow.artistName || follow.name,
-      id: follow.artistId
+    // Extract artists from musicProfile.spotify data
+    const artistSet = new Set();
+    const spotify = user.musicProfile.spotify;
+    
+    // Add artists from recent tracks
+    spotify.recentTracks?.forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add artists from top tracks
+    spotify.topTracks?.forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add artists from grails (top tracks)
+    spotify.grails?.topTracks?.forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add artists from grails (top albums)
+    spotify.grails?.topAlbums?.forEach(album => {
+      if (album.artist) artistSet.add(album.artist);
+    });
+    
+    const followedArtists = Array.from(artistSet).map(artistName => ({
+      name: artistName,
+      id: artistName.toLowerCase().replace(/\s+/g, '_')
     }));
+    
+    if (followedArtists.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        message: 'No artists found in your Spotify data. Play some music to see releases'
+      });
+    }
 
     // Choose aggregator based on cost settings
     const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
@@ -172,22 +236,54 @@ router.get('/news', protect, async (req, res) => {
 
     log.info('📰 Live news request', { userId: req.user.id, limit });
 
-    // Get user's followed artists
+    // Get user's music profile data
     const User = (await import('../models/User.js')).default;
     const user = await User.findById(req.user.id);
     
-    if (!user?.artistPreferences?.followedArtists?.length) {
+    if (!user?.musicProfile?.spotify) {
       return res.json({
         success: true,
         data: [],
-        message: 'Follow some artists to see news about them'
+        message: 'Connect Spotify to see news about your music'
       });
     }
 
-    const followedArtists = user.artistPreferences.followedArtists.map(follow => ({
-      name: follow.artistName || follow.name,
-      id: follow.artistId
+    // Extract artists from musicProfile.spotify data
+    const artistSet = new Set();
+    const spotify = user.musicProfile.spotify;
+    
+    // Add artists from recent tracks
+    spotify.recentTracks?.forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add artists from top tracks
+    spotify.topTracks?.forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add artists from grails (top tracks)
+    spotify.grails?.topTracks?.forEach(track => {
+      if (track.artist) artistSet.add(track.artist);
+    });
+    
+    // Add artists from grails (top albums)
+    spotify.grails?.topAlbums?.forEach(album => {
+      if (album.artist) artistSet.add(album.artist);
+    });
+    
+    const followedArtists = Array.from(artistSet).map(artistName => ({
+      name: artistName,
+      id: artistName.toLowerCase().replace(/\s+/g, '_')
     }));
+    
+    if (followedArtists.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        message: 'No artists found in your Spotify data. Play some music to see news'
+      });
+    }
 
     // Choose aggregator based on cost settings
     const useFreeMode = !env.SERPAPI_API_KEY || env.USE_FREE_NEWS_MODE === 'true';
@@ -239,69 +335,43 @@ router.get('/trending', protect, async (req, res) => {
 
     log.info('📈 Trending content request', { userId: req.user.id, limit });
 
-    // Get user's followed artists for context
+    // Get user's music profile data
     const User = (await import('../models/User.js')).default;
     const user = await User.findById(req.user.id);
-    
-    const followedArtists = user?.artistPreferences?.followedArtists?.map(follow => ({
-      name: follow.artistName || follow.name,
-      id: follow.artistId
-    })) || [];
 
-    // Get trending content (works even without followed artists)
+    // Extract artists from musicProfile.spotify data
     let artistNames = [];
     
-    if (followedArtists.length > 0) {
-      artistNames = followedArtists.map(a => a.name);
-    } else {
-      // Try to get artists from user memories instead of hardcoded ones
-      try {
-        const UserMemory = (await import('../models/UserMemory.js')).default;
-        const artistMemories = await UserMemory.find({
-          user: req.user.id,
-          $or: [
-            { content: { $regex: /artist|musician|rapper|singer/, $options: 'i' } },
-            { content: { $regex: /Drake|Cole|Kendrick|Travis|Future|Eminem|Jay-Z|Kanye|Tyler|Mac Miller|Kid Cudi|Post Malone|Lil Wayne|Nas|Biggie|Tupac|Weeknd|Frank Ocean|Childish Gambino|Chance|Logic|Joyner|Big Sean|Pusha|Meek Mill|21 Savage|Lil Baby|DaBaby|Roddy|Polo G|Lil Durk|Pop Smoke|Juice WRLD|XXXTentacion|Ski Mask|Denzel Curry|JID|Earthgang|Ari Lennox|SZA|Summer Walker|Doja Cat|Megan Thee Stallion|Cardi B|City Girls|Saweetie|Bia|Rico Nasty|Rapsody|Noname|Smino|Saba|Vince Staples|Isaiah Rashad|Ab-Soul|ScHoolboy Q|Jay Rock|Danny Brown|Earl Sweatshirt|Action Bronson|Joey Badass|Capital Steez|Beast Coast|Flatbush Zombies|Underachievers|Pro Era/, $options: 'i' } }
-          ],
-          $and: [
-            { decayAt: { $exists: false } },
-            { decayAt: { $gt: new Date() } }
-          ]
-        }).limit(20).lean();
-        
-        // Extract artist names from memory content using simple parsing
-        const extractedArtists = [];
-        artistMemories.forEach(memory => {
-          const content = memory.content.toLowerCase();
-          // Look for common patterns like "I love Drake" or "listening to J. Cole"
-          const artistPatterns = [
-            /(?:love|like|listen to|fan of|favorite|enjoy)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*)/gi,
-            /([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*)\s+(?:is|was|makes|dropped|released)/gi
-          ];
-          
-          artistPatterns.forEach(pattern => {
-            const matches = content.match(pattern);
-            if (matches) {
-              matches.forEach(match => {
-                const artistName = match.replace(/(?:love|like|listen to|fan of|favorite|enjoy|is|was|makes|dropped|released)/gi, '').trim();
-                if (artistName.length > 2 && artistName.length < 50) {
-                  extractedArtists.push(artistName);
-                }
-              });
-            }
-          });
-        });
-        
-        artistNames = [...new Set(extractedArtists)].slice(0, 5); // Dedupe and limit
-        
-        if (artistNames.length === 0) {
-          log.info('No artists found in user memories or followed list - using general trending content');
-          artistNames = ['hip-hop', 'rap', 'music']; // Use genre terms instead of specific artists
-        }
-      } catch (error) {
-        log.error('Error extracting artists from memories:', error);
-        artistNames = ['hip-hop', 'rap', 'music']; // Safe fallback to genre terms
-      }
+    if (user?.musicProfile?.spotify) {
+      const artistSet = new Set();
+      const spotify = user.musicProfile.spotify;
+      
+      // Add artists from recent tracks
+      spotify.recentTracks?.forEach(track => {
+        if (track.artist) artistSet.add(track.artist);
+      });
+      
+      // Add artists from top tracks
+      spotify.topTracks?.forEach(track => {
+        if (track.artist) artistSet.add(track.artist);
+      });
+      
+      // Add artists from grails (top tracks)
+      spotify.grails?.topTracks?.forEach(track => {
+        if (track.artist) artistSet.add(track.artist);
+      });
+      
+      // Add artists from grails (top albums)
+      spotify.grails?.topAlbums?.forEach(album => {
+        if (album.artist) artistSet.add(album.artist);
+      });
+      
+      artistNames = Array.from(artistSet);
+    }
+    
+    if (artistNames.length === 0) {
+      log.info('No artists found in Spotify data - using general trending content');
+      artistNames = ['hip-hop', 'rap', 'music']; // Use genre terms instead of specific artists
     }
 
     // Choose aggregator based on cost settings
@@ -348,57 +418,6 @@ router.get('/trending', protect, async (req, res) => {
   }
 });
 
-// Quick artist add for testing
-router.post('/follow-artist', protect, async (req, res) => {
-  try {
-    const { artistName } = req.body;
-
-    if (!artistName) {
-      return res.status(400).json({ error: 'Artist name is required' });
-    }
-
-    const User = (await import('../models/User.js')).default;
-    const user = await User.findById(req.user.id);
-
-    if (!user.artistPreferences) user.artistPreferences = {};
-    if (!user.artistPreferences.followedArtists) user.artistPreferences.followedArtists = [];
-
-    // Check if already following
-    const alreadyFollowing = user.artistPreferences.followedArtists.some(
-      follow => follow.artistName === artistName
-    );
-
-    if (alreadyFollowing) {
-      return res.json({ success: true, message: `Already following ${artistName}` });
-    }
-
-    // Add artist to followed list
-    user.artistPreferences.followedArtists.push({
-      artistId: `quick_${artistName.toLowerCase().replace(/\s+/g, '_')}`,
-      artistName,
-      followedAt: new Date(),
-      notificationSettings: {
-        releases: true,
-        news: true,
-        tours: true,
-        social: false
-      }
-    });
-
-    await user.save();
-
-    log.info(`User ${req.user.id} is now following ${artistName}`);
-
-    res.json({
-      success: true,
-      message: `Now following ${artistName}`,
-      followedArtists: user.artistPreferences.followedArtists.length
-    });
-
-  } catch (error) {
-    log.error('Follow artist error:', error);
-    res.status(500).json({ error: 'Failed to follow artist' });
-  }
-});
+// Follow artist endpoint removed - feed uses musicProfile.spotify data only
 
 export default router;
