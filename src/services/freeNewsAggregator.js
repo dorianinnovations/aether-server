@@ -153,9 +153,9 @@ class FreeNewsAggregator {
             const title = $element.text().trim();
             const link = $element.attr('href');
             
-            // Check if article mentions the artist
+            // Check if article mentions the artist (flexible matching)
             const titleContent = title.toLowerCase();
-            if (titleContent.includes(artistName.toLowerCase())) {
+            if (this.matchesArtist(titleContent, artistName.toLowerCase())) {
               // Build full URL if relative
               const fullUrl = link?.startsWith('http') 
                 ? link 
@@ -239,9 +239,9 @@ class FreeNewsAggregator {
             const selftext = postData.selftext || '';
             const content = `${title} ${selftext}`.toLowerCase();
             
-            // Check if post mentions any of the user's artists
+            // Check if post mentions any of the user's artists (flexible matching)
             const mentionedArtist = artistNames.find(artist => 
-              content.includes(artist.toLowerCase())
+              this.matchesArtist(content, artist.toLowerCase())
             );
             
             if (mentionedArtist || this.containsMusicKeywords(content)) {
@@ -346,9 +346,9 @@ class FreeNewsAggregator {
     const content = `${postData.title} ${postData.selftext}`.toLowerCase();
     let score = 0.3; // Base Reddit score
     
-    // Artist mentions
+    // Artist mentions (flexible matching)
     artistNames.forEach(name => {
-      if (content.includes(name.toLowerCase())) score += 0.4;
+      if (this.matchesArtist(content, name.toLowerCase())) score += 0.4;
     });
     
     // Engagement boost
@@ -359,8 +359,72 @@ class FreeNewsAggregator {
     return Math.min(score, 1.0);
   }
 
+  /**
+   * Flexible artist name matching with aliases and variations
+   */
+  matchesArtist(content, artistName) {
+    // Direct match
+    if (content.includes(artistName)) return true;
+    
+    // Common artist aliases and variations
+    const aliases = {
+      'drake': ['drizzy', '6 god', 'champagne papi', 'aubrey'],
+      'kanye west': ['ye', 'yeezy', 'yeezus'],
+      'jay-z': ['jay z', 'jigga', 'hov'],
+      'kendrick lamar': ['kdot', 'k dot', 'kung fu kenny'],
+      'travis scott': ['cactus jack', 'la flame'],
+      'future': ['future hendrix', 'pluto', 'freebandz'],
+      'lil wayne': ['weezy', 'tunechi', 'wayne'],
+      'nicki minaj': ['barbie', 'young money nicki'],
+      'cardi b': ['cardib', 'bardi'],
+      'megan thee stallion': ['hot girl meg', 'tina snow'],
+      'tyler the creator': ['tyler', 'odd future'],
+      'asap rocky': ['a$ap rocky', 'flacko'],
+      'j cole': ['jcole', 'dreamville'],
+      'childish gambino': ['donald glover', 'bino'],
+      'frank ocean': ['blonde frank', 'christopher breaux'],
+      'the weeknd': ['weeknd', 'abel tesfaye'],
+      'post malone': ['posty', 'stoney'],
+      '21 savage': ['savage', '21'],
+      'lil baby': ['baby', 'qc'],
+      'dababy': ['baby jesus', 'kirk'],
+      'playboi carti': ['carti', 'sir cartier'],
+      'young thug': ['thugger', 'slime', 'jeffery'],
+      'gunna': ['wunna', 'ysl gunna'],
+      'lil uzi vert': ['uzi', 'baby pluto'],
+      'juice wrld': ['juice', '999'],
+      'xxxtentacion': ['x', 'jahseh'],
+      'ski mask the slump god': ['ski mask', 'slump god'],
+      'denzel curry': ['zel', 'curry'],
+      'jid': ['j.i.d', 'dreamville jid'],
+      'vince staples': ['vince', 'long beach vince'],
+      'mac miller': ['mac', 'malcolm', 'swimming'],
+      'nipsey hussle': ['nip', 'hussle', 'marathon'],
+      'pop smoke': ['pop', 'woo'],
+      'king von': ['von', 'o block von'],
+      'polo g': ['polo', 'capalot'],
+      'rod wave': ['rod', 'heart break'],
+      'moneybagg yo': ['bagg', 'memphis yo'],
+      'est gee': ['gee', '5500 degrees'],
+      '42 dugg': ['dugg', 'cmg dugg'],
+      'rylo rodriguez': ['rylo', 'alabama rylo']
+    };
+    
+    // Check aliases for this artist
+    const artistAliases = aliases[artistName] || [];
+    return artistAliases.some(alias => content.includes(alias));
+  }
+
   containsMusicKeywords(content) {
-    const keywords = ['new album', 'new single', 'dropped', 'released', 'music video', 'collaboration', 'beef', 'diss track'];
+    const keywords = [
+      'new album', 'new single', 'dropped', 'released', 'music video', 'collaboration', 
+      'beef', 'diss track', 'mixtape', 'ep', 'deluxe', 'tracklist', 'features',
+      'snippet', 'leak', 'preview', 'teaser', 'announced', 'coming soon',
+      'tour dates', 'concert', 'festival', 'performance', 'live show',
+      'interview', 'freestyle', 'cypher', 'remix', 'cover', 'sample',
+      '[fresh]', '[leak]', '[snippet]', 'just dropped', 'out now',
+      'spotify', 'apple music', 'soundcloud', 'youtube music'
+    ];
     return keywords.some(keyword => content.includes(keyword));
   }
 
