@@ -61,5 +61,10 @@ const checkUserBadges = async (email) => {
   }
 };
 
-const email = process.argv[2] || 'isaiah.vq@gmail.com';
+const email = process.argv[2];
+if (!email) {
+  console.log('Usage: node scripts/check-user-badges.js <email>');
+  console.log('Example: node scripts/check-user-badges.js user@example.com');
+  process.exit(1);
+}
 checkUserBadges(email);

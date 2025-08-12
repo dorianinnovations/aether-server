@@ -68,7 +68,12 @@ const promoteUser = async (email, newTier) => {
   }
 };
 
-const email = process.argv[2] || 'isaiah.vq@gmail.com';
+const email = process.argv[2];
+if (!email) {
+  console.log('Usage: node scripts/promote-numina-user.js <email> [tier]');
+  console.log('Example: node scripts/promote-numina-user.js user@example.com VIP');
+  process.exit(1);
+}
 const tier = process.argv[3] || 'VIP';
 
 promoteUser(email, tier);

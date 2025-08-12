@@ -20,7 +20,7 @@ const checkCollections = async () => {
     collections.forEach(col => console.log(`- ${col.name}`));
     
     // Search in each collection for the email
-    const email = 'isaiah.vq@gmail.com';
+    const email = process.argv[2] || 'user@example.com';
     console.log(`\n🔍 Searching for "${email}" in all collections...\n`);
     
     for (const col of collections) {

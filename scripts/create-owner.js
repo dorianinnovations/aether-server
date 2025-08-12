@@ -57,7 +57,7 @@ const createOwnerUser = async () => {
     console.log('✅ Created user "owner" with VIP tier');
     console.log('👤 Username: owner');
     console.log('📧 Email: owner@aether.dev');
-    console.log('🔑 Password: owner123');
+    console.log('🔑 Password: [REDACTED]');
     console.log('🎉 Tier: VIP (Unlimited GPT-5)');
 
   } catch (error) {

@@ -134,5 +134,10 @@ const awardVIPBadges = async (email) => {
   }
 };
 
-const email = process.argv[2] || 'isaiah.vq@gmail.com';
+const email = process.argv[2];
+if (!email) {
+  console.log('Usage: node scripts/award-vip-badges.js <email>');
+  console.log('Example: node scripts/award-vip-badges.js user@example.com');
+  process.exit(1);
+}
 awardVIPBadges(email);

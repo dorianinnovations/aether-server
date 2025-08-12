@@ -24,7 +24,7 @@ const broadSearch = async () => {
     databases.databases.forEach(db => console.log(`- ${db.name} (${(db.sizeOnDisk / 1024 / 1024).toFixed(2)} MB)`));
     
     // Search in each database
-    const email = 'isaiah.vq@gmail.com';
+    const email = process.argv[2] || 'user@example.com';
     console.log(`\n🔍 Searching for "${email}" across all databases...\n`);
     
     for (const database of databases.databases) {
