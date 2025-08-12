@@ -258,7 +258,6 @@ const ArtistSchema = new mongoose.Schema({
 });
 
 // Indexes for efficient querying
-ArtistSchema.index({ artistId: 1 });
 ArtistSchema.index({ name: 'text', bio: 'text' });
 ArtistSchema.index({ genres: 1 });
 ArtistSchema.index({ 'popularity.spotifyPopularity': -1 });

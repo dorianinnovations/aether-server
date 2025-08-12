@@ -411,7 +411,6 @@ const UserAnalyticsSchema = new mongoose.Schema({
 });
 
 // Indexes for efficient querying
-UserAnalyticsSchema.index({ userId: 1 });
 UserAnalyticsSchema.index({ period: 1 });
 UserAnalyticsSchema.index({ 'dateRange.start': 1, 'dateRange.end': 1 });
 UserAnalyticsSchema.index({ userId: 1, period: 1 });
