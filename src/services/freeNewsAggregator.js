@@ -141,9 +141,9 @@ class FreeNewsAggregator {
   /**
    * Get music news from RSS feeds (PRIMARY SOURCE)
    */
-  async getMusicNewsFromRSS(artistNames, limit = 15) {
+  async getMusicNewsFromRSS(artistNames, feedType = 'timeline', limit = 15) {
     try {
-      console.log(`[DEBUG] RSS - Fetching news for ${artistNames.length} artists`);
+      console.log(`[DEBUG] RSS - Fetching ${feedType} content for ${artistNames.length} artists`);
       
       const allArticles = [];
       
@@ -161,31 +161,55 @@ class FreeNewsAggregator {
       
       console.log(`[DEBUG] RSS - Total articles before filtering: ${allArticles.length}`);
       
-      // Filter for artist mentions and music keywords
+      // Filter for artist mentions and content type
       const relevantArticles = [];
       allArticles.forEach(article => {
         const content = `${article.title} ${article.description}`.toLowerCase();
         
-        // Check for artist mentions
+        // Check for artist mentions (prioritize user's artists)
         const mentionedArtist = artistNames.find(name => 
           this.matchesArtist(content, name.toLowerCase())
         );
         
-        // Check for music keywords
-        const hasMusicKeywords = this.containsMusicKeywords(content);
+        // Content type filtering based on feedType
+        let contentTypeMatch = false;
+        let contentBonus = 0;
         
-        if (mentionedArtist || hasMusicKeywords) {
-          const relevanceScore = this.calculateRelevance(content, mentionedArtist || 'music');
+        if (feedType === 'releases') {
+          contentTypeMatch = this.containsReleaseKeywords(content);
+          contentBonus = contentTypeMatch ? 0.4 : 0;
+        } else if (feedType === 'tours') {
+          contentTypeMatch = this.containsTourKeywords(content);
+          contentBonus = contentTypeMatch ? 0.4 : 0;
+        } else if (feedType === 'news') {
+          contentTypeMatch = this.containsNewsKeywords(content);
+          contentBonus = contentTypeMatch ? 0.2 : 0;
+        } else {
+          // Timeline - broader match
+          contentTypeMatch = this.containsMusicKeywords(content);
+        }
+        
+        // Include if artist match OR content type match
+        if (mentionedArtist || contentTypeMatch) {
+          let relevanceScore = this.calculateRelevance(content, mentionedArtist || 'music');
+          
+          // Boost score for exact artist matches
+          if (mentionedArtist) {
+            relevanceScore += 0.5;
+          }
+          
+          // Boost score for content type match
+          relevanceScore += contentBonus;
           
           relevantArticles.push({
             id: `rss_${Date.now()}_${Math.random()}`,
-            type: article.type,
+            type: feedType,
             title: article.title,
             description: article.description,
             source: article.source,
             publishedAt: article.publishedAt,
             url: article.link,
-            imageUrl: null, // Could extract from RSS if available
+            imageUrl: this.extractImageFromRSS(article), 
             relevanceScore,
             artistName: mentionedArtist || 'Music',
             isFresh: true
@@ -193,7 +217,7 @@ class FreeNewsAggregator {
         }
       });
       
-      console.log(`[DEBUG] RSS - Relevant articles: ${relevantArticles.length}`);
+      console.log(`[DEBUG] RSS - Relevant ${feedType} articles: ${relevantArticles.length}`);
       
       // Sort by relevance and recency
       const sortedArticles = relevantArticles
@@ -204,7 +228,7 @@ class FreeNewsAggregator {
         })
         .slice(0, limit);
         
-      console.log(`[DEBUG] RSS - Final articles returned: ${sortedArticles.length}`);
+      console.log(`[DEBUG] RSS - Final ${feedType} articles returned: ${sortedArticles.length}`);
       return sortedArticles;
       
     } catch (error) {
@@ -500,10 +524,10 @@ class FreeNewsAggregator {
       const allContent = [];
       
       // PRIMARY: RSS feeds (most reliable)
-      console.log(`[DEBUG] Feed - Starting RSS news aggregation`);
-      const rssContent = await this.getMusicNewsFromRSS(artistNames, Math.ceil(limit * 0.7));
+      console.log(`[DEBUG] Feed - Starting RSS news aggregation for ${feedType}`);
+      const rssContent = await this.getMusicNewsFromRSS(artistNames, feedType, Math.ceil(limit * 0.7));
       allContent.push(...rssContent);
-      console.log(`[DEBUG] Feed - RSS returned ${rssContent.length} articles`);
+      console.log(`[DEBUG] Feed - RSS returned ${rssContent.length} articles for ${feedType}`);
       
       // SECONDARY: Direct web scraping if RSS doesn't provide enough
       if (allContent.length < limit / 2) {
@@ -528,8 +552,8 @@ class FreeNewsAggregator {
       
       // LAST RESORT: General music content from RSS
       if (allContent.length === 0) {
-        console.log(`[DEBUG] Feed - No content found, getting general music RSS`);
-        const generalContent = await this.getMusicNewsFromRSS(['hip-hop', 'rap', 'music', 'album', 'single'], limit);
+        console.log(`[DEBUG] Feed - No content found, getting general music RSS for ${feedType}`);
+        const generalContent = await this.getMusicNewsFromRSS(['hip-hop', 'rap', 'music', 'album', 'single'], feedType, limit);
         allContent.push(...generalContent);
       }
       
@@ -556,6 +580,24 @@ class FreeNewsAggregator {
   }
 
   /**
+   * Extract image from RSS article data
+   */
+  extractImageFromRSS(article) {
+    // Try to extract image from RSS content
+    if (article.description) {
+      const $ = cheerio.load(article.description);
+      const img = $('img').first();
+      if (img.length > 0) {
+        return img.attr('src');
+      }
+    }
+    
+    // TODO: Could implement more sophisticated image extraction
+    // For now, return null and images will be extracted later if needed
+    return null;
+  }
+
+  /**
    * Remove duplicate articles based on title similarity
    */
   removeDuplicateArticles(articles) {
@@ -579,16 +621,34 @@ class FreeNewsAggregator {
    */
   calculateRelevance(content, artistName) {
     const name = artistName.toLowerCase();
-    let score = 0;
+    let score = 0.2; // Base score for any music content
     
-    if (content.includes(name)) score += 0.8;
+    // Primary artist name match
+    if (content.includes(name)) {
+      score += 0.8;
+    }
     
-    const musicKeywords = ['album', 'single', 'song', 'track', 'music', 'rapper', 'hip-hop', 'rap'];
+    // Partial name matches (for multi-word artists)
+    const nameParts = name.split(/[\s,]+/).filter(part => part.length > 2);
+    nameParts.forEach(part => {
+      if (content.includes(part)) {
+        score += 0.3;
+      }
+    });
+    
+    // Music context keywords
+    const musicKeywords = ['album', 'single', 'song', 'track', 'music', 'rapper', 'hip-hop', 'rap', 'artist'];
     musicKeywords.forEach(keyword => {
       if (content.includes(keyword)) score += 0.1;
     });
     
-    return Math.min(score, 1.0);
+    // Engagement keywords
+    const engagementKeywords = ['new', 'released', 'dropped', 'announced', 'exclusive', 'breaking'];
+    engagementKeywords.forEach(keyword => {
+      if (content.includes(keyword)) score += 0.1;
+    });
+    
+    return Math.min(score, 1.5); // Allow higher scores for multiple matches
   }
 
   calculateRedditRelevance(postData, artistNames) {
@@ -672,7 +732,38 @@ class FreeNewsAggregator {
       'tour dates', 'concert', 'festival', 'performance', 'live show',
       'interview', 'freestyle', 'cypher', 'remix', 'cover', 'sample',
       '[fresh]', '[leak]', '[snippet]', 'just dropped', 'out now',
-      'spotify', 'apple music', 'soundcloud', 'youtube music'
+      'spotify', 'apple music', 'soundcloud', 'youtube music', 'rapper', 'artist',
+      'song', 'track', 'music', 'hip-hop', 'rap', 'album review'
+    ];
+    return keywords.some(keyword => content.includes(keyword));
+  }
+
+  containsReleaseKeywords(content) {
+    const keywords = [
+      'new album', 'new single', 'dropped', 'released', 'out now', 'just dropped',
+      'debut album', 'sophomore album', 'mixtape', 'ep', 'deluxe edition',
+      'tracklist', 'album cover', 'release date', 'streaming now', 'available now',
+      'surprise album', 'surprise drop', 'new music', 'latest album', 'latest single'
+    ];
+    return keywords.some(keyword => content.includes(keyword));
+  }
+
+  containsTourKeywords(content) {
+    const keywords = [
+      'tour', 'concert', 'live show', 'performance', 'tour dates', 'tickets',
+      'on tour', 'world tour', 'concert tour', 'live performance', 'festival',
+      'headlining', 'supporting act', 'venue', 'tour announcement', 'show dates',
+      'presale', 'general sale', 'sold out', 'concert venue', 'live music'
+    ];
+    return keywords.some(keyword => content.includes(keyword));
+  }
+
+  containsNewsKeywords(content) {
+    const keywords = [
+      'announces', 'announces new', 'confirms', 'reveals', 'interview', 'talks about',
+      'responds to', 'says', 'claims', 'beef', 'controversy', 'arrest', 'lawsuit',
+      'collaboration', 'partnership', 'signs with', 'label', 'record deal',
+      'breaking', 'exclusive', 'first time', 'never before', 'finally speaks'
     ];
     return keywords.some(keyword => content.includes(keyword));
   }
