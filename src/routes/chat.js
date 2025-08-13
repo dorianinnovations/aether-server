@@ -337,7 +337,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
               tool: 'webSearchTool',
               success: true,
               data: webSearchResults,
-              query: cleanMessage
+              query: processedMessage
             }],
             hasTools: true,
             toolsUsed: 1
