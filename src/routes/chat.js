@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import { protect } from '../middleware/auth.js';
 import { log } from '../utils/logger.js';
 import aiService from '../services/aiService.js';
@@ -15,7 +16,8 @@ const router = express.Router();
 // Artist-focused AI chat endpoint - handles both text and files
 router.post('/chat', protect, uploadFiles, validateUploadedFiles, handleMulterError, async (req, res) => {
   const startTime = Date.now();
-  const correlationId = log.info("POST /chat", { userId: req.user?.id });
+  const correlationId = crypto.randomUUID();
+  log.info("POST /chat", { userId: req.user?.id, correlationId });
   // Chat request timing - reduced logging
   
   try {
