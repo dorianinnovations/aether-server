@@ -218,17 +218,26 @@ router.get('/list', protect, async (req, res) => {
       });
     }
     
-    const friendsList = user.friends.map(friendship => ({
-      username: friendship.user.username,
-      friendId: friendship.user.username, // For backward compatibility
-      name: friendship.user.name,
-      avatar: friendship.user.profilePhoto?.url || null,
-      addedAt: friendship.addedAt,
-      topInterests: friendship.user.profile?.interests
-        ?.filter(i => i.confidence > 0.6)
-        ?.slice(0, 3)
-        ?.map(i => i.topic) || []
-    }));
+    // Check for and log null/invalid friendships
+    const invalidFriendships = user.friends.filter(friendship => !friendship.user || !friendship.user.username);
+    if (invalidFriendships.length > 0) {
+      console.warn(`Found ${invalidFriendships.length} invalid friendships for user ${userId}`, 
+        invalidFriendships.map(f => f._id));
+    }
+    
+    const friendsList = user.friends
+      .filter(friendship => friendship.user && friendship.user.username) // Filter out null/invalid users
+      .map(friendship => ({
+        username: friendship.user.username,
+        friendId: friendship.user.username, // For backward compatibility
+        name: friendship.user.name,
+        avatar: friendship.user.profilePhoto?.url || null,
+        addedAt: friendship.addedAt,
+        topInterests: friendship.user.profile?.interests
+          ?.filter(i => i.confidence > 0.6)
+          ?.slice(0, 3)
+          ?.map(i => i.topic) || []
+      }));
     
     res.json({
       success: true,
