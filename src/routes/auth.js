@@ -5,7 +5,7 @@ import { signToken, protect, protectRefresh } from "../middleware/auth.js";
 import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG as _SECURITY_CONFIG } from "../config/constants.js";
 import { log } from "../utils/logger.js";
 // import { catchAsync, ValidationError, AuthenticationError } from "../utils/index.js";
-// import emailService from "../services/emailService.js"; // Removed - no email service
+import emailService from "../services/emailService.js";
 
 const router = express.Router();
 
@@ -118,6 +118,26 @@ router.post(
 
       const user = await User.create(userData);
       log.info('User registration successful', { email: user.email, username: user.username });
+
+      // Send welcome email (non-blocking)
+      emailService.sendWelcomeEmail(user.email, user.name || user.username)
+        .then(emailResult => {
+          if (emailResult.success) {
+            log.info('Welcome email sent successfully', { 
+              email: user.email, 
+              service: emailResult.service,
+              messageId: emailResult.messageId 
+            });
+          } else {
+            log.warn('Welcome email failed to send', { 
+              email: user.email, 
+              error: emailResult.error 
+            });
+          }
+        })
+        .catch(emailError => {
+          log.error('Welcome email error', emailError, { email: user.email });
+        });
 
       res.status(HTTP_STATUS.CREATED).json({
         status: MESSAGES.SUCCESS,

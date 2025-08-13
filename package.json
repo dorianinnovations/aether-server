@@ -18,6 +18,7 @@
     "optimize-db": "node scripts/optimizeDatabase.js",
     "test-performance": "node scripts/performanceTest.js",
     "test-optimizations": "node scripts/testOptimizations.js",
+    "test:email": "node scripts/test-email-service.js",
     "lint": "eslint src/ --quiet",
     "lint:errors": "eslint src/ tests/ --quiet --max-warnings 0"
   },
@@ -38,6 +39,7 @@
     "multer": "^2.0.1",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
+    "nodemailer": "^6.10.1",
     "sharp": "^0.34.3",
     "socket.io": "^4.8.1",
     "uuid": "^11.1.0",

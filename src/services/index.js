@@ -8,3 +8,4 @@ export { default as llmService } from './llmService.js';
 export { default as profileAnalyzer } from './profileAnalyzer.js';
 export { default as conversationService } from './conversationService.js';
 export { default as spotifyService } from './spotifyService.js';
+export { default as emailService } from './emailService.js';
