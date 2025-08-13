@@ -125,6 +125,8 @@ router.post('/checkout', protect, async (req, res) => {
     const { tier } = req.body;
     const userId = req.user.id;
 
+    log.info('Checkout request received', { userId, tier });
+
     if (!['Legend', 'VIP'].includes(tier)) {
       return res.status(400).json({ error: 'Invalid tier' });
     }
@@ -137,13 +139,27 @@ router.post('/checkout', protect, async (req, res) => {
       `${process.env.FRONTEND_URL}/subscription/cancel`
     );
 
+    log.info('Checkout session created successfully', { 
+      userId, 
+      tier, 
+      sessionId: session.id 
+    });
+
     res.json({ 
       checkoutUrl: session.url,
       sessionId: session.id 
     });
   } catch (error) {
-    log.error('Error creating checkout session', error, { userId: req.user?.id });
-    res.status(500).json({ error: 'Failed to create checkout session' });
+    log.error('Error creating checkout session', error, { 
+      userId: req.user?.id,
+      tier: req.body?.tier,
+      errorMessage: error.message,
+      errorStack: error.stack
+    });
+    res.status(500).json({ 
+      error: 'Failed to create checkout session',
+      details: error.message 
+    });
   }
 });
 
