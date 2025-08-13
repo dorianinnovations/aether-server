@@ -57,18 +57,6 @@ router.post('/chat', protect, uploadFiles, validateUploadedFiles, handleMulterEr
       });
     }
 
-    // Temporary monitoring log for usage tracking verification
-    console.log(`📊 Response tracked: ${responseCheck.usageInfo.used}/${responseCheck.usageInfo.limit} (${responseCheck.usageInfo.tier}) - Period: ${responseCheck.usageInfo.periodStart} to ${responseCheck.usageInfo.periodEnd}`);
-    log.info('Response usage tracked', { 
-      correlationId,
-      userId,
-      tier: responseCheck.usageInfo.tier,
-      used: responseCheck.usageInfo.used,
-      limit: responseCheck.usageInfo.limit,
-      remaining: responseCheck.usageInfo.remaining,
-      periodStart: responseCheck.usageInfo.periodStart,
-      periodEnd: responseCheck.usageInfo.periodEnd
-    });
     
     // Process uploaded files if any
     let processedFiles = [];
