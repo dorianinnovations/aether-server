@@ -267,15 +267,15 @@ Use this current music information to provide up-to-date recommendations and dis
               const isSongInfoRequest = /(?:search statistics about|information about|stats about|facts about).*(?:song|track|music|artist|album)/i.test(cleanMessage);
               
               if (isSongInfoRequest) {
-                // For song info requests, set webSearchResults AND add search context to message
-                webSearchResults = searchResult;
+                // For song info requests, don't set webSearchResults to avoid streaming errors
+                // Instead, just add the search context to the message for AI processing
                 const searchContext = `Web search results for song information:
 ${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
 
 Based on this information, provide a conversational response about the song with interesting facts, chart performance, background, or other relevant details. Do not mention that you searched the web - just provide the information naturally.`;
                 
                 enhancedMessage = `${processedMessage}\n\n${searchContext}`;
-                log.info('Song info request detected - search results added to context and sent to frontend', { correlationId });
+                log.info('Song info request detected - search results added to context only', { correlationId });
               } else {
                 // For other searches, use the original behavior
                 webSearchResults = searchResult;
