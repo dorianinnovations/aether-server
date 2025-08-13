@@ -39,7 +39,9 @@ class QueryClassifier {
       /(follow|track|updates).*(artist|musician)/,
       /(my music|taste|preferences|stats|habits)/,
       /(currently listening|playing|on repeat)/,
-      /(concert|show|festival|live)/
+      /(concert|show|festival|live)/,
+      /(current track|what.*listening|what.*playing)/,
+      /(access.*data.*me|my data)/  // Catch music-related data queries
     ];
 
     // Info about Aether
