@@ -129,7 +129,7 @@ class EmailService {
     
     const emailData = {
       to: userEmail,
-      subject: 'Welcome to Aether - Your AI Journey Begins! ✨',
+      subject: 'Welcome to Aether - Your AI Journey Begins',
       html: this.getWelcomeEmailTemplate(userName),
       text: this.getWelcomeEmailText(userName)
     };
@@ -363,7 +363,7 @@ class EmailService {
     
     const emailData = {
       to: userEmail,
-      subject: '🚀 Welcome to Aether Premium - Unlock Your Full Potential!',
+      subject: 'Welcome to Aether Premium - Unlock Your Full Potential',
       html: this.getPremiumWelcomeEmailTemplate(userName, subscriptionDetails),
       text: this.getPremiumWelcomeEmailText(userName, subscriptionDetails)
     };
@@ -482,9 +482,7 @@ class EmailService {
       <body style="margin: 0; padding: 0; font-family: 'Mozilla Text', Arial, sans-serif;">
           <div class="container" style="width: 100%; max-width: 600px; margin: 0 auto; background: #ffffff; font-family: 'Mozilla Text', sans-serif; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); letter-spacing: -0.2px;">
             <div class="header" style="background: #f8f9fa; text-align: center; padding: 40px 30px; border-bottom: 1px solid #e9ecef; position: relative; border-radius: 12px 12px 0 0;">
-              <img class="logo-light" src="https://i.imgur.com/aether-light.png" alt="AetheR" style="height: 50px; border-radius: 8px; display: block; margin: 0 auto;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
-              <img class="logo-dark" src="https://i.imgur.com/aether-dark.png" alt="AetheR" style="height: 50px; border-radius: 8px; display: none; margin: 0 auto;" onerror="this.style.display='none';" />
-              <div style="display: none; height: 50px; line-height: 50px; font-size: 24px; font-weight: bold; color: inherit;">AetheR</div>
+              <div class="text-primary" style="height: 50px; line-height: 50px; font-size: 28px; font-weight: 700; color: #212529; font-family: 'Mozilla Headline', sans-serif; letter-spacing: -0.4px;">AetheR</div>
             </div>
             
             <div class="content" style="padding: 40px; border-radius: 10px; background: #ffffff;">
