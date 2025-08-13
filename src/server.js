@@ -39,8 +39,6 @@ import socialProxyRoutes from './routes/social-proxy.js';
 // Subscription and payment routes
 import subscriptionRoutes from './routes/subscription.js';
 import webhookRoutes from './routes/webhooks.js';
-// Debug routes (temporary)
-import debugRoutes from './routes/debug.js';
 
 // Initialize models
 import './models/User.js';
@@ -137,9 +135,6 @@ const initializeServer = async () => {
     // Subscription and payment routes
     app.use('/api/subscription', subscriptionRoutes);
     app.use('/webhooks', webhookRoutes);
-    
-    // Debug routes (temporary)
-    app.use('/debug', debugRoutes);
     
     // Error handling
     app.use(errorLogger);
