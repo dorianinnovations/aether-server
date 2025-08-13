@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <title>Aether Email</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mozilla+Headline:wght@400;600;700&family=Mozilla+Text:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        .container {
+          background: #0f0f0f !important;
+        }
+        .header {
+          background: #1a1a1a !important;
+          border-bottom: 1px solid #333 !important;
+        }
+        .content {
+          background: #0f0f0f !important;
+        }
+        .footer {
+          background: #0a0a0a !important;
+          border-top: 1px solid #333 !important;
+        }
+        .text-primary {
+          color: #ffffff !important;
+        }
+        .text-secondary {
+          color: #b8b8b8 !important;
+        }
+        .text-footer {
+          color: #888 !important;
+        }
+        .logo-dark {
+          display: block !important;
+        }
+        .logo-light {
+          display: none !important;
+        }
+        .button {
+          background: #ffffff !important;
+          color: #000000 !important;
+          border: 1px solid #ffffff !important;
+        }
+      }
+      @media (prefers-color-scheme: light) {
+        .container {
+          background: #ffffff !important;
+        }
+        .header {
+          background: #f8f9fa !important;
+          border-bottom: 1px solid #e9ecef !important;
+        }
+        .content {
+          background: #ffffff !important;
+        }
+        .footer {
+          background: #f8f9fa !important;
+          border-top: 1px solid #e9ecef !important;
+        }
+        .text-primary {
+          color: #212529 !important;
+        }
+        .text-secondary {
+          color: #6c757d !important;
+        }
+        .text-footer {
+          color: #6c757d !important;
+        }
+        .logo-light {
+          display: block !important;
+        }
+        .logo-dark {
+          display: none !important;
+        }
+        .button {
+          background: #212529 !important;
+          color: #ffffff !important;
+          border: 1px solid #212529 !important;
+        }
+      }
+    </style>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Mozilla Text', Arial, sans-serif;">
+    <div class="container" style="width: 100%; max-width: 600px; margin: 0 auto; background: #ffffff; font-family: 'Mozilla Text', sans-serif; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); letter-spacing: -0.2px;">
+      <div class="header" style="background: #f8f9fa; text-align: center; padding: 40px 30px; border-bottom: 1px solid #e9ecef; position: relative; border-radius: 12px 12px 0 0;">
+        <img class="logo-light" src="aether-brand-logo-light.webp" alt="AetheR" style="height: 50px; border-radius: 8px; display: block; margin: 0 auto;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+        <img class="logo-dark" src="aether-brand-logo-dark.webp" alt="AetheR" style="height: 50px; border-radius: 8px; display: none; margin: 0 auto;" onerror="this.style.display='none';" />
+        <div style="display: none; height: 50px; line-height: 50px; font-size: 24px; font-weight: bold; color: inherit;">AetheR</div>
+      </div>
+      
+      <div class="content" style="padding: 40px; border-radius: 10px; background: #ffffff;">
+        <h1 class="text-primary" style="font-size: 24px; font-weight: 600; color: #212529; margin: 30px 0 10px 0; font-family: 'Mozilla Headline', sans-serif; letter-spacing: -0.3px;">You're in. Welcome to AetheR.</h1>
+        <p class="text-secondary" style="font-size: 16px; color: #6c757d; line-height: 1.6; margin-bottom: 30px; letter-spacing: -0.1px;">
+          Seriously, thank you for being here. You're one of the very first to experience AetheR, and that means the world to us. We started this because we're obsessed with that feeling—the electric moment you discover a track that feels like it was made just for you. We think finding that feeling should be easier.
+        </p>
+        <p class="text-secondary" style="font-size: 16px; color: #6c757d; line-height: 1.6; margin-bottom: 30px; letter-spacing: -0.1px;">
+          AetheR is our answer. It's a discovery platform built on a simple, powerful idea: a conversation. By chatting with our AI about what you love, the vibe you're chasing, and what hits you *just right*, you unlock a universe of music handpicked for your unique taste. No more dead-end algorithms. Just pure, personalized discovery.
+        </p>
+        
+        <div style="margin-top: 40px;">
+          <h2 class="text-primary" style="font-size: 20px; font-weight: 600; color: #212529; margin-bottom: 20px; font-family: 'Mozilla Headline', sans-serif; letter-spacing: -0.3px;">What You Can Do Right Now</h2>
+          
+          <div style="margin-bottom: 20px;">
+            <h3 class="text-primary" style="font-size: 16px; font-weight: 600; color: #212529; margin: 0 0 8px 0; font-family: 'Mozilla Headline', sans-serif; letter-spacing: -0.2px;">Chat Your Way to a Perfect Playlist</h3>
+            <p class="text-secondary" style="font-size: 14px; color: #6c757d; margin: 0; line-height: 1.5; letter-spacing: -0.1px;">Forget endless scrolling. Tell AetheR about that one deep cut you love, the vibe you're chasing, or a song you just can't get out of your head. Our AI doesn't just match keywords; it understands the texture, energy, and emotion you're describing to connect you with tracks you'll actually love. It's less like a search engine, more like a conversation with a friend who has impeccable taste.</p>
+          </div>
+          
+          <div style="margin-bottom: 20px;">
+            <h3 class="text-primary" style="font-size: 16px; font-weight: 600; color: #212529; margin: 0 0 8px 0; font-family: 'Mozilla Headline', sans-serif; letter-spacing: -0.2px;">Craft Your Sonic Identity</h3>
+            <p class="text-secondary" style="font-size: 14px; color: #6c757d; margin: 0; line-height: 1.5; letter-spacing: -0.1px;">Your profile is your stage. Showcase your all-time favorite albums (your 'grails'), link your socials, and create a snapshot of your musical soul. AetheR is about connection, and your profile is your handshake. Make it yours.</p>
+          </div>
+          
+          <div style="margin-bottom: 20px;">
+            <h3 class="text-primary" style="font-size: 16px; font-weight: 600; color: #212529; margin: 0 0 8px 0; font-family: 'Mozilla Headline', sans-serif; letter-spacing: -0.2px;">Effortless Curation, Powered by AI</h3>
+            <p class="text-secondary" style="font-size: 14px; color: #6c757d; margin: 0; line-height: 1.5; letter-spacing: -0.1px;">This is where the magic happens. Every conversation you have refines your personal taste profile. AetheR learns, adapts, and anticipates, building playlists and suggesting artists with an uncanny understanding of what you want to hear next. The result? A listening experience that constantly evolves *with* you.</p>
+          </div>
+          
+          <div style="text-align: right; margin-top: 30px;">
+            <a href="https://aether.app" class="button" style="background: #212529; color: #ffffff; padding: 16px 22px; text-decoration: none; font-weight: 600; font-size: 12px; display: inline-block; border-radius: 4px; letter-spacing: -0.2px; border: 1px solid #212529;">Jump In</a>
+          </div>
+        </div>
+      </div>
+      
+      <div class="footer" style="background: #f8f9fa; text-align: center; padding: 30px; border-top: 1px solid #e9ecef; border-radius: 0 0 12px 12px;">
+        <p class="text-footer" style="color: #6c757d; margin: 8px 0;">Have a question? Hit reply. We're a small team and we read every single email.</p>
+        <p class="text-footer" style="margin: 8px 0; font-size: 14px; letter-spacing: -0.1px; color: #6c757d;">numinaworks@gmail.com</p>
+        <p class="text-footer" style="font-size: 12px; color: #6c757d; margin-top: 20px; letter-spacing: -0.05px;">
+          <a href="#" style="color: #6c757d;">Unsubscribe from these emails</a>
+        </p>
+        <p class="text-footer" style="margin: 8px 0; font-size: 8px; letter-spacing: -0.1px; color: #6c757d;">*Our AI discovery engine leverages cutting-edge models from leading developers. These models are subject to the limitations and availability of their respective providers.</p>
+      </div>
+    </div>
+</body>
+</html>
