@@ -17,7 +17,6 @@ const router = express.Router();
 router.post('/chat', protect, uploadFiles, validateUploadedFiles, handleMulterError, async (req, res) => {
   const startTime = Date.now();
   const correlationId = crypto.randomUUID();
-  log.info("POST /chat", { userId: req.user?.id, correlationId });
   // Chat request timing - reduced logging
   
   try {
