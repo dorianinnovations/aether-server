@@ -10,7 +10,7 @@ class QueryClassifier {
       return 'creative_music';
     }
     
-    // Priority: First time user welcome (only for users who haven't seen it)
+    // Priority: First time user welcome (only for users who haven't seen it globally, once per signup)
     const hasSeenWelcome = userContext?.onboarding?.hasSeenWelcome || false;
     const skipWelcomePrompt = userContext?.onboarding?.skipWelcomePrompt || false;
     

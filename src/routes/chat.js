@@ -102,29 +102,20 @@ Just give me your honest thoughts on what I've sent.`;
         // Use conversation message count for prompt classification
         const messageCount = conversation.messageCount || 0;
         
+        // SIMPLIFIED CONTEXT - only essential data for fast OpenRouter calls
         userContext = {
           username: user.username,
           displayName: user.displayName,
-          bio: user.bio,
-          location: user.location,
-          musicProfile: user.musicProfile,
-          onboarding: user.onboarding,
-          musicTaste: user.artistPreferences?.musicTaste,
-          analytics: user.analytics,
-          tier: user.tier,
           messageCount: messageCount,
           conversationId: conversation._id,
           userId: userId,
+          tier: user.tier,
           
-          // Enhanced music context
+          // Essential music context only
           currentTrack: user.musicProfile?.spotify?.currentTrack || null,
-          recentTracks: user.musicProfile?.spotify?.recentTracks || [],
-          topTracks: user.musicProfile?.spotify?.topTracks || [],
+          recentTracks: (user.musicProfile?.spotify?.recentTracks || []).slice(0, 5), // Limit to 5 recent
           grails: user.musicProfile?.spotify?.grails || null,
-          musicPersonality: user.musicProfile?.musicPersonality || null,
-          discoveryStyle: user.musicProfile?.musicPersonality?.discoveryStyle || null,
-          recentMusicActivities: user.musicProfile?.musicPersonality?.recentMusicActivities || [],
-          musicInterests: user.musicProfile?.musicPersonality?.musicInterests || []
+          discoveryStyle: user.musicProfile?.musicPersonality?.discoveryStyle || null
         };
 
         // Check for music discovery context
@@ -288,6 +279,14 @@ Use this current information to provide an accurate, up-to-date response. Do not
           };
           res.write(`data: ${JSON.stringify({metadata: toolResultData})}\n\n`);
         }
+        
+        // Always send conversation ID metadata first so frontend can sync state
+        const conversationMetadata = {
+          conversationId: conversation._id,
+          conversationType: 'aether',
+          isNewConversation: conversation.messageCount === 0
+        };
+        res.write(`data: ${JSON.stringify({metadata: conversationMetadata})}\n\n`);
         
         // Send music discovery context metadata if available
         if (musicDiscoveryContext || musicNewsContext) {
@@ -477,8 +476,8 @@ Use this current information to provide an accurate, up-to-date response. Do not
             console.log('⏩ Skipping profile analysis for performance testing');
           }
 
-          // Auto-mark welcome as seen if this was a first time welcome response
-          if (!userContext?.onboarding?.hasSeenWelcome) {
+          // Auto-mark welcome as seen ONLY if this was actually a first_message_welcome response
+          if (aiResponse.queryType === 'first_message_welcome' && !userContext?.onboarding?.hasSeenWelcome) {
             try {
               await User.findByIdAndUpdate(userId, {
                 $set: {
