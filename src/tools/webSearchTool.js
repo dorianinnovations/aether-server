@@ -93,10 +93,46 @@ export default async function webSearchTool(args, userContext) {
 
   console.log(`🔍 Web search triggered for: "${query}"`);
   
-  // Try SerpAPI first if available
+  // Try Google Custom Search first if available
+  if (process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_ENGINE_ID) {
+    try {
+      console.log('📡 Using Google Custom Search...');
+      const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
+        params: {
+          key: process.env.GOOGLE_SEARCH_API_KEY,
+          cx: process.env.GOOGLE_SEARCH_ENGINE_ID,
+          q: query,
+          num: 5
+        },
+        timeout: 5000
+      });
+
+      console.log(`✅ Google Custom Search returned ${response.data.items?.length || 0} results`);
+
+      if (response.data.items) {
+        return {
+          success: true,
+          structure: {
+            query,
+            results: response.data.items.map((item, i) => ({
+              title: item.title,
+              snippet: item.snippet,
+              link: item.link,
+              position: i + 1
+            })),
+            analysis: `Google Search found ${response.data.items.length} results for: ${query}`
+          }
+        };
+      }
+    } catch (error) {
+      console.error('❌ Google Custom Search failed:', error.message);
+    }
+  }
+
+  // Try SerpAPI as fallback if available
   if (process.env.SERPAPI_API_KEY) {
     try {
-      console.log('📡 Using SerpAPI...');
+      console.log('📡 Fallback to SerpAPI...');
       const response = await axios.get('https://serpapi.com/search', {
         params: {
           api_key: process.env.SERPAPI_API_KEY,
@@ -126,42 +162,6 @@ export default async function webSearchTool(args, userContext) {
       }
     } catch (error) {
       console.error('❌ SerpAPI failed:', error.message);
-    }
-  }
-
-  // Try Google Custom Search as fallback
-  if (process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_ENGINE_ID) {
-    try {
-      console.log('📡 Fallback to Google Custom Search...');
-      const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
-        params: {
-          key: process.env.GOOGLE_SEARCH_API_KEY,
-          cx: process.env.GOOGLE_SEARCH_ENGINE_ID,
-          q: query,
-          num: 5
-        },
-        timeout: 5000
-      });
-
-      console.log(`✅ Google Custom Search returned ${response.data.items?.length || 0} results`);
-
-      if (response.data.items) {
-        return {
-          success: true,
-          structure: {
-            query,
-            results: response.data.items.map((item, i) => ({
-              title: item.title,
-              snippet: item.snippet,
-              link: item.link,
-              position: i + 1
-            })),
-            analysis: `Google found ${response.data.items.length} results for: ${query}`
-          }
-        };
-      }
-    } catch (error) {
-      console.error('❌ Google Custom Search failed:', error.message);
     }
   }
 
@@ -264,111 +264,110 @@ async function performAdvancedSearch(query, maxResults, realTime) {
 
   const results = [];
   
-  console.log(`🔍 Starting search with SerpAPI for: "${query}"`);
+  console.log(`🔍 Starting search with Google Custom Search for: "${query}"`);
   
   // Check if any search API keys are available
-  console.log(`🔑 API Keys Check: SERPAPI=${!!process.env.SERPAPI_API_KEY}, GOOGLE=${!!process.env.GOOGLE_SEARCH_API_KEY}`);
+  console.log(`🔑 API Keys Check: GOOGLE=${!!process.env.GOOGLE_SEARCH_API_KEY}, SERPAPI=${!!process.env.SERPAPI_API_KEY}`);
   
-  if (!process.env.SERPAPI_API_KEY && !process.env.GOOGLE_SEARCH_API_KEY) {
+  if (!process.env.GOOGLE_SEARCH_API_KEY && !process.env.SERPAPI_API_KEY) {
     console.error('⚠️ No search API keys configured - web search unavailable');
-    throw new Error('Web search functionality requires API keys to be configured. Please set SERPAPI_API_KEY or GOOGLE_SEARCH_API_KEY environment variables.');
+    throw new Error('Web search functionality requires API keys to be configured. Please set GOOGLE_SEARCH_API_KEY or SERPAPI_API_KEY environment variables.');
   }
   
   
-  // Primary: Use SerpAPI (most reliable)
-  if (process.env.SERPAPI_API_KEY) {
+  // Primary: Use Google Custom Search API
+  if (process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_ENGINE_ID) {
     try {
-      const searchParams = {
-        q: query,
-        api_key: process.env.SERPAPI_API_KEY,
-        engine: 'google',
-        num: maxResults,
-        gl: 'us', // Country
-        hl: 'en'  // Language
-      };
-
-      // Add real-time news parameters
-      if (realTime) {
-        searchParams.tbm = 'nws'; // News search
-        searchParams.tbs = 'qdr:w'; // Past week
-      }
-
-      console.log(`📡 SerpAPI request params:`, searchParams);
-
-      const response = await axios.get('https://serpapi.com/search', {
-        params: searchParams,
-        timeout: 5000  // Fast timeout for better UX
+      console.log(`📡 Using Google Custom Search API`);
+      
+      const googleResponse = await axios.get('https://www.googleapis.com/customsearch/v1', {
+        params: {
+          key: process.env.GOOGLE_SEARCH_API_KEY,
+          cx: process.env.GOOGLE_SEARCH_ENGINE_ID,
+          q: query,
+          num: Math.min(maxResults, 10) // Google allows max 10
+        },
+        timeout: 6000
       });
 
-      console.log(`📊 SerpAPI response status: ${response.status}`);
-      console.log(`📊 Organic results: ${response.data.organic_results?.length || 0}`);
-      console.log(`📊 News results: ${response.data.news_results?.length || 0}`);
+      console.log(`📊 Google Custom Search response status: ${googleResponse.status}`);
+      console.log(`📊 Google results: ${googleResponse.data.items?.length || 0}`);
 
-      // Process organic results
-      if (response.data.organic_results) {
-        results.push(...response.data.organic_results.map(result => ({
-          title: result.title,
-          link: result.link,
-          snippet: result.snippet,
-          position: result.position,
-          source: 'google-organic',
-          date: result.date || null,
-          displayedLink: result.displayed_link
+      if (googleResponse.data.items) {
+        results.push(...googleResponse.data.items.map((item, index) => ({
+          title: item.title,
+          link: item.link,
+          snippet: item.snippet,
+          position: index + 1,
+          source: 'google-custom',
+          date: null
         })));
+        
+        console.log(`✅ Google Custom Search returned ${results.length} results`);
       }
 
-      // Add news results if available
-      if (response.data.news_results) {
-        results.push(...response.data.news_results.slice(0, 3).map(result => ({
-          title: result.title,
-          link: result.link,
-          snippet: result.snippet,
-          source: 'google-news',
-          date: result.date,
-          thumbnail: result.thumbnail
-        })));
-      }
-
-      // Add related questions if available
-      if (response.data.related_questions) {
-        console.log(`❓ Found ${response.data.related_questions.length} related questions`);
-      }
-
-      console.log(`✅ SerpAPI returned ${results.length} total results`);
-
-    } catch (error) {
-      console.error('❌ SerpAPI search failed:', error.response?.data || error.message);
+    } catch (googleError) {
+      console.error('❌ Google Custom Search failed:', googleError.message);
       
-      // Try Google Custom Search as fallback
-      if (process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_ENGINE_ID) {
+      // Fall back to SerpAPI if Google fails
+      if (process.env.SERPAPI_API_KEY) {
         try {
-          console.log(`🔄 Falling back to Google Custom Search API`);
-          
-          const googleResponse = await axios.get('https://www.googleapis.com/customsearch/v1', {
-            params: {
-              key: process.env.GOOGLE_SEARCH_API_KEY,
-              cx: process.env.GOOGLE_SEARCH_ENGINE_ID,
-              q: query,
-              num: Math.min(maxResults, 10) // Google allows max 10
-            },
-            timeout: 6000  // Reduced timeout for fallback
-          });
+          console.log(`🔄 Falling back to SerpAPI`);
+          const searchParams = {
+            q: query,
+            api_key: process.env.SERPAPI_API_KEY,
+            engine: 'google',
+            num: maxResults,
+            gl: 'us', // Country
+            hl: 'en'  // Language
+          };
 
-          if (googleResponse.data.items) {
-            results.push(...googleResponse.data.items.map((item, index) => ({
-              title: item.title,
-              link: item.link,
-              snippet: item.snippet,
-              position: index + 1,
-              source: 'google-custom',
-              date: null
-            })));
-            
-            console.log(`✅ Google Custom Search returned ${results.length} results`);
+          // Add real-time news parameters
+          if (realTime) {
+            searchParams.tbm = 'nws'; // News search
+            searchParams.tbs = 'qdr:w'; // Past week
           }
 
-        } catch (googleError) {
-          console.error('❌ Google Custom Search also failed:', googleError.message);
+          console.log(`📡 SerpAPI request params:`, searchParams);
+
+          const response = await axios.get('https://serpapi.com/search', {
+            params: searchParams,
+            timeout: 5000  // Fast timeout for better UX
+          });
+
+          console.log(`📊 SerpAPI response status: ${response.status}`);
+          console.log(`📊 Organic results: ${response.data.organic_results?.length || 0}`);
+          console.log(`📊 News results: ${response.data.news_results?.length || 0}`);
+
+          // Process organic results
+          if (response.data.organic_results) {
+            results.push(...response.data.organic_results.map(result => ({
+              title: result.title,
+              link: result.link,
+              snippet: result.snippet,
+              position: result.position,
+              source: 'google-organic',
+              date: result.date || null,
+              displayedLink: result.displayed_link
+            })));
+          }
+
+          // Add news results if available
+          if (response.data.news_results) {
+            results.push(...response.data.news_results.slice(0, 3).map(result => ({
+              title: result.title,
+              link: result.link,
+              snippet: result.snippet,
+              source: 'google-news',
+              date: result.date,
+              thumbnail: result.thumbnail
+            })));
+          }
+
+          console.log(`✅ SerpAPI returned ${results.length} total results`);
+
+        } catch (serpError) {
+          console.error('❌ SerpAPI fallback also failed:', serpError.message);
         }
       }
     }
