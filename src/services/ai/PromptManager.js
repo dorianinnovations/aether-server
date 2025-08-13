@@ -240,17 +240,39 @@ Be the AI companion that makes music discovery personal and fun using their actu
       
       // Music context - always include when available
       const currentTrack = userContext.musicProfile?.spotify?.currentTrack;
+      const recentTracks = userContext.musicProfile?.spotify?.recentTracks;
+      const topTracks = userContext.musicProfile?.spotify?.topTracks;
+      const grails = userContext.musicProfile?.spotify?.grails;
+      
       console.log('🎵 DEBUG PROMPT: currentTrack =', currentTrack?.name, 'by', currentTrack?.artist);
       
+      // Current track
       if (currentTrack?.name) {
         contextParts.push(`- Currently playing: ${currentTrack.name} by ${currentTrack.artist || 'Unknown Artist'}`);
       }
       
-      // Include recent tracks context
-      const recentTracks = userContext.musicProfile?.spotify?.recentTracks;
-      if (recentTracks?.length > 0 && !currentTrack?.name) {
-        const recent = recentTracks[0];
-        contextParts.push(`- Recently played: ${recent.name} by ${recent.artist || 'Unknown Artist'}`);
+      // Recent tracks (show last few for context)
+      if (recentTracks?.length > 0) {
+        const recentList = recentTracks.slice(0, 3).map(track => 
+          `${track.name} by ${track.artist || 'Unknown'}`
+        ).join(', ');
+        contextParts.push(`- Recent tracks: ${recentList}`);
+      }
+      
+      // Top tracks (show a few)
+      if (topTracks?.length > 0) {
+        const topList = topTracks.slice(0, 3).map(track => 
+          `${track.name} by ${track.artist || 'Unknown'}`
+        ).join(', ');
+        contextParts.push(`- Top tracks: ${topList}`);
+      }
+      
+      // Grails (favorite tracks)
+      if (grails?.topTracks?.length > 0) {
+        const grailsList = grails.topTracks.slice(0, 2).map(track => 
+          `${track.name} by ${track.artist || 'Unknown'}`
+        ).join(', ');
+        contextParts.push(`- Favorite tracks (grails): ${grailsList}`);
       }
       
       console.log('🎵 DEBUG PROMPT: contextParts =', contextParts);
