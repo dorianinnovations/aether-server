@@ -131,6 +131,15 @@ Just give me your honest thoughts on what I've sent.`;
     if (userId) {
       const user = await User.findById(userId).select('username displayName bio location musicProfile spotify onboarding artistPreferences analytics tier friends');
       if (user) {
+        // Update Spotify data if connected
+        if (user.musicProfile?.spotify?.connected) {
+          const spotifyService = (await import('../services/spotifyService.js')).default;
+          await spotifyService.updateUserSpotifyData(user);
+          // Re-fetch user data after update
+          const updatedUser = await User.findById(userId).select('username displayName bio location musicProfile spotify onboarding artistPreferences analytics tier friends');
+          user.musicProfile = updatedUser.musicProfile;
+        }
+        
         // Use conversation message count for prompt classification
         const messageCount = conversation.messageCount || 0;
         
@@ -147,10 +156,10 @@ Just give me your honest thoughts on what I've sent.`;
           onboarding: user.onboarding || {},
           
           // Essential music context only
-          currentTrack: user.spotify?.currentTrack || null,
-          recentTracks: (user.spotify?.recentTracks || []).slice(0, 5), // Limit to 5 recent
-          topTracks: user.spotify?.topTracks || [], // Restore top tracks
-          grails: user.spotify?.grails || null,
+          currentTrack: user.musicProfile?.spotify?.currentTrack || null,
+          recentTracks: (user.musicProfile?.spotify?.recentTracks || []).slice(0, 5), // Limit to 5 recent
+          topTracks: user.musicProfile?.spotify?.topTracks || [], // Restore top tracks
+          grails: user.musicProfile?.spotify?.grails || null,
           discoveryStyle: user.musicProfile?.musicPersonality?.discoveryStyle || null
         };
 
