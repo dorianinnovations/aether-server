@@ -111,6 +111,9 @@ Just give me your honest thoughts on what I've sent.`;
           userId: userId,
           tier: user.tier,
           
+          // Essential onboarding context for welcome message logic
+          onboarding: user.onboarding || {},
+          
           // Essential music context only
           currentTrack: user.musicProfile?.spotify?.currentTrack || null,
           recentTracks: (user.musicProfile?.spotify?.recentTracks || []).slice(0, 5), // Limit to 5 recent
@@ -503,6 +506,13 @@ Use this current information to provide an accurate, up-to-date response. Do not
                   'onboarding.welcomeShownAt': new Date()
                 }
               });
+              
+              // Update the userContext to reflect the change for this session
+              if (userContext && userContext.onboarding) {
+                userContext.onboarding.hasSeenWelcome = true;
+                userContext.onboarding.welcomeShownAt = new Date();
+              }
+              
               log.debug('🎯 Welcome prompt automatically marked as seen', { userId, correlationId });
             } catch (error) {
               log.error('Failed to auto-mark welcome as seen', error, { userId, correlationId });
