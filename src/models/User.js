@@ -537,6 +537,15 @@ const UserSchema = new mongoose.Schema({
     enum: ['free', 'Standard', 'Legend', 'VIP'],
     default: 'Standard'
   },
+
+  // Stripe integration fields
+  stripeCustomerId: String,
+  stripeSubscriptionId: String,
+  subscriptionStatus: {
+    type: String,
+    enum: ['active', 'canceled', 'past_due', 'unpaid'],
+    default: null
+  },
   
   // GPT-5 usage tracking
   gpt5Usage: {

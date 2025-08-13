@@ -36,6 +36,10 @@ import friendMessagingRoutes from './routes/friendMessaging.js';
 // Social proxy compatibility routes
 import socialProxyRoutes from './routes/social-proxy.js';
 
+// Subscription and payment routes
+import subscriptionRoutes from './routes/subscription.js';
+import webhookRoutes from './routes/webhooks.js';
+
 // Initialize models
 import './models/User.js';
 import './models/Artist.js';
@@ -127,6 +131,10 @@ const initializeServer = async () => {
     
     // Social proxy compatibility routes
     app.use('/social-proxy', socialProxyRoutes);
+
+    // Subscription and payment routes
+    app.use('/api/subscription', subscriptionRoutes);
+    app.use('/webhooks', webhookRoutes);
     
     // Error handling
     app.use(errorLogger);
