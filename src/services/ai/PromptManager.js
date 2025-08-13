@@ -221,10 +221,17 @@ Be the AI companion that makes music discovery personal and fun.`;
         contextParts.push(`- Mood: ${mood}`);
       }
       
-      // Music context - be more selective
+      // Music context - always include when available
       const currentTrack = userContext.musicProfile?.spotify?.currentTrack;
-      if (currentTrack?.name && Math.random() > 0.3) { // 70% chance to include
-        contextParts.push(`- Recently listening to: ${currentTrack.name}`);
+      if (currentTrack?.name) {
+        contextParts.push(`- Currently playing: ${currentTrack.name} by ${currentTrack.artist || 'Unknown Artist'}`);
+      }
+      
+      // Include recent tracks context
+      const recentTracks = userContext.musicProfile?.spotify?.recentTracks;
+      if (recentTracks?.length > 0 && !currentTrack?.name) {
+        const recent = recentTracks[0];
+        contextParts.push(`- Recently played: ${recent.name} by ${recent.artist || 'Unknown Artist'}`);
       }
       
       prompt += `
