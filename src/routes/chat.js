@@ -540,7 +540,7 @@ Use this current information to provide an accurate, up-to-date response. Do not
               }
 
               // Update conversation state after assistant response
-              if (aiResponse.queryType) {
+              if (aiResponse.queryType && aiService.updateConversationStateAfterResponse) {
                 await aiService.updateConversationStateAfterResponse(
                   userContext, 
                   conversation._id, 
