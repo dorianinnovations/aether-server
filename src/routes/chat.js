@@ -285,9 +285,16 @@ Based on this information, provide a conversational response about the song with
                 // For other searches, use the original behavior
                 webSearchResults = searchResult;
                 
-                // Add search results to message context
+                // Add search results to message context with length limiting
+                const searchResults = searchResult.structure.results.slice(0, 3).map(r => {
+                  // Limit snippet length to prevent overly long contexts
+                  const snippet = r.snippet && r.snippet.length > 200 ? 
+                    r.snippet.substring(0, 200) + '...' : r.snippet;
+                  return `- ${r.title}: ${snippet || 'No description available'}`;
+                }).join('\n');
+                
                 const searchContext = `Web search results for "${cleanMessage}":
-${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
+${searchResults}
 
 Use this current information to provide an accurate, up-to-date response. Do not include the raw search results or JSON data in your response - just use the information naturally in your answer.`;
                 
@@ -459,9 +466,37 @@ Use this current information to provide an accurate, up-to-date response. Do not
           }
           
         } catch (streamError) {
-          log.error('Streaming error:', streamError, { correlationId });
-          res.write(`data: ${JSON.stringify({content: 'Stream error occurred.'})}\n\n`);
-          res.write(`data: [DONE]\n\n`);
+          log.error('Streaming error during search response:', streamError, { correlationId });
+          
+          // If this was a search query, try again without search context
+          if (webSearchResults) {
+            log.info('Retrying AI request without search context due to streaming error', { correlationId });
+            try {
+              // Retry with original message only (no search context)
+              const retryResponse = await aiService.chat(processedMessage, 'openai/gpt-4o', userContext, attachments, {
+                musicDiscoveryContext
+              });
+              
+              if (retryResponse.success && retryResponse.content) {
+                const retryFullResponse = retryResponse.content;
+                res.write(`data: ${JSON.stringify({content: retryFullResponse})}\n\n`);
+                res.write(`data: [DONE]\n\n`);
+                fullResponse = retryFullResponse; // Set for saving
+                log.info('Successfully recovered with non-search response', { correlationId });
+              } else {
+                res.write(`data: ${JSON.stringify({content: 'I apologize, but I encountered an issue processing your search request. Please try a simpler query.'})}\n\n`);
+                res.write(`data: [DONE]\n\n`);
+              }
+            } catch (retryError) {
+              log.error('Retry without search also failed:', retryError, { correlationId });
+              res.write(`data: ${JSON.stringify({content: 'I apologize, but I\'m having trouble responding right now. Please try again.'})}\n\n`);
+              res.write(`data: [DONE]\n\n`);
+            }
+          } else {
+            // Original streaming error handling for non-search queries
+            res.write(`data: ${JSON.stringify({content: 'Stream error occurred.'})}\n\n`);
+            res.write(`data: [DONE]\n\n`);
+          }
         }
         
         // Save AI response if authenticated  

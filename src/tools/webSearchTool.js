@@ -30,6 +30,7 @@ const NO_SEARCH_PATTERNS = [
   /^(?:hello|hi|hey|thanks|thank you|ok|okay|yes|no|maybe)$/i,
   /^(?:hey|hi|hello).*(?:what'?s up|whats up|wassup|sup)$/i,
   /^(?:how are you|good morning|good afternoon|good evening)$/i,
+  /^(?:hello|hi|hey)\s+(?:how are you|how's it going|how are things)$/i,
   /^(?:i think|i feel|i believe|in my opinion).*$/i,
   /^(?:can you help|could you|would you|please).*(?:with|me).*$/i,
   /^(?:what'?s up|whats up|wassup|sup)$/i,
@@ -57,18 +58,27 @@ function shouldTriggerWebSearch(query, userContext) {
     }
   }
   
-  // Use GPT-4o to determine if web search would be helpful
+  // More precise search keywords to avoid false positives
   const searchKeywords = [
     'current', 'latest', 'recent', 'news', 'update', 'today', 'now',
-    'price', 'cost', 'statistics', 'data', 'facts', 'compare', 'vs',
-    'who is', 'what is', 'when did', 'where is', 'how to'
+    'price', 'cost', 'statistics', 'data', 'facts', 'compare', 'vs'
+  ];
+  
+  // More precise phrase matching to avoid false positives like "how are you"
+  const searchPhrases = [
+    'who is', 'what is', 'when did', 'where is', 'how to', 'what happened',
+    'current price', 'stock price', 'weather in', 'latest news', 'recent developments'
   ];
   
   const hasSearchKeywords = searchKeywords.some(keyword => 
     query.toLowerCase().includes(keyword)
   );
   
-  return hasSearchKeywords;
+  const hasSearchPhrases = searchPhrases.some(phrase => 
+    query.toLowerCase().includes(phrase)
+  );
+  
+  return hasSearchKeywords || hasSearchPhrases;
 }
 
 export default async function webSearchTool(args, userContext) {
