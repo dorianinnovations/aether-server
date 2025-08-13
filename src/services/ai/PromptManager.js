@@ -223,6 +223,8 @@ Be the AI companion that makes music discovery personal and fun.`;
       
       // Music context - always include when available
       const currentTrack = userContext.musicProfile?.spotify?.currentTrack;
+      console.log('🎵 DEBUG PROMPT: currentTrack =', currentTrack?.name, 'by', currentTrack?.artist);
+      
       if (currentTrack?.name) {
         contextParts.push(`- Currently playing: ${currentTrack.name} by ${currentTrack.artist || 'Unknown Artist'}`);
       }
@@ -233,6 +235,8 @@ Be the AI companion that makes music discovery personal and fun.`;
         const recent = recentTracks[0];
         contextParts.push(`- Recently played: ${recent.name} by ${recent.artist || 'Unknown Artist'}`);
       }
+      
+      console.log('🎵 DEBUG PROMPT: contextParts =', contextParts);
       
       prompt += `
 User Context:

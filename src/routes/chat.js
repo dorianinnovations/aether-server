@@ -133,11 +133,13 @@ Just give me your honest thoughts on what I've sent.`;
       if (user) {
         // Update Spotify data if connected
         if (user.musicProfile?.spotify?.connected) {
+          console.log('🎵 DEBUG: Updating Spotify data for user', userId);
           const spotifyService = (await import('../services/spotifyService.js')).default;
           await spotifyService.updateUserSpotifyData(user);
           // Re-fetch user data after update
           const updatedUser = await User.findById(userId).select('username displayName bio location musicProfile spotify onboarding artistPreferences analytics tier friends');
           user.musicProfile = updatedUser.musicProfile;
+          console.log('🎵 DEBUG: Spotify data updated, currentTrack:', user.musicProfile?.spotify?.currentTrack?.name);
         }
         
         // Use conversation message count for prompt classification
@@ -169,6 +171,14 @@ Just give me your honest thoughts on what I've sent.`;
             }
           }
         };
+
+        // DEBUG: Log what context we're actually passing
+        console.log('🎵 DEBUG CHAT CONTEXT:', {
+          username: userContext.username,
+          currentTrack: userContext.musicProfile?.spotify?.currentTrack?.name,
+          recentTracksCount: userContext.musicProfile?.spotify?.recentTracks?.length,
+          hasSpotifyData: !!user.musicProfile?.spotify
+        });
 
         // Check for music discovery context
         if (conversationService.detectMusicDiscoveryContext(processedMessage)) {
