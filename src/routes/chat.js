@@ -499,117 +499,131 @@ Use this current information to provide an accurate, up-to-date response. Do not
           }
         }
         
-        // Save AI response if authenticated  
-        const preSaveTime = Date.now();
-        // Saving response
-        
-        const aiResponseTime = Date.now() - startTime;
-        // Response saved
-        
-        if (userId && fullResponse) {
-          await conversationService.addMessage(
-            userId, 
-            conversation._id, 
-            'assistant', 
-            fullResponse, 
-            null, 
-            { 
-              model: aiResponse.model,
-              responseTime: Date.now() - startTime,
-              musicDiscoveryContext: aiResponse.musicDiscoveryContext ? 'enhanced' : 'none'
-            }
-          );
-
-          // Auto-learn music preferences from conversation
-          if (musicDiscoveryContext) {
-            try {
-              const ragMemoryService = (await import('../services/ragMemoryService.js')).default;
-              const preferencesLearned = await ragMemoryService.learnMusicPreferences(
+        // CRITICAL FIX: Move all post-processing to async background
+        // This prevents database/analytics errors from causing streaming errors
+        setImmediate(async () => {
+          try {
+            if (userId && fullResponse) {
+              await conversationService.addMessage(
                 userId, 
-                processedMessage, 
-                fullResponse
-              );
-              
-              if (preferencesLearned > 0) {
-                log.info('Music preferences auto-learned from conversation', {
-                  userId,
-                  conversationId: conversation._id,
-                  preferencesLearned
-                });
-              }
-            } catch (error) {
-              log.error('Failed to auto-learn music preferences:', error);
-            }
-          }
-
-          // Update conversation state after assistant response
-          if (aiResponse.queryType) {
-            await aiService.updateConversationStateAfterResponse(
-              userContext, 
-              conversation._id, 
-              fullResponse, 
-              aiResponse.queryType
-            );
-          }
-
-          // Queue user message for asynchronous profile analysis  
-          const preAnalysisTime = Date.now();
-          // Analysis queued
-          
-          // TEMP: Skip analysis queue for performance testing
-          if (process.env.SKIP_ANALYSIS !== 'true') {
-            const analysisJobId = analysisQueue.enqueue(userId, processedMessage, {
-            conversationId: conversation._id,
-            timestamp: new Date(),
-            source: 'social_chat'
-          });
-          
-          log.debug(`📊 Profile analysis queued: ${analysisJobId}`, { userId, correlationId });
-          } else {
-            console.log('⏩ Skipping profile analysis for performance testing');
-          }
-
-          // Auto-mark welcome as seen ONLY if this was actually a first_message_welcome response
-          if (aiResponse.queryType === 'first_message_welcome' && !userContext?.onboarding?.hasSeenWelcome) {
-            try {
-              await User.findByIdAndUpdate(userId, {
-                $set: {
-                  'onboarding.hasSeenWelcome': true,
-                  'onboarding.welcomeShownAt': new Date()
+                conversation._id, 
+                'assistant', 
+                fullResponse, 
+                null, 
+                { 
+                  model: aiResponse.model,
+                  responseTime: Date.now() - startTime,
+                  musicDiscoveryContext: aiResponse.musicDiscoveryContext ? 'enhanced' : 'none'
                 }
+              );
+
+              // Auto-learn music preferences from conversation
+              if (musicDiscoveryContext) {
+                try {
+                  const ragMemoryService = (await import('../services/ragMemoryService.js')).default;
+                  const preferencesLearned = await ragMemoryService.learnMusicPreferences(
+                    userId, 
+                    processedMessage, 
+                    fullResponse
+                  );
+                  
+                  if (preferencesLearned > 0) {
+                    log.info('Music preferences auto-learned from conversation', {
+                      userId,
+                      conversationId: conversation._id,
+                      preferencesLearned
+                    });
+                  }
+                } catch (error) {
+                  log.error('Failed to auto-learn music preferences:', error);
+                }
+              }
+
+              // Update conversation state after assistant response
+              if (aiResponse.queryType) {
+                await aiService.updateConversationStateAfterResponse(
+                  userContext, 
+                  conversation._id, 
+                  fullResponse, 
+                  aiResponse.queryType
+                );
+              }
+
+              // Queue user message for asynchronous profile analysis  
+              if (process.env.SKIP_ANALYSIS !== 'true') {
+                const analysisJobId = analysisQueue.enqueue(userId, processedMessage, {
+                conversationId: conversation._id,
+                timestamp: new Date(),
+                source: 'social_chat'
               });
               
-              // Update the userContext to reflect the change for this session
-              if (userContext && userContext.onboarding) {
-                userContext.onboarding.hasSeenWelcome = true;
-                userContext.onboarding.welcomeShownAt = new Date();
+              log.debug(`📊 Profile analysis queued: ${analysisJobId}`, { userId, correlationId });
               }
-              
-              log.debug('🎯 Welcome prompt automatically marked as seen', { userId, correlationId });
-            } catch (error) {
-              log.error('Failed to auto-mark welcome as seen', error, { userId, correlationId });
+
+              // Auto-mark welcome as seen
+              if (aiResponse.queryType === 'first_message_welcome' && !userContext?.onboarding?.hasSeenWelcome) {
+                try {
+                  await User.findByIdAndUpdate(userId, {
+                    $set: {
+                      'onboarding.hasSeenWelcome': true,
+                      'onboarding.welcomeShownAt': new Date()
+                    }
+                  });
+                  
+                  if (userContext && userContext.onboarding) {
+                    userContext.onboarding.hasSeenWelcome = true;
+                    userContext.onboarding.welcomeShownAt = new Date();
+                  }
+                  
+                  log.debug('🎯 Welcome prompt automatically marked as seen', { userId, correlationId });
+                } catch (error) {
+                  log.error('Failed to auto-mark welcome as seen', error, { userId, correlationId });
+                }
+              }
             }
+          } catch (postProcessError) {
+            // Post-processing errors will NOT affect the user response
+            log.error('Background post-processing error (user response already sent successfully):', postProcessError, { correlationId });
           }
-        }
+        });
       } else {
         res.write(`data: ${JSON.stringify({content: 'Sorry, I encountered an error. Please try again.'})}\n\n`);
         res.write(`data: [DONE]\n\n`);
       }
       
+      // End the response stream properly
       res.end();
+      
+      // Mark that response has been sent to prevent double responses
+      const responseSent = true;
     } catch (streamError) {
-      res.write(`data: ${JSON.stringify({content: 'Error occurred during streaming.'})}\n\n`);
-      res.write(`data: [DONE]\n\n`);
-      res.end();
+      log.error('Critical streaming error:', streamError, { correlationId });
+      
+      // Only send error response if we haven't already sent one
+      try {
+        if (!res.headersSent) {
+          res.write(`data: ${JSON.stringify({content: 'Error occurred during streaming.'})}\n\n`);
+          res.write(`data: [DONE]\n\n`);
+          res.end();
+        }
+      } catch (writeError) {
+        log.error('Failed to send error response:', writeError, { correlationId });
+      }
     }
     
   } catch (error) {
     log.error('Social chat failed', error, { correlationId });
-    // log.info("Request completed");
-    res.status(500).json({ 
-      success: false, 
-      error: 'Internal server error' 
-    });
+    
+    // Only send error response if we haven't started streaming yet
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        success: false, 
+        error: 'Internal server error' 
+      });
+    } else {
+      // If headers were already sent, we were streaming, so just log the error
+      log.error('Error occurred after streaming started - user may have received partial response', { correlationId });
+    }
   } finally {
     // Ensure successful requests are logged
     if (res.statusCode !== 500) {
