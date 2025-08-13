@@ -559,6 +559,26 @@ const UserSchema = new mongoose.Schema({
       type: Number,
       default: 0
     }
+  },
+
+  // Bi-weekly response usage tracking for tier limits
+  responseUsage: {
+    currentPeriod: {
+      type: String, // YYYY-MM-DD format (start of 2-week period)
+      default: () => new Date().toISOString().slice(0, 10)
+    },
+    periodCount: {
+      type: Number,
+      default: 0
+    },
+    lastReset: {
+      type: Date,
+      default: Date.now
+    },
+    totalResponses: {
+      type: Number,
+      default: 0
+    }
   }
 }, {
   timestamps: true

@@ -8,6 +8,132 @@ class TierService {
       Legendary: 50,    // 5x more (50 calls per month)
       VIP: -1           // Unlimited (represented as -1)
     };
+
+    // Bi-weekly response limits by tier (14 days)
+    this.responseLimits = {
+      Standard: 150,    // 150 responses every 2 weeks
+      Legend: 3000,     // 20x more (150 * 20)
+      VIP: -1           // Unlimited (represented as -1)
+    };
+  }
+
+  /**
+   * Get user's response usage info for current bi-weekly period
+   * @param {string} userId - User ID
+   * @returns {Object} Response usage info
+   */
+  async getResponseUsageInfo(userId) {
+    try {
+      const user = await User.findById(userId).select('tier responseUsage');
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const now = new Date();
+      const currentPeriodStart = this.getCurrentPeriodStart(now);
+      
+      // Reset period count if new 2-week period
+      if (user.responseUsage.currentPeriod !== currentPeriodStart) {
+        user.responseUsage.currentPeriod = currentPeriodStart;
+        user.responseUsage.periodCount = 0;
+        user.responseUsage.lastReset = new Date();
+        await user.save();
+      }
+
+      const limit = this.responseLimits[user.tier];
+      const isUnlimited = limit === -1;
+      const remaining = isUnlimited ? -1 : Math.max(0, limit - user.responseUsage.periodCount);
+
+      return {
+        tier: user.tier,
+        limit,
+        used: user.responseUsage.periodCount,
+        remaining,
+        isUnlimited,
+        canRespond: isUnlimited || remaining > 0,
+        totalResponses: user.responseUsage.totalResponses,
+        periodStart: currentPeriodStart,
+        periodEnd: this.getPeriodEnd(currentPeriodStart)
+      };
+    } catch (error) {
+      console.error('Error getting response usage info:', error);
+      return {
+        tier: 'Standard',
+        limit: this.responseLimits.Standard,
+        used: this.responseLimits.Standard,
+        remaining: 0,
+        isUnlimited: false,
+        canRespond: false,
+        totalResponses: 0
+      };
+    }
+  }
+
+  /**
+   * Get current bi-weekly period start date (YYYY-MM-DD)
+   * @param {Date} date - Current date
+   * @returns {string} Period start date
+   */
+  getCurrentPeriodStart(date = new Date()) {
+    const epochStart = new Date('2024-01-01'); // Fixed epoch start
+    const daysSinceEpoch = Math.floor((date - epochStart) / (1000 * 60 * 60 * 24));
+    const periodsSinceEpoch = Math.floor(daysSinceEpoch / 14);
+    const periodStartDays = periodsSinceEpoch * 14;
+    const periodStart = new Date(epochStart.getTime() + periodStartDays * 24 * 60 * 60 * 1000);
+    return periodStart.toISOString().slice(0, 10);
+  }
+
+  /**
+   * Get period end date
+   * @param {string} periodStart - Period start date (YYYY-MM-DD)
+   * @returns {string} Period end date
+   */
+  getPeriodEnd(periodStart) {
+    const start = new Date(periodStart);
+    const end = new Date(start.getTime() + 13 * 24 * 60 * 60 * 1000); // 13 days later
+    return end.toISOString().slice(0, 10);
+  }
+
+  /**
+   * Track a response usage and increment counter
+   * @param {string} userId - User ID
+   * @returns {Object} Usage result
+   */
+  async trackResponse(userId) {
+    try {
+      const usageInfo = await this.getResponseUsageInfo(userId);
+      
+      if (!usageInfo.canRespond) {
+        return {
+          success: false,
+          reason: 'period_limit_reached',
+          message: `Response limit reached for this 2-week period. Upgrade to Legend (3000/period) or VIP (unlimited) for more conversations.`,
+          usageInfo
+        };
+      }
+
+      // Increment usage counter
+      const user = await User.findById(userId);
+      user.responseUsage.periodCount += 1;
+      user.responseUsage.totalResponses += 1;
+      await user.save();
+
+      const updatedUsageInfo = await this.getResponseUsageInfo(userId);
+
+      return {
+        success: true,
+        message: 'Response tracked successfully',
+        usageInfo: updatedUsageInfo
+      };
+    } catch (error) {
+      console.error('Error tracking response usage:', error);
+      return {
+        success: false,
+        reason: 'error',
+        message: 'Error tracking response usage',
+        usageInfo: null
+      };
+    }
   }
 
   /**
