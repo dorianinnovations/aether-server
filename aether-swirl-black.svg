@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+  <defs>
+    <style>
+      .swirl-outer { stroke: #000000; stroke-width: 30; fill: none; opacity: 0.15; }
+      .swirl-middle { stroke: #000000; stroke-width: 20; fill: none; opacity: 0.25; }
+      .swirl-inner { stroke: #000000; stroke-width: 15; fill: none; opacity: 0.35; }
+    </style>
+  </defs>
+  <path class="swirl-outer" d="M100 250 C100 150, 150 100, 250 100 C350 100, 400 150, 400 250 C400 350, 350 400, 250 400 C150 400, 100 350, 100 250"/>
+  <path class="swirl-middle" d="M150 250 C150 200, 200 150, 250 150 C300 150, 350 200, 350 250 C350 300, 300 350, 250 350 C200 350, 150 300, 150 250"/>
+  <path class="swirl-inner" d="M200 250 C200 225, 225 200, 250 200 C275 200, 300 225, 300 250 C300 275, 275 300, 250 300 C225 300, 200 275, 200 250"/>
+</svg>

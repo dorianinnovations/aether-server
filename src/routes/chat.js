@@ -188,7 +188,9 @@ Use this current music information to provide up-to-date recommendations and dis
           /(?:search|find|look up|google|web search)\s+(?:for\s+)?(.+)/i,
           /(?:what'?s|what is)\s+(the\s+)?(latest|recent|current|news about|happening with)\s+(.+)/i,
           /(?:when did|where is|what happened|current price|stock price|weather in)/i,
-          /(?:latest news|recent developments|current events)/i
+          /(?:latest news|recent developments|current events)/i,
+          // Add song/music information search triggers
+          /(?:search statistics about|information about|stats about|facts about).*(?:song|track|music|artist|album)/i
         ];
         
         const noSearchPatterns = [
@@ -226,15 +228,31 @@ Use this current music information to provide up-to-date recommendations and dis
           try {
             const searchResult = await webSearchTool({ query: cleanMessage }, { userId });
             if (searchResult.success && searchResult.structure.results.length > 0) {
-              webSearchResults = searchResult;
+              // Check if this is a song/music information request
+              const isSongInfoRequest = /(?:search statistics about|information about|stats about|facts about).*(?:song|track|music|artist|album)/i.test(cleanMessage);
               
-              // Add search results to message context
-              const searchContext = `Web search results for "${cleanMessage}":
+              if (isSongInfoRequest) {
+                // For song info requests, don't set webSearchResults to avoid sending raw JSON
+                // Instead, just add the search context to the message for AI processing
+                const searchContext = `Web search results for song information:
+${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
+
+Based on this information, provide a conversational response about the song with interesting facts, chart performance, background, or other relevant details. Do not mention that you searched the web - just provide the information naturally.`;
+                
+                enhancedMessage = `${processedMessage}\n\n${searchContext}`;
+                log.info('Song info request detected - search results added to context only', { correlationId });
+              } else {
+                // For other searches, use the original behavior
+                webSearchResults = searchResult;
+                
+                // Add search results to message context
+                const searchContext = `Web search results for "${cleanMessage}":
 ${searchResult.structure.results.slice(0, 3).map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
 
 Use this current information to provide an accurate, up-to-date response. Do not include the raw search results or JSON data in your response - just use the information naturally in your answer.`;
-              
-              enhancedMessage = `${processedMessage}\n\n${searchContext}`;
+                
+                enhancedMessage = `${processedMessage}\n\n${searchContext}`;
+              }
             }
           } catch (error) {
             log.error('Web search failed', error, { correlationId });

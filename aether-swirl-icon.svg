@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+  <path d="M125 125C200 50 350 50 425 125C500 200 500 350 425 425C350 500 200 500 125 425C50 350 50 200 125 125Z" fill="none" stroke="#000000" stroke-width="40" opacity="0.1"/>
+  <path d="M200 200C250 150 350 150 400 200C450 250 450 350 400 400C350 450 250 450 200 400C150 350 150 250 200 200Z" fill="none" stroke="#000000" stroke-width="30" opacity="0.2"/>
+  <path d="M250 250C275 225 325 225 350 250C375 275 375 325 350 350C325 375 275 375 250 350C225 325 225 275 250 250Z" fill="none" stroke="#000000" stroke-width="20" opacity="0.3"/>
+</svg>
