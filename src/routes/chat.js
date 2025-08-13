@@ -155,12 +155,19 @@ Just give me your honest thoughts on what I've sent.`;
           // Essential onboarding context for welcome message logic
           onboarding: user.onboarding || {},
           
-          // Essential music context only
-          currentTrack: user.musicProfile?.spotify?.currentTrack || null,
-          recentTracks: (user.musicProfile?.spotify?.recentTracks || []).slice(0, 5), // Limit to 5 recent
-          topTracks: user.musicProfile?.spotify?.topTracks || [], // Restore top tracks
-          grails: user.musicProfile?.spotify?.grails || null,
-          discoveryStyle: user.musicProfile?.musicPersonality?.discoveryStyle || null
+          // Maintain nested structure that PromptManager expects
+          musicProfile: {
+            mood: user.musicProfile?.mood || null,
+            spotify: {
+              currentTrack: user.musicProfile?.spotify?.currentTrack || null,
+              recentTracks: (user.musicProfile?.spotify?.recentTracks || []).slice(0, 5), // Limit to 5 recent
+              topTracks: user.musicProfile?.spotify?.topTracks || [], // Restore top tracks
+              grails: user.musicProfile?.spotify?.grails || null,
+            },
+            musicPersonality: {
+              discoveryStyle: user.musicProfile?.musicPersonality?.discoveryStyle || null
+            }
+          }
         };
 
         // Check for music discovery context
