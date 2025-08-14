@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect } from '../middleware/authMiddleware.js';
+import { protect } from '../middleware/auth.js';
 import User from '../models/User.js';
 import musicAnalyticsService from '../services/musicAnalyticsService.js';
 import musicPredictionService from '../services/musicPredictionService.js';
