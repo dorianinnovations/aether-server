@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
 import UserAnalytics from '../models/UserAnalytics.js';
-import ArtistUpdate from '../models/ArtistUpdate.js';
 import ragMemoryService from './ragMemoryService.js';
 
 class UserAnalyticsService {
@@ -360,124 +359,24 @@ class UserAnalyticsService {
       low: followedArtists.filter(a => a.priority === 'low').length
     };
 
-    // Get engagement data from artist updates
-    const engagementData = await ArtistUpdate.aggregate([
-      {
-        $match: {
-          'engagement.interactions.userId': new mongoose.Types.ObjectId(userId),
-          'distribution.originalPublishDate': {
-            $gte: dateRange.start,
-            $lte: dateRange.end
-          }
-        }
-      },
-      {
-        $group: {
-          _id: '$artistId',
-          artistName: { $first: '$artistName' },
-          interactions: { $sum: 1 },
-          views: {
-            $sum: {
-              $size: {
-                $filter: {
-                  input: '$engagement.viewedBy',
-                  cond: { $eq: ['$$this.userId', new mongoose.Types.ObjectId(userId)] }
-                }
-              }
-            }
-          }
-        }
-      },
-      { $sort: { interactions: -1 } }
-    ]);
-
-    const topArtists = engagementData.map(artist => ({
-      artistId: artist._id,
-      artistName: artist.artistName,
-      engagementScore: artist.interactions * 10 + artist.views,
-      interactions: {
-        total: artist.interactions,
-        views: artist.views,
-        clicks: artist.interactions, // Simplified
-        shares: 0,
-        saves: 0
-      },
-      lastEngagement: new Date()
-    }));
-
-    const newDiscoveries = followedArtists
-      .filter(follow => {
-        const followDate = new Date(follow.followedAt);
-        return followDate >= dateRange.start && followDate <= dateRange.end;
-      })
-      .map(follow => ({
-        artistId: follow.artistId,
-        artistName: follow.artistName,
-        discoveredAt: follow.followedAt,
-        discoverySource: 'manual' // Could be enhanced with actual source tracking
-      }));
-
     return {
       totalArtistsFollowed: followedArtists.length,
       artistsByPriority,
-      topArtists,
-      newDiscoveries,
-      unfollowed: [] // Would need to track unfollows separately
+      topArtists: [],
+      newDiscoveries: [],
+      unfollowed: []
     };
   }
 
   async calculateContentConsumption(userId, dateRange) {
-    // Get updates user has interacted with
-    const interactions = await ArtistUpdate.find({
-      $or: [
-        { 'engagement.viewedBy.userId': userId },
-        { 'engagement.interactions.userId': userId }
-      ],
-      'distribution.originalPublishDate': {
-        $gte: dateRange.start,
-        $lte: dateRange.end
-      }
-    }).lean();
-
-    const totalUpdatesReceived = interactions.length;
-    const totalUpdatesViewed = interactions.filter(
-      update => update.engagement?.viewedBy?.some(view => view.userId.toString() === userId)
-    ).length;
-
-    // Calculate by content type
-    const byContentType = {
-      releases: { received: 0, viewed: 0, engaged: 0 },
-      news: { received: 0, viewed: 0, engaged: 0 },
-      tours: { received: 0, viewed: 0, engaged: 0 },
-      social: { received: 0, viewed: 0, engaged: 0 }
-    };
-
-    interactions.forEach(update => {
-      const type = update.updateType;
-      if (byContentType[type]) {
-        byContentType[type].received++;
-        
-        if (update.engagement?.viewedBy?.some(view => view.userId.toString() === userId)) {
-          byContentType[type].viewed++;
-        }
-        
-        if (update.engagement?.interactions?.some(int => int.userId.toString() === userId)) {
-          byContentType[type].engaged++;
-        }
-      }
-    });
-
     return {
-      totalUpdatesReceived,
-      totalUpdatesViewed,
-      byContentType,
-      dailyActivity: [], // Would need to calculate from interaction timestamps
+      totalUpdatesReceived: 0,
+      totalUpdatesViewed: 0,
+      byContentType: {},
+      dailyActivity: [],
       preferenceSignals: {
-        preferredContentTypes: Object.entries(byContentType)
-          .sort(([,a], [,b]) => b.engaged - a.engaged)
-          .slice(0, 3)
-          .map(([type]) => type),
-        averageEngagementTime: 45 // Placeholder
+        preferredContentTypes: [],
+        averageEngagementTime: 0
       }
     };
   }
@@ -551,42 +450,18 @@ class UserAnalyticsService {
   }
 
   async calculateEngagementMetrics(userId, dateRange) {
-    const interactions = await ArtistUpdate.find({
-      'engagement.interactions.userId': userId,
-      'distribution.originalPublishDate': {
-        $gte: dateRange.start,
-        $lte: dateRange.end
-      }
-    }).lean();
-
-    const totalInteractions = interactions.reduce((sum, update) => {
-      return sum + (update.engagement?.interactions?.filter(
-        int => int.userId.toString() === userId
-      ).length || 0);
-    }, 0);
-
-    const totalViews = await ArtistUpdate.countDocuments({
-      'engagement.viewedBy.userId': userId,
-      'distribution.originalPublishDate': {
-        $gte: dateRange.start,
-        $lte: dateRange.end
-      }
-    });
-
-    const overallEngagementRate = totalViews > 0 ? totalInteractions / totalViews : 0;
-
     return {
       health: {
-        overallEngagementRate,
-        contentSatisfactionScore: 0.7, // Would need to calculate from user feedback
-        platformStickiness: 0.8,
+        overallEngagementRate: 0,
+        contentSatisfactionScore: 0,
+        platformStickiness: 0,
         churnRisk: 'low'
       },
       deepEngagement: {
         sharesToFriends: 0,
         commentsLeft: 0,
         playlistsCreated: 0,
-        averageTimePerUpdate: 30,
+        averageTimePerUpdate: 0,
         qualityEngagements: {
           fullArticleReads: 0,
           fullTrackListens: 0,

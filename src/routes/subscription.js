@@ -3,8 +3,85 @@ import { protect } from '../middleware/auth.js';
 import stripeService from '../services/stripeService.js';
 import tierService from '../services/tierService.js';
 import { log } from '../utils/logger.js';
+import User from '../models/User.js';
+import Conversation from '../models/Conversation.js';
 
 const router = express.Router();
+
+/**
+ * Get lightweight activity metrics for user
+ */
+async function getLightweightActivityMetrics(userId) {
+  try {
+    console.log('[getLightweightActivityMetrics] Starting for userId:', userId);
+    
+    // Get user data
+    const user = await User.findById(userId).select(
+      'friends musicProfile.spotify.grails musicProfile.spotify.topTracks responseUsage.totalResponses gpt5Usage.totalUsage'
+    );
+    
+    console.log('[getLightweightActivityMetrics] User found:', !!user);
+    if (!user) {
+      console.log('[getLightweightActivityMetrics] No user found, returning null');
+      return null;
+    }
+
+    // Get conversation count (lightweight query)
+    const conversationCount = await Conversation.countDocuments({ 
+      creator: userId, 
+      isActive: true 
+    });
+
+    // Get total message count across conversations
+    const messageStats = await Conversation.aggregate([
+      { $match: { creator: userId, isActive: true } },
+      { $group: { 
+        _id: null, 
+        totalMessages: { $sum: '$messageCount' },
+        avgMessages: { $avg: '$messageCount' }
+      }}
+    ]);
+
+    const totalMessages = messageStats[0]?.totalMessages || 0;
+    const avgMessagesPerConvo = Math.round(messageStats[0]?.avgMessages || 0);
+
+    // Music metrics
+    const grailsCount = (user.musicProfile?.spotify?.grails?.topTracks?.length || 0) + 
+                       (user.musicProfile?.spotify?.grails?.topAlbums?.length || 0);
+    const topTracksCount = user.musicProfile?.spotify?.topTracks?.length || 0;
+
+    // Friend metrics
+    const friendsCount = user.friends?.length || 0;
+    const friendMessages = user.friends?.reduce((total, friend) => {
+      return total + (friend.messagingHistory?.stats?.totalMessages || 0);
+    }, 0) || 0;
+
+    const result = {
+      conversations: {
+        total: conversationCount,
+        avgLength: avgMessagesPerConvo
+      },
+      music: {
+        grailsCollected: grailsCount,
+        tracksDiscovered: topTracksCount
+      },
+      social: {
+        friends: friendsCount,
+        friendMessages: friendMessages
+      },
+      totals: {
+        aiMessages: user.responseUsage?.totalResponses || 0,
+        gpt5Lifetime: user.gpt5Usage?.totalUsage || 0
+      }
+    };
+    
+    console.log('[getLightweightActivityMetrics] Returning result:', JSON.stringify(result, null, 2));
+    return result;
+  } catch (error) {
+    log.error('Error getting activity metrics:', error);
+    return null;
+  }
+}
 
 /**
  * Get user's current usage and tier info
@@ -21,6 +98,10 @@ router.get('/usage', protect, async (req, res) => {
     
     // Get subscription info
     const subscription = await stripeService.getUserSubscription(userId);
+
+    // Get lightweight activity metrics
+    const activityMetrics = await getLightweightActivityMetrics(userId);
+    console.log('[Subscription API] Activity metrics result:', JSON.stringify(activityMetrics, null, 2));
 
     const response = {
       tier: responseUsage.tier,
@@ -44,8 +125,17 @@ router.get('/usage', protect, async (req, res) => {
         currentPeriodEnd: subscription.currentPeriodEnd,
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd
       } : null,
-      upgradeRecommended: responseUsage.remaining < 20 && responseUsage.tier === 'Standard'
+      upgradeRecommended: responseUsage.remaining < 20 && responseUsage.tier === 'Standard',
+      // Enhanced activity metrics
+      activityMetrics: activityMetrics || {
+        conversations: { total: 0, avgLength: 0 },
+        music: { grailsCollected: 0, tracksDiscovered: 0 },
+        social: { friends: 0, friendMessages: 0 },
+        totals: { aiMessages: 0, gpt5Lifetime: 0 }
+      }
     };
+
+    console.log('[Subscription API] Final response object:', JSON.stringify(response, null, 2));
 
     res.json(response);
   } catch (error) {

@@ -10,7 +10,6 @@ dotenv.config();
 
 // Import models
 import Artist from '../src/models/Artist.js';
-import ArtistUpdate from '../src/models/ArtistUpdate.js';
 import User from '../src/models/User.js';
 
 async function seedDatabase() {
@@ -23,7 +22,6 @@ async function seedDatabase() {
     // Clear existing data (optional - comment out to preserve existing data)
     console.log('🗑️ Clearing existing data...');
     await Artist.deleteMany({});
-    await ArtistUpdate.deleteMany({});
     
     // Create sample artists
     console.log('👨‍🎤 Creating sample artists...');
@@ -346,11 +344,8 @@ async function seedDatabase() {
         user.artistPreferences = user.artistPreferences || {};
         user.artistPreferences.followedArtists = randomArtists.map(artist => ({
           artistId: artist._id,
-          followedAt: new Date(now.getTime() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+          followedAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
           notificationSettings: {
-            releases: true,
-            news: true,
-            tours: true,
             social: false
           }
         }));
@@ -365,16 +360,14 @@ async function seedDatabase() {
     // Final verification
     const finalCounts = {
       artists: await Artist.countDocuments(),
-      updates: await ArtistUpdate.countDocuments(),
       users: await User.countDocuments()
     };
 
     console.log('\n🎉 DATABASE SEEDING COMPLETE!');
     console.log('============================');
     console.log(`Artists: ${finalCounts.artists}`);
-    console.log(`Updates: ${finalCounts.updates}`);
     console.log(`Users: ${finalCounts.users}`);
-    console.log('\n✅ The news/buzz screen should now show content!');
+    console.log('\n✅ Artist data seeded successfully!');
 
   } catch (error) {
     console.error('❌ Seeding failed:', error);
