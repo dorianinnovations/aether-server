@@ -1,0 +1,19 @@
+> node src/server.js
+
+[INFO] Analysis Queue initialized
+[INFO] Notification Service initialized
+[INFO] Stripe initialization check { hasSecretKey: true, secretKeyLength: 107, secretKeyStart: 'sk_test' }
+[INFO] Stripe service initialized successfully
+[INFO] Spotify Live Service initialized
+[BOOT] OPENROUTER_API_KEY set: true
+[BOOT] GPT-5 + RAG fixes deployed ✅
+✅ Gmail SMTP verified and ready
+🚀 Aether email services initialized successfully
+📧 Active email services: Gmail SMTP
+[INFO] ✅ Database connection established
+[INFO] Analysis queue event handlers initialized
+[INFO] Spotify Live Service started (updates every 30s)
+[INFO] Spotify Live Service started
+[INFO] Real-time messaging service initialized
+node:events:496
+      throw er; // Unhandled 'error' event

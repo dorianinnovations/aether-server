@@ -6,6 +6,7 @@ import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG as _SECURITY_CONFIG } from "../c
 import { log } from "../utils/logger.js";
 // import { catchAsync, ValidationError, AuthenticationError } from "../utils/index.js";
 import emailService from "../services/emailService.js";
+import googleAuthService from "../services/googleAuthService.js";
 
 const router = express.Router();
 
@@ -226,6 +227,137 @@ router.post(
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
         status: MESSAGES.ERROR, 
         message: MESSAGES.LOGIN_FAILED 
+      });
+    }
+  }
+);
+
+// Google OAuth Routes
+router.post("/google", 
+  [
+    body("token").notEmpty().withMessage("Google token is required.")
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+        status: MESSAGES.ERROR,
+        message: MESSAGES.VALIDATION_ERROR,
+        errors: errors.array() 
+      });
+    }
+
+    const { token } = req.body;
+    
+    try {
+      // Verify Google token
+      const googleResult = await googleAuthService.verifyToken(token);
+      
+      if (!googleResult.success) {
+        return res.status(HTTP_STATUS.UNAUTHORIZED).json({
+          status: MESSAGES.ERROR,
+          message: "Invalid Google token"
+        });
+      }
+
+      const { googleId, email, name, picture, email_verified } = googleResult.data;
+
+      if (!email_verified) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+          status: MESSAGES.ERROR,
+          message: "Google email not verified"
+        });
+      }
+
+      // Check if user already exists by email or googleId
+      let user = await User.findOne({
+        $or: [
+          { email },
+          { googleId }
+        ]
+      });
+
+      if (user) {
+        // User exists - update Google info if needed
+        if (!user.googleId) {
+          user.googleId = googleId;
+          user.authProvider = 'google';
+          await user.save();
+        }
+        
+        log.info('Google login successful', { email, userId: user._id });
+        
+        return res.json({
+          status: MESSAGES.SUCCESS,
+          token: signToken(user._id),
+          data: { 
+            user: { 
+              id: user._id, 
+              email: user.email,
+              username: user.username,
+              name: user.name,
+              authProvider: user.authProvider
+            } 
+          }
+        });
+      }
+
+      // Create new user
+      const baseUsername = googleAuthService.generateUsername(email, name);
+      let username = baseUsername;
+      let counter = 1;
+
+      // Ensure username is unique
+      while (await User.findOne({ username })) {
+        username = `${baseUsername}${counter}`;
+        counter++;
+      }
+
+      const userData = {
+        email,
+        username,
+        name: name || username,
+        googleId,
+        authProvider: 'google',
+        profilePhoto: picture ? { url: picture } : undefined
+      };
+
+      user = await User.create(userData);
+      log.info('Google signup successful', { email, username, userId: user._id });
+
+      // Send welcome email (non-blocking)
+      emailService.sendWelcomeEmail(user.email, user.name || user.username)
+        .then(emailResult => {
+          if (emailResult.success) {
+            log.info('Welcome email sent successfully', { 
+              email: user.email, 
+              service: emailResult.service 
+            });
+          }
+        })
+        .catch(emailError => {
+          log.warn('Welcome email failed', { email: user.email, error: emailError.message });
+        });
+
+      res.status(HTTP_STATUS.CREATED).json({
+        status: MESSAGES.SUCCESS,
+        token: signToken(user._id),
+        data: { 
+          user: { 
+            id: user._id, 
+            email: user.email,
+            username: user.username,
+            name: user.name,
+            authProvider: user.authProvider
+          } 
+        }
+      });
+
+    } catch (err) {
+      log.error('Google auth failed', err);
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
+        status: MESSAGES.ERROR, 
+        message: "Google authentication failed" 
       });
     }
   }
