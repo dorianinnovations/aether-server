@@ -205,6 +205,60 @@ class NotificationService extends EventEmitter {
   }
 
   /**
+   * Send friend message notification
+   * @param {string} userId - User ID
+   * @param {Object} messageData - Message data
+   */
+  notifyFriendMessage(userId, messageData) {
+    return this.notifyUser(userId, {
+      type: 'friend_message',
+      data: {
+        messageId: messageData.messageId,
+        from: messageData.from,
+        fromName: messageData.fromName,
+        content: messageData.content,
+        timestamp: messageData.timestamp,
+        conversationKey: messageData.conversationKey,
+        message: `New message from ${messageData.fromName || messageData.from}`
+      }
+    });
+  }
+
+  /**
+   * Send message delivery confirmation
+   * @param {string} userId - User ID (sender)
+   * @param {Object} deliveryData - Delivery confirmation data
+   */
+  notifyMessageDelivered(userId, deliveryData) {
+    return this.notifyUser(userId, {
+      type: 'message_delivered',
+      data: {
+        messageId: deliveryData.messageId,
+        deliveredAt: deliveryData.deliveredAt,
+        recipient: deliveryData.recipient,
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+
+  /**
+   * Send message read receipt notification
+   * @param {string} userId - User ID (sender)
+   * @param {Object} readData - Read receipt data
+   */
+  notifyMessageRead(userId, readData) {
+    return this.notifyUser(userId, {
+      type: 'message_read',
+      data: {
+        messageId: readData.messageId,
+        readAt: readData.readAt,
+        readBy: readData.readBy,
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+
+  /**
    * Get service statistics
    */
   getStats() {

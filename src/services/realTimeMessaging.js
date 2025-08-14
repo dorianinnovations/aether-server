@@ -63,6 +63,9 @@ class RealTimeMessagingService {
 
     // Join user to their personal room for notifications
     socket.join(`user:${userId}`);
+    
+    // Confirm delivery of any pending messages
+    this.confirmPendingDeliveries(userId);
 
     // Handle typing indicators
     socket.on('typing:start', (data) => {
@@ -316,6 +319,21 @@ class RealTimeMessagingService {
       status[userId] = this.userSockets.has(userId);
     });
     return status;
+  }
+
+  // Confirm delivery of pending messages when user comes online
+  async confirmPendingDeliveries(userId) {
+    try {
+      // Import here to avoid circular dependency
+      const { default: friendMessagingService } = await import('./friendMessagingService.js');
+      
+      // This could be enhanced to check for specific pending messages
+      // For now, we just log that the user is online for delivery confirmations
+      log.debug(`User ${userId} online - ready for delivery confirmations`);
+      
+    } catch (error) {
+      log.error('Confirm pending deliveries error:', error);
+    }
   }
 }
 

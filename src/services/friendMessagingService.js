@@ -7,6 +7,8 @@
 import User from '../models/User.js';
 import { v4 as uuidv4 } from 'uuid';
 import { log } from '../utils/logger.js';
+import realTimeMessagingService from './realTimeMessaging.js';
+import notificationService from './notificationService.js';
 
 class FriendMessagingService {
   
@@ -62,6 +64,9 @@ class FriendMessagingService {
       await toUser.save();
       
       log.info(`Message sent from ${fromUser.username} to ${toUser.username}`);
+      
+      // Send real-time notifications
+      await this.sendNotifications(fromUser, toUser, message);
       
       return {
         success: true,
@@ -396,6 +401,81 @@ class FriendMessagingService {
     } catch (error) {
       log.error('Mark messages as read error:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Send real-time notifications for new message
+   */
+  async sendNotifications(fromUser, toUser, message) {
+    try {
+      // 1. Send Socket.IO notification for immediate delivery
+      await realTimeMessagingService.notifyNewMessage(
+        fromUser.username, 
+        toUser.username, 
+        message
+      );
+      
+      // 2. Send SSE notification for persistent notification
+      const sent = notificationService.notifyUser(toUser._id.toString(), {
+        type: 'friend_message',
+        data: {
+          messageId: message.messageId,
+          from: fromUser.username,
+          fromName: fromUser.name || fromUser.username,
+          content: message.content.length > 100 
+            ? message.content.substring(0, 100) + '...' 
+            : message.content,
+          timestamp: message.timestamp,
+          conversationKey: realTimeMessagingService.getConversationKey(
+            fromUser.username, 
+            toUser.username
+          )
+        }
+      });
+      
+      log.debug(`Notifications sent for message ${message.messageId}:`, {
+        socketIO: true,
+        sse: sent,
+        recipient: toUser.username
+      });
+      
+    } catch (error) {
+      log.error('Send notifications error:', error);
+      // Don't throw - message was already saved successfully
+    }
+  }
+  
+  /**
+   * Update message delivery status when recipient comes online
+   */
+  async confirmDelivery(messageId, recipientUserId) {
+    try {
+      const user = await User.findById(recipientUserId);
+      if (!user) return false;
+      
+      // Find the message in any friend's messaging history
+      for (const friendship of user.friends) {
+        if (friendship.messagingHistory?.recentMessages) {
+          const message = friendship.messagingHistory.recentMessages.find(
+            m => m.messageId === messageId && m.from.toString() !== recipientUserId
+          );
+          
+          if (message && !message.deliveredAt) {
+            message.deliveredAt = new Date();
+            await user.save();
+            
+            log.debug(`Message ${messageId} marked as delivered to ${user.username}`);
+            return true;
+          }
+        }
+      }
+      
+      return false;
+      
+    } catch (error) {
+      log.error('Confirm delivery error:', error);
+      return false;
     }
   }
 
