@@ -363,6 +363,104 @@ router.post("/google",
   }
 );
 
+// Google OAuth Mobile Callback Route
+router.get('/google/callback', async (req, res) => {
+  try {
+    const { id_token, state, error } = req.query;
+    
+    if (error) {
+      // Redirect back to app with error
+      return res.redirect(`aether://google-auth?error=${encodeURIComponent(error)}`);
+    }
+    
+    if (!id_token) {
+      return res.redirect(`aether://google-auth?error=${encodeURIComponent('No token received')}`);
+    }
+    
+    // Verify the Google token
+    const googleResult = await googleAuthService.verifyToken(id_token);
+    
+    if (!googleResult.success) {
+      return res.redirect(`aether://google-auth?error=${encodeURIComponent('Invalid token')}`);
+    }
+
+    const { googleId, email, name, picture, email_verified } = googleResult.data;
+
+    if (!email_verified) {
+      return res.redirect(`aether://google-auth?error=${encodeURIComponent('Email not verified')}`);
+    }
+
+    // Check if user already exists by email or googleId
+    let user = await User.findOne({
+      $or: [
+        { email },
+        { googleId }
+      ]
+    });
+
+    if (user) {
+      // User exists - update Google info if needed
+      if (!user.googleId) {
+        user.googleId = googleId;
+        user.authProvider = 'google';
+        await user.save();
+      }
+      
+      // Generate JWT token
+      const token = signToken(user._id);
+      
+      // Redirect back to app with token
+      return res.redirect(`aether://google-auth?token=${token}&user=${encodeURIComponent(JSON.stringify({
+        id: user._id,
+        email: user.email,
+        username: user.username,
+        name: user.name
+      }))}`);
+    }
+
+    // Create new user
+    const baseUsername = googleAuthService.generateUsername(email, name);
+    let username = baseUsername;
+    let counter = 1;
+
+    // Ensure username is unique
+    while (await User.findOne({ username })) {
+      username = `${baseUsername}${counter}`;
+      counter++;
+    }
+
+    const userData = {
+      email,
+      username,
+      name: name || username,
+      googleId,
+      authProvider: 'google',
+      profilePhoto: picture ? { url: picture } : undefined
+    };
+
+    user = await User.create(userData);
+    
+    // Generate JWT token
+    const token = signToken(user._id);
+    
+    // Send welcome email (non-blocking)
+    emailService.sendWelcomeEmail(user.email, user.name || user.username)
+      .catch(err => log.warn('Welcome email failed', { email: user.email, error: err.message }));
+    
+    // Redirect back to app with token
+    res.redirect(`aether://google-auth?token=${token}&user=${encodeURIComponent(JSON.stringify({
+      id: user._id,
+      email: user.email,
+      username: user.username,
+      name: user.name
+    }))}`);
+
+  } catch (err) {
+    log.error('Google OAuth callback failed', err);
+    res.redirect(`aether://google-auth?error=${encodeURIComponent('Authentication failed')}`);
+  }
+});
+
 // Spotify Connection Routes - Now Active
 router.post('/spotify/connect', protect, async (req, res) => {
   try {
