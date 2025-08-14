@@ -26,8 +26,10 @@ import memoryRoutes from './routes/memory.js';
 
 // New artist-focused routes
 import artistRoutes from './routes/artists.js';
-import artistNewsRoutes from './routes/artistNews.js';
 import analyticsRoutes from './routes/analytics.js';
+
+// Music prediction and preferences routes
+import musicPreferencesRoutes from './routes/musicPreferences.js';
 
 // Friends functionality routes
 import friendsRoutes from './routes/friends.js';
@@ -44,7 +46,6 @@ import adminRoutes from './routes/admin.js';
 // Initialize models
 import './models/User.js';
 import './models/Artist.js';
-import './models/ArtistUpdate.js';
 import './models/UserAnalytics.js';
 import './models/UserBadge.js';
 import './models/Conversation.js';
@@ -123,8 +124,10 @@ const initializeServer = async () => {
     
     // Artist-focused routes
     app.use('/api/artists', artistRoutes);
-    app.use('/api/artist-news', artistNewsRoutes);
     app.use('/api/analytics', analyticsRoutes);
+    
+    // Music prediction and preferences routes
+    app.use('/music-preferences', musicPreferencesRoutes);
     
     // Friends functionality routes
     app.use('/friends', friendsRoutes);
