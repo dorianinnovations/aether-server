@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { log } from '../utils/logger.js';
 
 // Load environment variables
 dotenv.config();
@@ -54,7 +55,7 @@ class EmailService {
         
         // Test Gmail connection
         await this.primaryTransporter.verify();
-        console.log('✅ Gmail SMTP verified and ready');
+        log.debug('Gmail SMTP verified and ready');
       }
       
       // SECONDARY: Brevo (Sendinblue) API (300 emails/day free)
@@ -64,7 +65,7 @@ class EmailService {
           apiKey: process.env.BREVO_API_KEY,
           baseUrl: 'https://api.brevo.com/v3/smtp/email'
         };
-        console.log('✅ Brevo API configured');
+        log.debug('Brevo API configured');
       }
       
       // TERTIARY: SendGrid API (100 emails/day free)
@@ -74,13 +75,13 @@ class EmailService {
           apiKey: process.env.SENDGRID_API_KEY,
           baseUrl: 'https://api.sendgrid.com/v3/mail/send'
         };
-        console.log('✅ SendGrid API configured');
+        log.debug('SendGrid API configured');
       }
       
       // Skip Ethereal for now - focus on Gmail testing
       
       this.isInitialized = true;
-      console.log('🚀 Aether email services initialized successfully');
+      log.info('Email services initialized successfully');
       this.logServiceStatus();
       
     } catch (error) {
@@ -96,7 +97,7 @@ class EmailService {
     if (this.sendgridApi) services.push('SendGrid API');
     if (this.fallbackTransporter) services.push('Ethereal Test');
     
-    console.log(`📧 Active email services: ${services.join(', ')}`);
+    log.debug(`Active email services: ${services.join(', ')}`);
   }
   
   resetDailyCountIfNeeded() {
@@ -148,7 +149,7 @@ class EmailService {
           this.emailStats.sent++;
           this.emailStats.dailyCount++;
           this.emailStats.serviceUsage.gmail++;
-          console.log(`✅ Email sent via Gmail (${this.emailStats.serviceUsage.gmail}/450 today)`);
+          log.debug(`Email sent via Gmail (${this.emailStats.serviceUsage.gmail}/450 today)`);
           return { ...result, service: 'gmail', attempt: 1 };
         } catch (error) {
           attempts.push({ service: 'gmail', error: error.message });
@@ -163,7 +164,7 @@ class EmailService {
           this.emailStats.sent++;
           this.emailStats.dailyCount++;
           this.emailStats.serviceUsage.brevo++;
-          console.log(`✅ Email sent via Brevo (${this.emailStats.serviceUsage.brevo}/250 today)`);
+          log.debug(`Email sent via Brevo (${this.emailStats.serviceUsage.brevo}/250 today)`);
           return { ...result, service: 'brevo', attempt: 2 };
         } catch (error) {
           attempts.push({ service: 'brevo', error: error.message });
@@ -178,7 +179,7 @@ class EmailService {
           this.emailStats.sent++;
           this.emailStats.dailyCount++;
           this.emailStats.serviceUsage.sendgrid++;
-          console.log(`✅ Email sent via SendGrid (${this.emailStats.serviceUsage.sendgrid}/80 today)`);
+          log.debug(`Email sent via SendGrid (${this.emailStats.serviceUsage.sendgrid}/80 today)`);
           return { ...result, service: 'sendgrid', attempt: 3 };
         } catch (error) {
           attempts.push({ service: 'sendgrid', error: error.message });
@@ -191,7 +192,7 @@ class EmailService {
         try {
           const result = await this.sendViaFallback(emailData);
           this.emailStats.serviceUsage.ethereal++;
-          console.log('✅ Email sent via test service (development)');
+          log.debug('Email sent via test service (development)');
           return { ...result, service: 'ethereal-test', attempt: 4 };
         } catch (error) {
           attempts.push({ service: 'ethereal', error: error.message });

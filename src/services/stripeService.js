@@ -11,10 +11,8 @@ class StripeService {
 
   init() {
     const secretKey = process.env.STRIPE_SECRET_KEY;
-    log.info('Stripe initialization check', { 
-      hasSecretKey: !!secretKey,
-      secretKeyLength: secretKey ? secretKey.length : 0,
-      secretKeyStart: secretKey ? secretKey.substring(0, 7) : 'none'
+    log.debug('Stripe initialization check', { 
+      hasSecretKey: !!secretKey
     });
     
     if (!secretKey) {

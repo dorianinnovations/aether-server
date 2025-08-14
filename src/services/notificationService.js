@@ -136,7 +136,7 @@ class NotificationService extends EventEmitter {
 
     this.stats.totalNotificationsSent += sentCount;
 
-    log.debug(`🔔 Notification sent to ${sentCount} clients for user ${userId}`, {
+    log.debug(`Notification sent to ${sentCount} clients for user ${userId}`, {
       type: notification.type,
       totalSent: this.stats.totalNotificationsSent
     });

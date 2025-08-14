@@ -202,7 +202,7 @@ class SpotifyLiveService {
           }
 
           if (sentToUser) {
-            log.debug(`🔔 Spotify track change notification sent to ${user.username}`);
+            log.debug(`Spotify track change notification sent to ${user.username}`);
           }
         }
       }

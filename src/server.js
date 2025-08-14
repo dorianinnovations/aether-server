@@ -64,19 +64,20 @@ const app = express();
 const initializeServer = async () => {
   try {
     // Debug env loading
-    console.log('[BOOT] OPENROUTER_API_KEY set:', !!process.env.OPENROUTER_API_KEY);
-    console.log('[BOOT] GPT-5 + RAG fixes deployed ✅');
+    log.debug('Environment variables loaded', {
+      openRouterKeySet: !!process.env.OPENROUTER_API_KEY
+    });
     
     // Connect to database
     await connectDB();
-    log.info('✅ Database connection established');
+    log.info('Database connection established');
 
     // Setup analysis queue event handlers for real-time notifications
     analysisQueue.on('analysisComplete', (result) => {
       if (result.success && result.updates) {
         const sent = notificationService.notifyProfileUpdate(result.userId, result.updates);
         if (sent) {
-          log.debug(`🔔 Profile update notification sent to user ${result.userId}`);
+          log.debug(`Profile update notification sent to user ${result.userId}`);
         }
       }
     });
