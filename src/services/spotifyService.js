@@ -293,7 +293,11 @@ class SpotifyService {
       if (currentTrack) {
         user.musicProfile.spotify.currentTrack = {
           ...currentTrack,
-          lastPlayed: new Date()
+          // Only update lastPlayed if track actually changed or if it was just started
+          lastPlayed: (user.musicProfile.spotify.currentTrack?.name !== currentTrack.name || 
+                      user.musicProfile.spotify.currentTrack?.artist !== currentTrack.artist) 
+                     ? new Date() 
+                     : user.musicProfile.spotify.currentTrack?.lastPlayed || new Date()
         };
       } else {
         // If nothing is currently playing, use the most recent track but mark it as not playing
