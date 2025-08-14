@@ -294,43 +294,6 @@ const UserSchema = new mongoose.Schema({
         diversityScore: Number // 0-1, how varied their music taste is
       }
     },
-    
-    // Feed customization
-    feedPreferences: {
-      contentTypes: {
-        releases: {
-          type: Boolean,
-          default: true
-        },
-        news: {
-          type: Boolean,
-          default: true
-        },
-        tours: {
-          type: Boolean,
-          default: true
-        },
-        social: {
-          type: Boolean,
-          default: false
-        },
-        interviews: {
-          type: Boolean,
-          default: false
-        }
-      },
-      updateFrequency: {
-        type: String,
-        enum: ['realtime', 'daily', 'weekly'],
-        default: 'daily'
-      },
-      maxUpdatesPerDay: {
-        type: Number,
-        default: 20,
-        min: 1,
-        max: 100
-      }
-    }
   },
   
   // User Analytics & Statistics
@@ -527,6 +490,68 @@ const UserSchema = new mongoose.Schema({
         default: 0,
         min: 0,
         max: 1
+      },
+      
+      // Enhanced Music Prediction Settings
+      predictionSettings: {
+        // Custom weights for audio features (user-customizable)
+        customWeights: {
+          danceability: { type: Number, default: 0.15, min: 0, max: 1 },
+          energy: { type: Number, default: 0.15, min: 0, max: 1 },
+          valence: { type: Number, default: 0.12, min: 0, max: 1 },
+          tempo: { type: Number, default: 0.10, min: 0, max: 1 },
+          speechiness: { type: Number, default: 0.08, min: 0, max: 1 },
+          acousticness: { type: Number, default: 0.10, min: 0, max: 1 },
+          instrumentalness: { type: Number, default: 0.08, min: 0, max: 1 },
+          liveness: { type: Number, default: 0.07, min: 0, max: 1 },
+          loudness: { type: Number, default: 0.08, min: 0, max: 1 },
+          affinityPattern: { type: Number, default: 0.07, min: 0, max: 1 }
+        },
+        
+        // User's preferred ranges for audio features
+        featureRanges: {
+          danceability: { min: Number, max: Number, strict: { type: Boolean, default: false } },
+          energy: { min: Number, max: Number, strict: { type: Boolean, default: false } },
+          valence: { min: Number, max: Number, strict: { type: Boolean, default: false } },
+          tempo: { min: Number, max: Number, strict: { type: Boolean, default: false } }
+        },
+        
+        // Prediction preferences
+        adaptiveLearning: { type: Boolean, default: true }, // Auto-adjust weights based on feedback
+        explorationFactor: { type: Number, default: 0.2, min: 0, max: 1 }, // How much to explore vs exploit
+        diversityBoost: { type: Number, default: 0.1, min: 0, max: 0.5 }, // Boost for diverse recommendations
+        
+        // Feedback learning settings
+        feedbackSensitivity: { type: Number, default: 0.1, min: 0.01, max: 0.5 }, // Learning rate
+        lastWeightUpdate: Date,
+        totalFeedbackReceived: { type: Number, default: 0 }
+      },
+      
+      // Derived music preferences (auto-calculated)
+      derivedPreferences: {
+        moodProfile: {
+          primary: String, // 'happy_energetic', 'sad_calm', etc.
+          secondary: [String],
+          lastUpdated: Date
+        },
+        energyProfile: {
+          preferred: String, // 'very_high', 'high', 'medium', 'low', 'very_low'
+          tolerance: Number, // How much variation they accept
+          lastUpdated: Date
+        },
+        danceabilityProfile: {
+          preferred: String, // 'very_danceable', 'danceable', 'moderate', etc.
+          context: String, // When they prefer danceable music
+          lastUpdated: Date
+        },
+        temporalPreferences: {
+          tempo: {
+            preferred: Number, // BPM
+            range: { min: Number, max: Number },
+            lastUpdated: Date
+          }
+        },
+        confidence: { type: Number, default: 0, min: 0, max: 1 } // How confident we are in these preferences
       }
     }
   },

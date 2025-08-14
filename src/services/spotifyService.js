@@ -192,6 +192,7 @@ class SpotifyService {
       const data = await response.json();
       
       return data.items.map(item => ({
+        id: item.track.id,
         name: item.track.name,
         artist: item.track.artists.map(a => a.name).join(', '),
         album: item.track.album.name,
@@ -228,6 +229,7 @@ class SpotifyService {
       const data = await response.json();
       
       return data.items.map(track => ({
+        id: track.id,
         name: track.name,
         artist: track.artists.map(a => a.name).join(', '),
         album: track.album.name,
@@ -340,6 +342,137 @@ class SpotifyService {
       }
       
       return false;
+    }
+  }
+
+  // Get audio features for tracks
+  async getAudioFeatures(accessToken, trackIds) {
+    try {
+      // Convert single ID to array for consistency
+      const ids = Array.isArray(trackIds) ? trackIds : [trackIds];
+      const idsParam = ids.join(',');
+      
+      const response = await fetch(`${this.baseUrl}/audio-features?ids=${idsParam}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+
+      if (response.status === 401) {
+        throw new Error('SPOTIFY_TOKEN_EXPIRED');
+      }
+      if (!response.ok) {
+        throw new Error(`Spotify API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return Array.isArray(trackIds) ? data.audio_features : data.audio_features[0];
+    } catch (error) {
+      if (error.message === 'SPOTIFY_TOKEN_EXPIRED') {
+        throw error;
+      }
+      log.error('Failed to get audio features:', error);
+      throw error;
+    }
+  }
+
+  // Get detailed track information including audio features
+  async getTrackWithFeatures(accessToken, trackId) {
+    try {
+      const [trackResponse, featuresResponse] = await Promise.all([
+        fetch(`${this.baseUrl}/tracks/${trackId}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        }),
+        fetch(`${this.baseUrl}/audio-features/${trackId}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        })
+      ]);
+
+      if (trackResponse.status === 401 || featuresResponse.status === 401) {
+        throw new Error('SPOTIFY_TOKEN_EXPIRED');
+      }
+
+      const [track, features] = await Promise.all([
+        trackResponse.json(),
+        featuresResponse.json()
+      ]);
+
+      return {
+        ...track,
+        audioFeatures: features
+      };
+    } catch (error) {
+      if (error.message === 'SPOTIFY_TOKEN_EXPIRED') {
+        throw error;
+      }
+      log.error('Failed to get track with features:', error);
+      throw error;
+    }
+  }
+
+  // Enhanced method to get recent tracks with audio features
+  async getRecentTracksWithFeatures(accessToken, limit = 10) {
+    try {
+      const recentTracks = await this.getRecentTracks(accessToken, limit);
+      
+      if (!recentTracks || recentTracks.length === 0) {
+        return [];
+      }
+
+      // Extract track IDs for audio features batch request
+      const trackIds = recentTracks.map(track => track.id).filter(Boolean);
+
+      if (trackIds.length === 0) {
+        return recentTracks;
+      }
+
+      const audioFeatures = await this.getAudioFeatures(accessToken, trackIds);
+      
+      // Merge audio features with track data
+      return recentTracks.map((track, index) => ({
+        ...track,
+        audioFeatures: audioFeatures[index] || null
+      }));
+
+    } catch (error) {
+      if (error.message === 'SPOTIFY_TOKEN_EXPIRED') {
+        throw error;
+      }
+      log.error('Failed to get recent tracks with features:', error);
+      return [];
+    }
+  }
+
+  // Enhanced method to get top tracks with audio features
+  async getTopTracksWithFeatures(accessToken, timeRange = 'medium_term', limit = 20) {
+    try {
+      const topTracks = await this.getTopTracks(accessToken, timeRange, limit);
+      
+      if (!topTracks || topTracks.length === 0) {
+        return [];
+      }
+
+      // Extract track IDs for audio features batch request
+      const trackIds = topTracks.map(track => track.id).filter(Boolean);
+
+      if (trackIds.length === 0) {
+        return topTracks;
+      }
+
+      const audioFeatures = await this.getAudioFeatures(accessToken, trackIds);
+      
+      // Merge audio features with track data
+      return topTracks.map((track, index) => ({
+        ...track,
+        audioFeatures: audioFeatures[index] || null
+      }));
+
+    } catch (error) {
+      if (error.message === 'SPOTIFY_TOKEN_EXPIRED') {
+        throw error;
+      }
+      log.error('Failed to get top tracks with features:', error);
+      return [];
     }
   }
 
