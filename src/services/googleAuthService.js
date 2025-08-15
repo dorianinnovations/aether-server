@@ -1,4 +1,5 @@
 import { OAuth2Client } from 'google-auth-library';
+import axios from 'axios';
 import { log } from '../utils/logger.js';
 
 class GoogleAuthService {
@@ -30,6 +31,34 @@ class GoogleAuthService {
       return {
         success: false,
         error: 'Invalid Google token'
+      };
+    }
+  }
+
+  async exchangeCodeForTokens(code) {
+    try {
+      // Exchange authorization code for tokens
+      const response = await axios.post('https://oauth2.googleapis.com/token', {
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        code: code,
+        grant_type: 'authorization_code',
+        redirect_uri: process.env.GOOGLE_REDIRECT_URI || 'https://aether-server-j5kh.onrender.com/auth/google/callback'
+      });
+
+      const { id_token, access_token } = response.data;
+      
+      if (!id_token) {
+        throw new Error('No ID token received from Google');
+      }
+
+      // Verify the ID token
+      return await this.verifyToken(id_token);
+    } catch (error) {
+      log.error('Google code exchange failed', error);
+      return {
+        success: false,
+        error: 'Token exchange failed'
       };
     }
   }

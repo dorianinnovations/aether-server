@@ -366,19 +366,22 @@ router.post("/google",
 // Google OAuth Mobile Callback Route
 router.get('/google/callback', async (req, res) => {
   try {
-    const { id_token, state, error } = req.query;
+    log.info('Google OAuth callback received', { query: req.query });
+    const { code, state, error } = req.query;
     
     if (error) {
+      log.error('Google OAuth error in callback', { error });
       // Redirect back to app with error
       return res.redirect(`aether://google-auth?error=${encodeURIComponent(error)}`);
     }
     
-    if (!id_token) {
-      return res.redirect(`aether://google-auth?error=${encodeURIComponent('No token received')}`);
+    if (!code) {
+      log.error('No authorization code in Google OAuth callback');
+      return res.redirect(`aether://google-auth?error=${encodeURIComponent('No authorization code received')}`);
     }
     
-    // Verify the Google token
-    const googleResult = await googleAuthService.verifyToken(id_token);
+    // Exchange authorization code for tokens
+    const googleResult = await googleAuthService.exchangeCodeForTokens(code);
     
     if (!googleResult.success) {
       return res.redirect(`aether://google-auth?error=${encodeURIComponent('Invalid token')}`);
